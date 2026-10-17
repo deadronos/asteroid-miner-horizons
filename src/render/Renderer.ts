@@ -10,9 +10,10 @@ import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
 import { isAlive } from '../sim/ships';
 import type { GameState, Rock, StarSystem } from '../sim/types';
 import { Backdrop } from './backdrop';
+import { Debris } from './debris';
 import { FloatingText } from './floatingText';
 import { Particles } from './particles';
-import { RockView } from './rocks';
+import { ROCK_TINT, RockView } from './rocks';
 import { ShipView } from './shipView';
 import { SystemView } from './systemView';
 import { additive, flat } from './util';
@@ -32,6 +33,7 @@ export class Renderer {
   private rocks = new RockView();
   private ships = new ShipView();
   private particles = new Particles();
+  private debris = new Debris();
   private floaters: FloatingText;
   private hoverRing: THREE.Mesh;
   private moveMarker: THREE.Mesh;
@@ -61,7 +63,14 @@ export class Renderer {
 
     this.camera.up.set(0, 0, -1);
     this.scene.add(new THREE.AmbientLight(0x8090b0, 0.55));
-    this.scene.add(this.backdrop.group, this.system.group, this.rocks.group, this.ships.group, this.particles.points);
+    this.scene.add(
+      this.backdrop.group,
+      this.system.group,
+      this.rocks.group,
+      this.ships.group,
+      this.particles.points,
+      this.debris.mesh,
+    );
 
     this.hoverRing = new THREE.Mesh(flat(new THREE.RingGeometry(0.9, 1, 48)), additive(0xffffff, 0.6));
     this.hoverRing.visible = false;
@@ -80,6 +89,7 @@ export class Renderer {
     this.resize();
     this.backdrop.configure(q.stars, s.nebula);
     this.particles.density = q.particles;
+    this.debris.density = q.particles;
     this.shakeScale = SHAKE_SCALE[s.shake];
     this.alwaysBars = s.alwaysShowBars;
   }
@@ -198,6 +208,7 @@ export class Renderer {
 
     this.consumeFx(state, hits, dt);
     this.particles.update(dt);
+    this.debris.update(dt);
     this.updateMarkers(state, moveMark, wpp);
     this.floaters.update(
       dt,
@@ -210,6 +221,10 @@ export class Renderer {
 
     this.warpFlash = Math.max(0, this.warpFlash - dt * 1.2);
     this.gl.render(this.scene, this.camera);
+  }
+
+  private onScreen(p: Vec2): boolean {
+    return Math.abs(p.x - this.center.x) < this.halfH * this.aspect && Math.abs(p.z - this.center.z) < this.halfH;
   }
 
   /** 0..1 white-out intensity after a warp, for the HUD overlay. */
@@ -230,7 +245,9 @@ export class Renderer {
           col.setHex(RESOURCE_INFO[fx.kind].color);
           P.emit(fx.pos.x, fx.pos.z, col, Math.round(fx.radius * 1.6), fx.radius * 3.5, 1.1);
           P.emit(fx.pos.x, fx.pos.z, col.setHex(0x8a8070), Math.round(fx.radius), fx.radius * 1.5, 1.8, { drag: 0.8 });
-          if (fx.radius > 25) this.shake = Math.min(14, this.shake + 6);
+          this.debris.burst(fx.pos.x, fx.pos.z, fx.radius, ROCK_TINT[fx.kind]);
+          // Only cracks the player can see shake the camera; big rocks hit harder.
+          if (this.onScreen(fx.pos)) this.shake = Math.min(14, this.shake + Math.min(7, 1 + fx.radius / 5));
           break;
         }
         case 'collect':
@@ -241,7 +258,8 @@ export class Renderer {
           break;
         case 'impact':
           P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffd0a0), 14, 120, 0.4);
-          this.shake = Math.min(14, this.shake + 5);
+          this.ships.flashNear(fx.pos);
+          if (this.onScreen(fx.pos)) this.shake = Math.min(14, this.shake + 5);
           break;
         case 'explode':
           P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffa040), 140, 220, 1.4);

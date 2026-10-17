@@ -3,6 +3,7 @@
 // width) are scaled by world-units-per-pixel so they stay crisp at any zoom.
 
 import * as THREE from 'three';
+import type { Vec2 } from '../core/vec';
 import { HULLS, type HullId } from '../data/hulls';
 import { walletTotal } from '../data/resources';
 import { isAlive, shipStats } from '../sim/ships';
@@ -168,6 +169,20 @@ export class ShipView {
     this.visuals.delete(id);
   }
 
+  /** Flashes the shield bubble of the ship closest to an impact point. */
+  flashNear(pos: Vec2): void {
+    let best: Visual | null = null;
+    let bestD = 60;
+    for (const v of this.visuals.values()) {
+      const d = Math.hypot(v.root.position.x - pos.x, v.root.position.z - pos.z);
+      if (d < bestD) {
+        best = v;
+        bestD = d;
+      }
+    }
+    if (best) best.hitFlash = 1;
+  }
+
   /** Returns hit points for beams this frame so the caller can spawn sparks. */
   update(
     state: GameState,
@@ -211,7 +226,8 @@ export class ShipView {
       v.shieldPrev = ship.shield;
       v.hitFlash = Math.max(0, v.hitFlash - dt * 3);
       const sf = st.maxShield > 0 ? ship.shield / st.maxShield : 0;
-      v.shield.visible = sf > 0.02;
+      // Hulls without a shield still flash a bubble on impact.
+      v.shield.visible = sf > 0.02 || v.hitFlash > 0;
       (v.shield.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.1 * sf + 0.4 * v.hitFlash;
 
       const selected = ship.id === run.selectedId;
