@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
+import { TUNING } from '../src/data/tuning';
 import { SAVE_VERSION } from '../src/sim/create';
+import { SimIndex } from '../src/sim/index';
 import { migrate, migrations, type Migration, type SaveData } from '../src/sim/migrations';
 import { deserialize, parseImport } from '../src/sim/save';
+import type { Command } from '../src/sim/commands';
 import type { ContractBoard } from '../src/sim/types';
+import { tick } from '../src/sim/update';
 // A real save frozen at version 2 (belt trimmed to a few rocks), committed so
 // future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
@@ -111,6 +115,15 @@ describe('load through the production registry', () => {
     expect(state?.version).toBe(SAVE_VERSION);
     expect(state?.run.contracts.offers).toEqual([]);
     expect(state?.run.contracts.active).toBeNull();
+  });
+
+  it('refills the migrated board on the first tick', () => {
+    const state = deserialize(JSON.stringify(fixtureState()))!;
+    expect(state.run.contracts.offers).toEqual([]);
+
+    tick(state, 1 / 60, { thrust: { x: 0, z: 0 }, commands: [] as Command[] }, new SimIndex());
+
+    expect(state.run.contracts.offers).toHaveLength(TUNING.contractOffers);
   });
 
   it('rejects a v3 save whose run has no contract board', () => {
