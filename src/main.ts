@@ -5,11 +5,12 @@ import './style.css';
 import { TUNING } from './data/tuning';
 import { Input } from './input';
 import { Renderer } from './render/Renderer';
+import type { Assists } from './sim/assists';
 import type { Command } from './sim/commands';
 import { newGame } from './sim/create';
 import { activeSlot, clearSlot, migrateLegacy, readSlot, setActiveSlot, writeSlot } from './sim/save';
 import type { GameState } from './sim/types';
-import { applyCommands, tick, type Assists } from './sim/update';
+import { applyCommands, tick } from './sim/update';
 import { SettingsStore } from './settings';
 import { Hud } from './ui/Hud';
 

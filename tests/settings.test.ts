@@ -3,7 +3,8 @@ import { DEFAULTS, SettingsStore, actionFor } from '../src/settings';
 import { newGame } from '../src/sim/create';
 import { makeRock } from '../src/sim/generate';
 import { flagship, makeShip } from '../src/sim/ships';
-import { tick, type Assists } from '../src/sim/update';
+import type { Assists } from '../src/sim/assists';
+import { tick } from '../src/sim/update';
 import type { GameState } from '../src/sim/types';
 
 class MemStorage {
