@@ -16,6 +16,7 @@ npm run preview    # serve the production build
 npm run lint       # oxlint (warnings fail); npm run lint:fix auto-fixes
 npm run format     # oxfmt formats in place; format:check only verifies
 npm run check      # everything CI runs except the build
+npm run bench      # headless tick benchmark: mean/p95 ms per tick
 ```
 
 Linting and formatting use the [Oxc](https://oxc.rs) toolchain: `oxlint` (config in
