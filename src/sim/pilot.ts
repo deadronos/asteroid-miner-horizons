@@ -1,20 +1,18 @@
 // Ship piloting: steering with obstacle avoidance, order execution and the
 // drone AI. Everything here operates on one ship per call.
 
-import type { SpatialHash } from '../core/spatialHash';
 import { damp, dist, distSq, len, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import type { Assists } from './assists';
 import { isDocked } from './economy';
+import type { SimIndex } from './index';
 import { laserRock } from './mining';
 import { cargoFree, flagship, isAlive, type ShipStats } from './ships';
 import type { GameState, Rock, Ship } from './types';
 
 export interface TickCtx {
   state: GameState;
-  rockHash: SpatialHash<Rock>;
-  rockById: Map<number, Rock>;
-  stats: Map<number, ShipStats>;
+  index: SimIndex;
   dt: number;
   assists: Assists;
 }
@@ -36,8 +34,8 @@ function avoidance(
   let ax = 0;
   let az = 0;
   let danger = 0;
-  ctx.rockHash.query(ship.pos, look + 50, (r) => {
-    if (r.id === ignoreId || !ctx.rockById.has(r.id)) return;
+  ctx.index.rockHash.query(ship.pos, look + 50, (r) => {
+    if (r.id === ignoreId || !ctx.index.rockById.has(r.id)) return;
     const rx = r.pos.x - ship.pos.x;
     const rz = r.pos.z - ship.pos.z;
     const d = Math.hypot(rx, rz) || 0.01;
@@ -142,15 +140,15 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
   ship.vel.x = rock.vel.x + (ship.vel.x - rock.vel.x) * k;
   ship.vel.z = rock.vel.z + (ship.vel.z - rock.vel.z) * k;
   const frags = laserRock(ctx.state, rock, st.dps * ctx.dt);
-  if (frags) ctx.rockById.delete(rock.id);
+  if (frags) ctx.index.rockById.delete(rock.id);
   return frags;
 }
 
 function nearestRock(ctx: TickCtx, from: Vec2, radius: number, filter: (r: Rock) => boolean): Rock | null {
   let best: Rock | null = null;
   let bestD = radius * radius;
-  ctx.rockHash.query(from, radius, (r) => {
-    if (!ctx.rockById.has(r.id) || !filter(r)) return;
+  ctx.index.rockHash.query(from, radius, (r) => {
+    if (!ctx.index.rockById.has(r.id) || !filter(r)) return;
     const d = distSq(from, r.pos);
     if (d < bestD) {
       bestD = d;
@@ -177,7 +175,7 @@ export function runOrder(ctx: TickCtx, ship: Ship, st: ShipStats): boolean {
   } else if (o.kind === 'dock') {
     if (arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.4)) ship.order = null;
   } else {
-    const rock = ctx.rockById.get(o.rockId);
+    const rock = ctx.index.rockById.get(o.rockId);
     if (!rock) {
       ship.order = null;
       return false;
@@ -229,9 +227,9 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   }
 
   if (st.dps > 0) {
-    let rock = ship.aiTargetId != null ? ctx.rockById.get(ship.aiTargetId) : undefined;
+    let rock = ship.aiTargetId != null ? ctx.index.rockById.get(ship.aiTargetId) : undefined;
     if (rock && dist(rock.pos, anchor) > TUNING.droneLeash) rock = undefined;
-    if (!rock && ship.aiMode === 'assist' && fs.order?.kind === 'mine') rock = ctx.rockById.get(fs.order.rockId);
+    if (!rock && ship.aiMode === 'assist' && fs.order?.kind === 'mine') rock = ctx.index.rockById.get(fs.order.rockId);
     if (!rock) {
       rock =
         nearestRock(ctx, ship.pos, 500, (r) => dist(r.pos, anchor) < TUNING.droneLeash) ??

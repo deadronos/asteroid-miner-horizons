@@ -2,7 +2,6 @@
 // commands → orbits → rocks → ships (pilot, collide, heat, dock) → pickups → belt regrowth.
 
 import { range } from '../core/rng';
-import { SpatialHash } from '../core/spatialHash';
 import { damp, dist, type Vec2 } from '../core/vec';
 import { walletValue, RESOURCES, RESOURCE_INFO, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
@@ -10,9 +9,10 @@ import { DEFAULT_ASSISTS, type Assists } from './assists';
 import { applyCommand, type Command } from './commands';
 import { isDocked } from './economy';
 import { spawnBeltRock } from './generate';
+import type { SimIndex } from './index';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
-import { cargoFree, damageShip, isAlive, isFlagship, shipStats, type ShipStats } from './ships';
-import type { GameState, Rock, Ship } from './types';
+import { cargoFree, damageShip, isAlive, isFlagship, type ShipStats } from './ships';
+import type { GameState, Ship } from './types';
 
 export interface TickInput {
   /** WASD vector for the selected ship; (0,0) when idle. */
@@ -27,9 +27,7 @@ export function applyCommands(state: GameState, commands: Command[]): void {
   commands.length = 0;
 }
 
-const rockHash = new SpatialHash<Rock>(128);
-
-export function tick(state: GameState, dt: number, input: TickInput): void {
+export function tick(state: GameState, dt: number, input: TickInput, index: SimIndex): void {
   applyCommands(state, input.commands);
 
   const { run } = state;
@@ -51,23 +49,19 @@ export function tick(state: GameState, dt: number, input: TickInput): void {
     r.pos.x += r.vel.x * dt;
     r.pos.z += r.vel.z * dt;
   }
-  rockHash.rebuild(run.rocks);
+  index.rebuild(state);
 
-  const stats = new Map<number, ShipStats>();
-  for (const s of run.ships) stats.set(s.id, shipStats(s, state.profile));
   const ctx: TickCtx = {
     state,
-    rockHash,
-    rockById: new Map(run.rocks.map((r) => [r.id, r])),
-    stats,
+    index,
     dt,
     assists: input.assists ?? DEFAULT_ASSISTS,
   };
 
   // Safe while ships die mid-loop: removals reassign run.ships rather than mutating it.
-  for (const ship of run.ships) updateShip(ctx, ship, stats.get(ship.id)!, input.thrust);
+  for (const ship of run.ships) updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
 
-  updatePickups(state, stats, dt);
+  updatePickups(state, index.stats, dt);
   regrowBelts(state, dt);
 }
 
@@ -137,8 +131,8 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
 
 function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const { state } = ctx;
-  ctx.rockHash.query(ship.pos, st.size + 50, (r) => {
-    if (!ctx.rockById.has(r.id) || !state.run.ships.includes(ship) || !isAlive(ship)) return;
+  ctx.index.rockHash.query(ship.pos, st.size + 50, (r) => {
+    if (!ctx.index.rockById.has(r.id) || !state.run.ships.includes(ship) || !isAlive(ship)) return;
     const dx = ship.pos.x - r.pos.x;
     const dz = ship.pos.z - r.pos.z;
     const d = Math.hypot(dx, dz) || 0.01;

@@ -5,6 +5,7 @@ import type { Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { dataGain, warpCost } from '../src/sim/economy';
 import { makeRock } from '../src/sim/generate';
+import { SimIndex } from '../src/sim/index';
 import { destroyRock } from '../src/sim/mining';
 import { deserialize, exportText, parseImport, serialize } from '../src/sim/save';
 import { flagship, shipStats } from '../src/sim/ships';
@@ -15,7 +16,8 @@ const DT = 1 / 60;
 
 function run(state: GameState, seconds: number, commands: Command[] = []): void {
   const input = { thrust: { x: 0, z: 0 }, commands };
-  for (let t = 0; t < seconds; t += DT) tick(state, DT, input);
+  const index = new SimIndex();
+  for (let t = 0; t < seconds; t += DT) tick(state, DT, input, index);
 }
 
 function totalUnits(state: GameState): number {

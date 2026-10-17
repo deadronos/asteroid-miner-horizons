@@ -4,6 +4,7 @@
 
 import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
+import { SimIndex } from '../src/sim/index';
 import type { GameState } from '../src/sim/types';
 import { tick, type TickInput } from '../src/sim/update';
 import { botCommands, type BotOptions } from './bot';
@@ -27,7 +28,8 @@ export function runBot(state: GameState, opts: RunOptions): number {
   const commands: Command[] = [];
   const input: TickInput = { thrust: { x: 0, z: 0 }, commands };
   const ticks = Math.round(opts.seconds * TUNING.simHz);
-  const doTick = (): void => tick(state, DT, input);
+  const index = new SimIndex();
+  const doTick = (): void => tick(state, DT, input, index);
   for (let i = 0; i < ticks; i++) {
     if (i % BOT_EVERY === 0) commands.push(...botCommands(state, opts));
     opts.before?.(state);

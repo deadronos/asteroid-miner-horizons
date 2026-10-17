@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { fromAngle } from '../src/core/vec';
 import { newGame } from '../src/sim/create';
 import { isDocked } from '../src/sim/economy';
+import { SimIndex } from '../src/sim/index';
 import { flagship } from '../src/sim/ships';
 import { tick } from '../src/sim/update';
 
@@ -17,7 +18,8 @@ describe('autopilot', () => {
       // Start on the far side of the inner belt.
       ship.pos = fromAngle(Math.atan2(st.z, st.x) + ((i % 5) - 2) * 0.15, 560);
       const input = { thrust: { x: 0, z: 0 }, commands: [{ t: 'dock' as const, shipId: ship.id }] };
-      for (let t = 0; t < 25; t += 1 / 60) tick(s, 1 / 60, input);
+      const index = new SimIndex();
+      for (let t = 0; t < 25; t += 1 / 60) tick(s, 1 / 60, input, index);
       if (isDocked(s.run, ship)) docked++;
       hullLost += 100 - ship.hull;
     }
