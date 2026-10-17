@@ -21,8 +21,9 @@ describe('SimIndex', () => {
     expect(index.rockById.size).toBeGreaterThan(0);
     expect(index.stats.size).toBeGreaterThan(0);
     // Covers every rock in a system (belts live within ~2200 of the star).
-    // (The plan's 1e9 makes query() walk a ~2.4e14-cell bounding box and hang.)
-    const ALL = 1e5;
+    // (The plan's 1e9 makes query() walk a ~2.4e14-cell bounding box and hang;
+    // even 1e5 costs ~2.4M cells, so keep this close to the system radius.)
+    const ALL = 4000;
     let hits = 0;
     index.rockHash.query({ x: 0, z: 0 }, ALL, () => {
       hits++;
@@ -45,8 +46,10 @@ describe('SimIndex', () => {
     index.rebuild(state);
     const ship = state.run.ships[0]!;
     const before = index.stats.get(ship.id)!.speed;
-    state.profile.perks.thrust += 1; // ships.ts: speed *= 1 + 0.08 * thrust
+    const t0 = state.profile.perks.thrust; // ships.ts: speed *= 1 + 0.08 * thrust
+    state.profile.perks.thrust = t0 + 1;
     index.rebuild(state);
-    expect(index.stats.get(ship.id)!.speed).toBeCloseTo(before * 1.08);
+    const base = before / (1 + 0.08 * t0);
+    expect(index.stats.get(ship.id)!.speed).toBeCloseTo(base * (1 + 0.08 * (t0 + 1)));
   });
 });

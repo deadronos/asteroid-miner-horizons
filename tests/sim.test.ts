@@ -214,5 +214,9 @@ describe('multiple games', () => {
     for (let t = 0; t < 10; t += DT) tick(b2, DT, input, j2);
     expect(serialize(a1)).toEqual(serialize(b1));
     expect(serialize(a2)).toEqual(serialize(b2));
+    // Distinct instances: a shared index would still pass the equality checks
+    // above, since `tick` rebuilds the index from its own state every tick.
+    expect(i1).not.toBe(i2);
+    expect(i1.rockHash).not.toBe(i2.rockHash);
   });
 });
