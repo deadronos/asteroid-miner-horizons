@@ -2,6 +2,7 @@
 // fixed-step simulation (60 Hz) decoupled from the render frame rate.
 
 import './style.css';
+import { AudioEngine } from './audio/AudioEngine';
 import { TUNING } from './data/tuning';
 import { Input } from './input';
 import { Renderer } from './render/Renderer';
@@ -33,6 +34,11 @@ const commands: Command[] = [];
 const send = (c: Command): void => void commands.push(c);
 
 const renderer = new Renderer(sceneEl, settings.value);
+const audio = new AudioEngine(settings);
+// Every enabled button clicks; disabled ones never fire `click`.
+app.addEventListener('click', (e) => {
+  if ((e.target as Element | null)?.closest?.('button')) audio.ui('uiClick');
+});
 const saveNow = (): void => writeSlot(slot, state);
 
 /** Swap the running game (and the slot it autosaves to). */
@@ -156,11 +162,13 @@ function frame(now: number): void {
   }
   input.edgePan(dt);
   input.updateHover();
+  audio.consumeFx(state.out.fx, renderer.view);
   renderer.render(state, dt, input.moveMark);
   hud.frame(dt);
   hudAcc += dt;
   if (hudAcc >= 0.1) {
     hudAcc = 0;
+    audio.consumeLog(state.out.log);
     hud.refresh(renderer.flash);
   }
   requestAnimationFrame(frame);
@@ -169,4 +177,4 @@ hud.refresh(0);
 requestAnimationFrame(frame);
 
 // Debug hook for automated checks in the browser console.
-Object.assign(window, { __amh: { state: () => state, send, settings } });
+Object.assign(window, { __amh: { state: () => state, send, settings, renderer, audio } });

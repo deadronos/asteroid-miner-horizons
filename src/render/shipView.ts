@@ -3,6 +3,7 @@
 // width) are scaled by world-units-per-pixel so they stay crisp at any zoom.
 
 import * as THREE from 'three';
+import type { Vec2 } from '../core/vec';
 import { HULLS, type HullId } from '../data/hulls';
 import { walletTotal } from '../data/resources';
 import { isAlive, shipStats } from '../sim/ships';
@@ -84,6 +85,8 @@ export class ShipView {
   readonly group = new THREE.Group();
   private visuals = new Map<number, Visual>();
   private geos = new Map<HullId, THREE.BufferGeometry>();
+  /** HDR boost for flames and beams while bloom is on (1 = as authored). */
+  glow = 1;
 
   private geo(id: HullId): THREE.BufferGeometry {
     let g = this.geos.get(id);
@@ -168,6 +171,20 @@ export class ShipView {
     this.visuals.delete(id);
   }
 
+  /** Flashes the shield bubble of the ship closest to an impact point. */
+  flashNear(pos: Vec2): void {
+    let best: Visual | null = null;
+    let bestD = 60;
+    for (const v of this.visuals.values()) {
+      const d = Math.hypot(v.root.position.x - pos.x, v.root.position.z - pos.z);
+      if (d < bestD) {
+        best = v;
+        bestD = d;
+      }
+    }
+    if (best) best.hitFlash = 1;
+  }
+
   /** Returns hit points for beams this frame so the caller can spawn sparks. */
   update(
     state: GameState,
@@ -205,13 +222,15 @@ export class ShipView {
 
       const flick = 0.75 + Math.random() * 0.5;
       v.flame.visible = ship.thrusting;
+      (v.flame.material as THREE.MeshBasicMaterial).color.setHex(0xff8a3a).multiplyScalar(this.glow);
       v.flame.scale.set(flick, 1, 0.8 + Math.random() * 0.3);
 
       if (ship.shield < v.shieldPrev - 0.5) v.hitFlash = 1;
       v.shieldPrev = ship.shield;
       v.hitFlash = Math.max(0, v.hitFlash - dt * 3);
       const sf = st.maxShield > 0 ? ship.shield / st.maxShield : 0;
-      v.shield.visible = sf > 0.02;
+      // Hulls without a shield still flash a bubble on impact.
+      v.shield.visible = sf > 0.02 || v.hitFlash > 0;
       (v.shield.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.1 * sf + 0.4 * v.hitFlash;
 
       const selected = ship.id === run.selectedId;
@@ -259,6 +278,8 @@ export class ShipView {
         v.beamGlow.scale.set(L, 1, Math.max(5, 8 * wpp) * pulse);
         v.tip.position.set(tx, 22, tz);
         v.tip.scale.setScalar(Math.max(18, 26 * wpp) * (0.8 + Math.random() * 0.4));
+        (v.beam.material as THREE.MeshBasicMaterial).color.setHex(0xff6a4a).multiplyScalar(this.glow);
+        (v.tip.material as THREE.SpriteMaterial).color.setHex(0xffb070).multiplyScalar(this.glow);
         v.beam.visible = v.beamGlow.visible = v.tip.visible = true;
         hits.push({ x: tx, z: tz, ship });
       } else {

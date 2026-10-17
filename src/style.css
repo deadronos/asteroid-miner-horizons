@@ -49,6 +49,27 @@ body {
   cursor: crosshair;
 }
 
+/* Floating pickup text: pooled spans positioned by transform only. */
+.floaters {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.floater {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-weight: 700;
+  font-size: calc(14px * var(--hud-scale, 1));
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  text-shadow:
+    0 0 6px rgba(0, 0, 0, 0.9),
+    0 1px 2px #000;
+  will-change: transform, opacity;
+}
+
 .hidden {
   display: none !important;
 }

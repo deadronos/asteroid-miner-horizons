@@ -63,6 +63,29 @@ describe('mining loop', () => {
     expect(s.run.runValue).toBeGreaterThan(0);
     expect(walletTotal(ship.cargo)).toBe(0);
   });
+
+  it('reports collected amounts and docking in the fx outbox', () => {
+    const s = newGame(7);
+    const ship = flagship(s.run);
+    const st = s.run.system.station.pos;
+    const rock = makeRock(s.run, 'ore', 2, { x: st.x + 120, z: st.z }, 5, 0);
+    s.run.rocks.push(rock);
+    ship.pos = { x: st.x + 40, z: st.z };
+    s.out.fx.length = 0;
+    run(s, 8, [{ t: 'mine', shipId: ship.id, rockId: rock.id }]);
+    run(s, 4, [{ t: 'dock', shipId: ship.id }]);
+    run(s, 6);
+    let collected = 0;
+    let docked = 0;
+    for (const f of s.out.fx) {
+      if (f.t === 'collect' && f.shipId === ship.id) collected += f.amount;
+      if (f.t === 'dock' && f.shipId === ship.id) docked += f.value;
+    }
+    expect(collected).toBeGreaterThan(0);
+    // Ore is worth 1 per unit, so everything picked up shows up as docked value.
+    expect(docked).toBeCloseTo(collected, 6);
+    expect(docked).toBeCloseTo(s.run.runValue, 6);
+  });
 });
 
 describe('progression', () => {
