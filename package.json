@@ -9,6 +9,7 @@
     "preview": "vite preview --port 4173",
     "test": "vitest run",
     "bench": "tsx scripts/bench.ts",
+    "balance": "tsx scripts/balance.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
     "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",
