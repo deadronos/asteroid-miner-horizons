@@ -29,3 +29,13 @@ jobs:
         run: npm test
       - name: Build
         run: npx vite build
+      - name: Tick benchmark (warn-only)
+        run: |
+          npm run bench -- --json bench.json
+          {
+            echo '### Tick benchmark'
+            echo
+            echo '```json'
+            cat bench.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
