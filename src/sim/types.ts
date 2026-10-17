@@ -135,7 +135,8 @@ export interface Profile {
 
 export type Fx =
   | { t: 'crack'; pos: Vec2; kind: Resource; radius: number }
-  | { t: 'collect'; pos: Vec2; kind: Resource }
+  | { t: 'collect'; pos: Vec2; kind: Resource; amount: number; shipId: number }
+  | { t: 'dock'; pos: Vec2; shipId: number; value: number }
   | { t: 'impact'; pos: Vec2 }
   | { t: 'explode'; pos: Vec2 }
   | { t: 'warp' };

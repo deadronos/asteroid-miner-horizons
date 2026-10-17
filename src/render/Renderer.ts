@@ -10,6 +10,7 @@ import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
 import { isAlive } from '../sim/ships';
 import type { GameState, Rock, StarSystem } from '../sim/types';
 import { Backdrop } from './backdrop';
+import { FloatingText } from './floatingText';
 import { Particles } from './particles';
 import { RockView } from './rocks';
 import { ShipView } from './shipView';
@@ -31,6 +32,7 @@ export class Renderer {
   private rocks = new RockView();
   private ships = new ShipView();
   private particles = new Particles();
+  private floaters: FloatingText;
   private hoverRing: THREE.Mesh;
   private moveMarker: THREE.Mesh;
   private shake = 0;
@@ -55,6 +57,7 @@ export class Renderer {
     this.gl.setClearColor(0x03060d);
     this.canvas = this.gl.domElement;
     container.appendChild(this.canvas);
+    this.floaters = new FloatingText(container);
 
     this.camera.up.set(0, 0, -1);
     this.scene.add(new THREE.AmbientLight(0x8090b0, 0.55));
@@ -103,6 +106,16 @@ export class Renderer {
     const nx = ((clientX - r.left) / r.width) * 2 - 1;
     const ny = ((clientY - r.top) / r.height) * 2 - 1;
     return { x: this.center.x + nx * this.halfH * this.aspect, z: this.center.z + ny * this.halfH };
+  }
+
+  /** World point → CSS pixels relative to the scene container. */
+  worldToScreen(p: Vec2): { x: number; y: number } {
+    const w = this.container.clientWidth;
+    const h = this.container.clientHeight;
+    return {
+      x: ((p.x - this.center.x) / (this.halfH * this.aspect) + 1) * 0.5 * w,
+      y: ((p.z - this.center.z) / this.halfH + 1) * 0.5 * h,
+    };
   }
 
   /** Zooms by `factor`, keeping the world point under the cursor fixed (unless following). */
@@ -186,6 +199,14 @@ export class Renderer {
     this.consumeFx(state, hits, dt);
     this.particles.update(dt);
     this.updateMarkers(state, moveMark, wpp);
+    this.floaters.update(
+      dt,
+      (p) => this.worldToScreen(p),
+      (id) => {
+        const s = run.ships.find((x) => x.id === id);
+        return s && isAlive(s) ? s.pos : null;
+      },
+    );
 
     this.warpFlash = Math.max(0, this.warpFlash - dt * 1.2);
     this.gl.render(this.scene, this.camera);
@@ -214,6 +235,9 @@ export class Renderer {
         }
         case 'collect':
           P.emit(fx.pos.x, fx.pos.z, col.setHex(RESOURCE_INFO[fx.kind].color), 4, 60, 0.35);
+          this.floaters.add(fx.shipId, fx.kind, fx.amount, fx.pos);
+          break;
+        case 'dock':
           break;
         case 'impact':
           P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffd0a0), 14, 120, 0.4);

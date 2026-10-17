@@ -176,6 +176,7 @@ function unload(state: GameState, ship: Ship): void {
     ship.cargo[r] = 0;
   }
   run.runValue += value;
+  if (value > 0) state.out.fx.push({ t: 'dock', pos: { ...ship.pos }, shipId: ship.id, value });
   if (isFlagship(ship) && parts.length)
     state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts.join(' ')}.` });
 }
@@ -209,7 +210,7 @@ function updatePickups(state: GameState, stats: Map<number, ShipStats>, dt: numb
         const take = Math.min(cargoFree(best, st), p.amount);
         best.cargo[p.kind] += take;
         p.amount -= take;
-        state.out.fx.push({ t: 'collect', pos: { ...best.pos }, kind: p.kind });
+        state.out.fx.push({ t: 'collect', pos: { ...best.pos }, kind: p.kind, amount: take, shipId: best.id });
         if (p.amount <= 1e-6) return false;
       }
     }
