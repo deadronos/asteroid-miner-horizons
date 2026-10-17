@@ -4,11 +4,11 @@
 import type { SpatialHash } from '../core/spatialHash';
 import { damp, dist, distSq, len, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
+import type { Assists } from './assists';
 import { isDocked } from './economy';
 import { laserRock } from './mining';
 import { cargoFree, flagship, isAlive, type ShipStats } from './ships';
 import type { GameState, Rock, Ship } from './types';
-import type { Assists } from './update';
 
 export interface TickCtx {
   state: GameState;

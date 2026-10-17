@@ -6,24 +6,13 @@ import { SpatialHash } from '../core/spatialHash';
 import { damp, dist, type Vec2 } from '../core/vec';
 import { walletValue, RESOURCES, RESOURCE_INFO, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
+import { DEFAULT_ASSISTS, type Assists } from './assists';
 import { applyCommand, type Command } from './commands';
 import { isDocked } from './economy';
 import { spawnBeltRock } from './generate';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
 import { cargoFree, damageShip, isAlive, isFlagship, shipStats, type ShipStats } from './ships';
 import type { GameState, Rock, Ship } from './types';
-
-/** Player-chosen autopilot helpers (from Settings). All on by default. */
-export interface Assists {
-  /** Autopilot steers around rocks. */
-  avoid: boolean;
-  /** Drones fly home to unload when their hold is full. */
-  autoDock: boolean;
-  /** A manual mining order moves on to the fragments when its rock breaks. */
-  chain: boolean;
-}
-
-export const DEFAULT_ASSISTS: Assists = { avoid: true, autoDock: true, chain: true };
 
 export interface TickInput {
   /** WASD vector for the selected ship; (0,0) when idle. */
