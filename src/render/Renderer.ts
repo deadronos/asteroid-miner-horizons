@@ -167,6 +167,11 @@ export class Renderer {
     return this.container.clientWidth / Math.max(1, this.container.clientHeight);
   }
 
+  /** The visible world rectangle (center + half extents), for audio falloff. */
+  get view(): { center: Vec2; halfW: number; halfH: number } {
+    return { center: this.center, halfW: this.halfH * this.aspect, halfH: this.halfH };
+  }
+
   /** World units per CSS pixel at the current zoom. */
   get wpp(): number {
     return (this.halfH * 2) / Math.max(1, this.container.clientHeight);
