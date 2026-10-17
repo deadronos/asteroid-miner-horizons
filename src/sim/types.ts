@@ -150,6 +150,7 @@ export interface Run {
   pickups: Pickup[];
   selectedId: number;
   regrowTimer: number;
+  contracts: ContractBoard;
 }
 
 export interface Profile {
