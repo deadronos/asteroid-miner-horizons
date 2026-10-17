@@ -1,0 +1,55 @@
+import { describe, expect, it } from 'vitest';
+import {
+  ARMOR_DMG_MUL,
+  COMPONENTS,
+  COMPONENT_IDS,
+  LASER_DPS,
+  type ComponentId,
+  type Tier,
+} from '../src/data/components';
+import { newGame } from '../src/sim/create';
+import { shipStats, type ShipStats } from '../src/sim/ships';
+
+const TIERS: Tier[] = [1, 2, 3];
+
+/** The flagship (4 slots) with exactly the given components fitted. */
+function fit(...components: { type: ComponentId; tier: Tier }[]) {
+  const state = newGame(7);
+  const ship = state.run.ships[0]!;
+  ship.slots = components;
+  return { state, ship };
+}
+
+const dps = (f: ReturnType<typeof fit>): number => shipStats(f.ship, f.state.profile).dps;
+
+describe('shipStats', () => {
+  it('matches the committed snapshot for every component and tier', () => {
+    const table: Record<string, ShipStats> = {};
+    for (const id of COMPONENT_IDS) {
+      for (const tier of TIERS) {
+        const { state, ship } = fit({ type: id, tier });
+        table[`${id} T${tier}`] = shipStats(ship, state.profile);
+      }
+    }
+    expect(table).toMatchSnapshot();
+  });
+
+  it('stacks duplicate components additively', () => {
+    const base = dps(fit());
+    const one = dps(fit({ type: 'laser', tier: 1 }));
+    const two = dps(fit({ type: 'laser', tier: 1 }, { type: 'laser', tier: 1 }));
+    expect(one - base).toBeCloseTo(LASER_DPS[0]);
+    expect(two - base).toBeCloseTo(2 * LASER_DPS[0]);
+  });
+
+  it('multiplies armor damage reduction across slots', () => {
+    const { state, ship } = fit({ type: 'armor', tier: 1 }, { type: 'armor', tier: 1 });
+    expect(shipStats(ship, state.profile).dmgMul).toBeCloseTo(ARMOR_DMG_MUL[0] ** 2);
+  });
+
+  it('declares at least one effect for every component', () => {
+    for (const id of COMPONENT_IDS) {
+      expect(COMPONENTS[id].effects.length).toBeGreaterThan(0);
+    }
+  });
+});
