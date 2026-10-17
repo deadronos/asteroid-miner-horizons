@@ -5,9 +5,15 @@ import { activeSlot, clearSlot, migrateLegacy, readSlot, serialize, setActiveSlo
 // Minimal in-memory localStorage for the node test environment.
 class MemStorage {
   private m = new Map<string, string>();
-  getItem(k: string) { return this.m.get(k) ?? null; }
-  setItem(k: string, v: string) { this.m.set(k, String(v)); }
-  removeItem(k: string) { this.m.delete(k); }
+  getItem(k: string) {
+    return this.m.get(k) ?? null;
+  }
+  setItem(k: string, v: string) {
+    this.m.set(k, String(v));
+  }
+  removeItem(k: string) {
+    this.m.delete(k);
+  }
 }
 
 beforeEach(() => {

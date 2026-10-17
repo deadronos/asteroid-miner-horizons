@@ -8,15 +8,24 @@ import type { GameState } from '../src/sim/types';
 
 class MemStorage {
   m = new Map<string, string>();
-  getItem(k: string) { return this.m.get(k) ?? null; }
-  setItem(k: string, v: string) { this.m.set(k, v); }
-  removeItem(k: string) { this.m.delete(k); }
+  getItem(k: string) {
+    return this.m.get(k) ?? null;
+  }
+  setItem(k: string, v: string) {
+    this.m.set(k, v);
+  }
+  removeItem(k: string) {
+    this.m.delete(k);
+  }
 }
 
 describe('settings store', () => {
   it('fills defaults and ignores wrongly typed stored values', () => {
     const st = new MemStorage();
-    st.setItem('asteroid-miner-horizons/settings', JSON.stringify({ hudScale: 1.2, quality: 42, keys: { up: ['KeyI', null], down: 'nope' } }));
+    st.setItem(
+      'asteroid-miner-horizons/settings',
+      JSON.stringify({ hudScale: 1.2, quality: 42, keys: { up: ['KeyI', null], down: 'nope' } }),
+    );
     const s = new SettingsStore(st as unknown as Storage).value;
     expect(s.hudScale).toBe(1.2);
     expect(s.quality).toBe(DEFAULTS.quality);
@@ -64,8 +73,8 @@ describe('assists', () => {
       s.run.rocks.push(rock);
       runFor(s, 8, { ...ON, chain }, [{ t: 'mine', shipId: ship.id, rockId: rock.id }]);
       expect(s.run.rocks.includes(rock)).toBe(false);
-      if (chain) expect(ship.order).not.toBeNull();
-      else expect(ship.order).toBeNull();
+      // With chaining the order moves on to a fragment; without it the order ends.
+      expect(ship.order !== null).toBe(chain);
     }
   });
 

@@ -47,7 +47,8 @@ function fromData(data: unknown): GameState | null {
   if (!d || typeof d !== 'object' || d.version !== SAVE_VERSION) return null;
   const { profile, run } = d;
   if (!profile || typeof profile.seed !== 'number' || typeof profile.perks !== 'object') return null;
-  if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups)) return null;
+  if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
+    return null;
   if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
   return { version: d.version, profile, run, out: { fx: [], log: [] } };
 }
@@ -70,9 +71,18 @@ export function parseImport(text: string): { ok: true; record: SaveRecord } | { 
   const state = fromData(isRecord ? rec.state : data);
   if (!state) {
     const v = (isRecord ? (rec.state as { version?: unknown }) : (data as { version?: unknown }))?.version;
-    return { ok: false, error: v != null && v !== SAVE_VERSION ? `Unsupported save version ${String(v)} (expected ${SAVE_VERSION}).` : 'This is not an Asteroid Miner Horizons save.' };
+    return {
+      ok: false,
+      error:
+        v != null && v !== SAVE_VERSION
+          ? `Unsupported save version ${String(v)} (expected ${SAVE_VERSION}).`
+          : 'This is not an Asteroid Miner Horizons save.',
+    };
   }
-  return { ok: true, record: { savedAt: isRecord && typeof rec.savedAt === 'number' ? rec.savedAt : Date.now(), state } };
+  return {
+    ok: true,
+    record: { savedAt: isRecord && typeof rec.savedAt === 'number' ? rec.savedAt : Date.now(), state },
+  };
 }
 
 export function readSlot(i: number): SaveRecord | null {

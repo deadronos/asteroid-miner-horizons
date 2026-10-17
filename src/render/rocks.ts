@@ -67,7 +67,8 @@ export class RockView {
 
   constructor() {
     const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
-    for (let i = 0; i < VARIANTS; i++) this.rocks.push(new InstancePool(this.group, rockGeometry(1000 + i * 77), mat, 256));
+    for (let i = 0; i < VARIANTS; i++)
+      this.rocks.push(new InstancePool(this.group, rockGeometry(1000 + i * 77), mat, 256));
     this.pickups = new InstancePool(
       this.group,
       new THREE.OctahedronGeometry(1),
@@ -91,7 +92,9 @@ export class RockView {
         s.set(r.radius, r.radius * 0.8, r.radius);
         pool.mesh.setMatrixAt(i, m.compose(p, q, s));
         const dmg = 1 - Math.max(0, r.hp) / r.maxHp;
-        c.copy(ROCK_TINT[r.kind]).multiplyScalar(0.85 + h * 0.3).lerp(HOT, dmg * 0.55);
+        c.copy(ROCK_TINT[r.kind])
+          .multiplyScalar(0.85 + h * 0.3)
+          .lerp(HOT, dmg * 0.55);
         pool.mesh.setColorAt(i, c);
       });
       pool.commit(bucket.length);

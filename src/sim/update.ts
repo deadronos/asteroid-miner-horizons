@@ -75,7 +75,8 @@ export function tick(state: GameState, dt: number, input: TickInput): void {
     assists: input.assists ?? DEFAULT_ASSISTS,
   };
 
-  for (const ship of [...run.ships]) updateShip(ctx, ship, stats.get(ship.id)!, input.thrust);
+  // Safe while ships die mid-loop: removals reassign run.ships rather than mutating it.
+  for (const ship of run.ships) updateShip(ctx, ship, stats.get(ship.id)!, input.thrust);
 
   updatePickups(state, stats, dt);
   regrowBelts(state, dt);
@@ -130,7 +131,11 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
   if (dStar < sys.heatRadius) {
     const k = 1 - (dStar - sys.starRadius) / (sys.heatRadius - sys.starRadius);
     damageShip(state, ship, TUNING.starHeatDps * Math.max(0.2, k) * dt);
-    if (ship.id === run.selectedId && Math.floor(run.time) !== Math.floor(run.time - dt) && Math.floor(run.time) % 3 === 0) {
+    if (
+      ship.id === run.selectedId &&
+      Math.floor(run.time) !== Math.floor(run.time - dt) &&
+      Math.floor(run.time) % 3 === 0
+    ) {
       state.out.log.push({ level: 'warn', text: `${ship.name} is overheating near the star!` });
     }
     if (!isAlive(ship) || !run.ships.includes(ship)) return;
@@ -182,7 +187,8 @@ function unload(state: GameState, ship: Ship): void {
     ship.cargo[r] = 0;
   }
   run.runValue += value;
-  if (isFlagship(ship) && parts.length) state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts.join(' ')}.` });
+  if (isFlagship(ship) && parts.length)
+    state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts.join(' ')}.` });
 }
 
 function updatePickups(state: GameState, stats: Map<number, ShipStats>, dt: number): void {

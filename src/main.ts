@@ -22,7 +22,11 @@ app.append(sceneEl);
 migrateLegacy();
 let slot = activeSlot();
 let state: GameState = readSlot(slot)?.state ?? newGame();
-if (state.run.time > 0) state.out.log.push({ level: 'major', text: `Slot ${slot + 1} loaded: system ${state.run.system.number}, ${state.run.system.name}.` });
+if (state.run.time > 0)
+  state.out.log.push({
+    level: 'major',
+    text: `Slot ${slot + 1} loaded: system ${state.run.system.number}, ${state.run.system.name}.`,
+  });
 
 const commands: Command[] = [];
 const send = (c: Command): void => void commands.push(c);
@@ -41,43 +45,58 @@ function switchTo(next: number, nextState: GameState): void {
   saveNow();
 }
 
-const hud = new Hud(app, () => state, {
-  send,
-  saves: {
-    active: () => slot,
-    current: () => state,
-    saveNow: () => {
-      saveNow();
-      state.out.log.push({ level: 'info', text: `Saved to slot ${slot + 1}.` });
-    },
-    load: (i) => {
-      const rec = readSlot(i);
-      if (!rec) return;
-      switchTo(i, rec.state);
-      state.out.log.push({ level: 'major', text: `Slot ${i + 1} loaded: system ${state.run.system.number}, ${state.run.system.name}.` });
-    },
-    newGame: (i) => {
-      // Restarting the running slot must not first re-save the old game over it.
-      if (i === slot) clearSlot(i);
-      else saveNow();
-      slot = i;
-      setActiveSlot(i);
-      state = newGame();
-      commands.length = 0;
-      renderer.follow = true;
-      saveNow();
-    },
-    importTo: (i, rec) => {
-      writeSlot(i, rec.state);
-      state.out.log.push({ level: 'info', text: `Imported a save into slot ${i + 1}.` });
-    },
-    remove: (i) => {
-      if (i !== slot) clearSlot(i);
+const hud = new Hud(
+  app,
+  () => state,
+  {
+    send,
+    saves: {
+      active: () => slot,
+      current: () => state,
+      saveNow: () => {
+        saveNow();
+        state.out.log.push({ level: 'info', text: `Saved to slot ${slot + 1}.` });
+      },
+      load: (i) => {
+        const rec = readSlot(i);
+        if (!rec) return;
+        switchTo(i, rec.state);
+        state.out.log.push({
+          level: 'major',
+          text: `Slot ${i + 1} loaded: system ${state.run.system.number}, ${state.run.system.name}.`,
+        });
+      },
+      newGame: (i) => {
+        // Restarting the running slot must not first re-save the old game over it.
+        if (i === slot) clearSlot(i);
+        else saveNow();
+        slot = i;
+        setActiveSlot(i);
+        state = newGame();
+        commands.length = 0;
+        renderer.follow = true;
+        saveNow();
+      },
+      importTo: (i, rec) => {
+        writeSlot(i, rec.state);
+        state.out.log.push({ level: 'info', text: `Imported a save into slot ${i + 1}.` });
+      },
+      remove: (i) => {
+        if (i !== slot) clearSlot(i);
+      },
     },
   },
-}, settings);
+  settings,
+);
 let manualPause = false;
-const input = new Input(renderer, hud, () => state, send, settings, () => (manualPause = !manualPause));
+const input = new Input(
+  renderer,
+  hud,
+  () => state,
+  send,
+  settings,
+  () => (manualPause = !manualPause),
+);
 
 // Persistence: autosave on the chosen interval, plus on tab hide / close.
 let autosaveTimer = 0;

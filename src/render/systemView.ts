@@ -29,14 +29,24 @@ export class SystemView {
     g.add(this.light);
 
     // Star: hot core plus two additive glow sprites.
-    const star = new THREE.Mesh(new THREE.SphereGeometry(sys.starRadius, 48, 24), new THREE.MeshBasicMaterial({ color: sys.starColor }));
+    const star = new THREE.Mesh(
+      new THREE.SphereGeometry(sys.starRadius, 48, 24),
+      new THREE.MeshBasicMaterial({ color: sys.starColor }),
+    );
     g.add(star);
     for (const [scale, op] of [
       [4.5, 0.85],
       [11, 0.25],
     ] as const) {
       const s = new THREE.Sprite(
-        new THREE.SpriteMaterial({ map: glowTexture, color: sys.starColor, transparent: true, opacity: op, blending: THREE.AdditiveBlending, depthWrite: false }),
+        new THREE.SpriteMaterial({
+          map: glowTexture,
+          color: sys.starColor,
+          transparent: true,
+          opacity: op,
+          blending: THREE.AdditiveBlending,
+          depthWrite: false,
+        }),
       );
       s.scale.setScalar(sys.starRadius * scale);
       s.position.y = 30;
@@ -73,7 +83,10 @@ export class SystemView {
         g.add(ring);
       }
       const moons = p.moons.map((m) => {
-        const mesh = new THREE.Mesh(new THREE.SphereGeometry(m.radius, 20, 10), new THREE.MeshLambertMaterial({ color: m.color }));
+        const mesh = new THREE.Mesh(
+          new THREE.SphereGeometry(m.radius, 20, 10),
+          new THREE.MeshLambertMaterial({ color: m.color }),
+        );
         g.add(mesh);
         return mesh;
       });

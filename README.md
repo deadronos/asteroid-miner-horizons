@@ -13,25 +13,34 @@ npm run dev        # http://localhost:5173
 npm test           # headless sim tests (vitest)
 npm run build      # typecheck + production build into dist/
 npm run preview    # serve the production build
+npm run lint       # oxlint (warnings fail); npm run lint:fix auto-fixes
+npm run format     # oxfmt formats in place; format:check only verifies
+npm run check      # everything CI runs except the build
 ```
+
+Linting and formatting use the [Oxc](https://oxc.rs) toolchain: `oxlint` (config in
+`.oxlintrc.json`) and `oxfmt` (config in `.oxfmtrc.json`, Prettier-compatible options).
+GitHub Actions (`.github/workflows/ci.yml`) runs format check, lint, typecheck, tests and the
+build on every push to `main` and on every pull request. For editor integration, install
+the Oxc extension (VS Code / Cursor). It picks up both config files.
 
 Requires Node 20+. Built with TypeScript 7, Vite 8 and three r186.
 
 ## How to play
 
-| Input | Action |
-|---|---|
-| `WASD` / arrows | Fly the selected ship directly (cancels its order) |
-| Click empty space | Move order (autopilot steers around rocks) |
-| Click asteroid | Mine: the ship closes to laser range and burns it; it automatically moves on to the fragments |
-| Click station | Dock and unload cargo into the station bank |
-| Click ship / `Tab` / `1–9` | Select a ship |
-| Right-click | Order the selected ship without changing the selection |
-| Mouse wheel | Zoom (toward the cursor when not following) |
-| Drag | Pan (camera stops following) · `F` follows again |
-| `M` | System map toggle |
-| `R` | Research (prestige) panel · `P` pause · `H` hides help · `Esc` closes menus, else stops the ship |
-| ⚙ button | Menu: save slots, settings, key rebinding |
+| Input                      | Action                                                                                           |
+| -------------------------- | ------------------------------------------------------------------------------------------------ |
+| `WASD` / arrows            | Fly the selected ship directly (cancels its order)                                               |
+| Click empty space          | Move order (autopilot steers around rocks)                                                       |
+| Click asteroid             | Mine: the ship closes to laser range and burns it; it automatically moves on to the fragments    |
+| Click station              | Dock and unload cargo into the station bank                                                      |
+| Click ship / `Tab` / `1–9` | Select a ship                                                                                    |
+| Right-click                | Order the selected ship without changing the selection                                           |
+| Mouse wheel                | Zoom (toward the cursor when not following)                                                      |
+| Drag                       | Pan (camera stops following) · `F` follows again                                                 |
+| `M`                        | System map toggle                                                                                |
+| `R`                        | Research (prestige) panel · `P` pause · `H` hides help · `Esc` closes menus, else stops the ship |
+| ⚙ button                   | Menu: save slots, settings, key rebinding                                                        |
 
 All keys can be rebound in ⚙ → Controls.
 
@@ -71,16 +80,16 @@ All keys can be rebound in ⚙ → Controls.
   import a `.json` file, or take pasted save text. Imports are validated and give a
   readable error. The ⚙ menu also has a Controls tab.
 - **Settings** (⚙ menu, stored separately from saves so they apply to every slot):
-  - *Gameplay*: pause while menus are open or the window is unfocused (P pauses
+  - _Gameplay_: pause while menus are open or the window is unfocused (P pauses
     manually; menus keep working while paused), autosave interval, confirmations, and
     the autopilot assists (rock avoidance, drone auto-unload, fragment chaining).
-  - *Graphics*: Low/Medium/High quality (resolution cap, star and particle density),
+  - _Graphics_: Low/Medium/High quality (resolution cap, star and particle density),
     nebula, anti-aliasing (applies on reload), screen shake, FPS counter.
-  - *Interface*: HUD scale, always-on ship bars, help box, event log verbosity, camera
+  - _Interface_: HUD scale, always-on ship bars, help box, event log verbosity, camera
     follow, zoom speed, edge panning.
-  - *Controls*: rebind every action (primary + secondary key). A key bound to another
+  - _Controls_: rebind every action (primary + secondary key). A key bound to another
     action is moved, and the help box follows your bindings.
-  - *Audio*: volume sliders reserved for when sound arrives.
+  - _Audio_: volume sliders reserved for when sound arrives.
 
 ## Architecture
 

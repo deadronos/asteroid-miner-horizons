@@ -19,10 +19,7 @@ function run(state: GameState, seconds: number, commands: Command[] = []): void 
 }
 
 function totalUnits(state: GameState): number {
-  return (
-    state.run.rocks.reduce((s, r) => s + r.units, 0) +
-    state.run.pickups.reduce((s, p) => s + p.amount, 0)
-  );
+  return state.run.rocks.reduce((s, r) => s + r.units, 0) + state.run.pickups.reduce((s, p) => s + p.amount, 0);
 }
 
 describe('determinism', () => {
@@ -151,20 +148,19 @@ describe('save', () => {
     const s = newGame(77);
     run(s, 2);
     const res = parseImport(exportText(s, 1234));
-    expect(res.ok).toBe(true);
-    if (res.ok) {
-      expect(res.record.savedAt).toBe(1234);
-      expect(serialize(res.record.state)).toEqual(serialize(s));
-    }
+    if (!res.ok) throw new Error(`import failed: ${res.error}`);
+    expect(res.record.savedAt).toBe(1234);
+    expect(serialize(res.record.state)).toEqual(serialize(s));
     // A bare serialized state is accepted too.
     expect(parseImport(serialize(s)).ok).toBe(true);
   });
 
   it('import explains what is wrong', () => {
     expect(parseImport('{oops')).toEqual({ ok: false, error: 'Not valid JSON.' });
-    const bad = parseImport('{"format":"amh-save","state":{"version":1}}');
-    expect(bad.ok).toBe(false);
-    if (!bad.ok) expect(bad.error).toMatch(/version 1/);
+    expect(parseImport('{"format":"amh-save","state":{"version":1}}')).toEqual({
+      ok: false,
+      error: expect.stringMatching(/version 1/),
+    });
     expect(parseImport('{"hello":"world"}').ok).toBe(false);
   });
 
