@@ -6,7 +6,7 @@ import type { Cost } from './resources';
 export type ComponentId = 'laser' | 'engine' | 'shield' | 'armor' | 'cargo' | 'sensor';
 export type Tier = 1 | 2 | 3;
 
-/** Every numeric stat a fitted component can contribute to. Mirrors ShipStats. */
+/** Every derived ship stat; `ShipStats` (sim/ships) is built from this list. */
 export type ShipStatKey =
   | 'maxHull'
   | 'maxShield'
@@ -22,11 +22,17 @@ export type ShipStatKey =
 
 export type EffectOp = 'add' | 'max' | 'mul';
 
-/** One stat contribution per tier (index 0 = tier 1). */
+/** One number per tier (index 0 = tier 1). */
+export type PerTier = readonly [number, number, number];
+
+/**
+ * One stat contribution per tier. Effects apply in slot order, so give each
+ * stat a single kind of op: add, max and mul don't commute when mixed.
+ */
 export interface Effect {
   stat: ShipStatKey;
   op: EffectOp;
-  values: readonly number[];
+  values: PerTier;
 }
 
 export interface ComponentDef {
@@ -52,7 +58,7 @@ export const ARMOR_DMG_MUL = [0.9, 0.8, 0.68] as const;
 export const CARGO_CAP = [50, 120, 240] as const;
 export const SENSOR_MAGNET = [50, 100, 170] as const;
 /** An engine adds three times its speed bonus as acceleration. */
-export const ENGINE_ACCEL = ENGINE_SPEED.map((v) => v * 3);
+export const ENGINE_ACCEL: PerTier = [ENGINE_SPEED[0] * 3, ENGINE_SPEED[1] * 3, ENGINE_SPEED[2] * 3];
 
 const tiered =
   (mul: number) =>

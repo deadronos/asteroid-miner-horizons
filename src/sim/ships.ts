@@ -1,25 +1,14 @@
 // Ship construction, derived stats and damage.
 
 import { v, type Vec2 } from '../core/vec';
-import { COMPONENTS } from '../data/components';
+import { COMPONENTS, type ShipStatKey } from '../data/components';
 import { HULLS, type HullId } from '../data/hulls';
 import { emptyWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { GameState, Profile, Run, Ship } from './types';
 
-export interface ShipStats {
-  maxHull: number;
-  maxShield: number;
-  shieldRegen: number;
-  speed: number;
-  accel: number;
-  dps: number;
-  range: number;
-  magnet: number;
-  cargoCap: number;
-  dmgMul: number;
-  size: number;
-}
+/** Derived stats; the key list lives with the component effects that target it. */
+export type ShipStats = Record<ShipStatKey, number>;
 
 export function shipStats(ship: Ship, profile: Profile): ShipStats {
   const h = HULLS[ship.hullId];
