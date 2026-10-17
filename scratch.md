@@ -1,23 +1,28 @@
-# Suggested next issues
+# Suggested next issues (after #11)
 
-I'd suggest this order, based on the 47 open issues and the ⭐ picks in each umbrella issue. #9 (lint + CI) is already done through PR #52, so you could tick it off in #11.
+All nine children of #11 have landed (#2–#10, last one PR #60), so the code cleanup is finished. The earlier "measuring tools" and "quick wins" picks are done too: #12, #43, #19, #21, #22, #29, #30.
 
-## Next up: clean up before adding features
+## 0. Housekeeping (5 min)
 
-1. **#2 Split `ui/Hud.ts`** (502 lines) and **#3 Split `ui/Menu.ts`** (634 lines). Almost every feature below adds UI: contracts, refining, floating text and audio settings. Splitting these files first keeps each feature PR small and avoids merge conflicts. I'd do them as two separate PRs.
-2. **#10 Fix the `pilot.ts` ↔ `update.ts` circular import.** It's small and quick, and now that oxlint is in CI, a good time to clear it.
+- Close umbrella **#11**. Its body already says "Complete."
+- Tick the closed children in the other umbrellas, whose checklists are out of date: #18 (#12), #28 (#19, #21, #22), #34 (#29, #30), #51 (#43).
 
-## Then: build the measuring tools (they share a base)
+## 1. Next up: #35 Station contracts → #36 Refining
 
-3. **#12 Headless tick benchmark in CI** and **#43 Headless balance bot + report.** Both run the sim without the browser, so building one makes the other cheap. With them in place, the performance work (#13–#17) and balance tuning (#44–#46) are based on numbers rather than guesses.
+- Both are ⭐ and `priority: high` in #42. The core loop works, but the mid-game has no goals, and this is now the biggest gap.
+- The groundwork is in place: the handler map (#7) makes new commands like accept/deliver contract a single entry, data-driven effects (#6) and save migrations (#8) let new state be added without breaking saves, and the split Menu/HUD (#2, #3) gives contracts their own tab or panel.
+- The balance bot (#43) can measure the extra income from contracts before we tune reward sizes.
+- Order: contracts first, then refining (ore→alloy, ice→fuel). Refined goods make better contract targets.
 
-## Then: quick game-feel wins
+## 2. Then: #47 System modifiers + #44 Warp cost vs income
 
-4. **#22 Floating pickup text**, **#21 Mining feedback**, **#19 Bloom.** These are cheap, visible improvements, and #22 would be the first test of the new HUD layout.
-5. **#29 Audio engine + #30 Core SFX.** These hook into the existing `out.fx` event stream, so the sim stays untouched. Sound is the biggest feel gap right now.
+- #47 is the other ⭐ / `priority: high` pick (in #51). It adds variety to each warp, so systems stop playing the same.
+- In the current `docs/balance.md`, time per system grows (system 5 takes 16:12, 1.48× the previous system). Warp cost is outpacing income, so #44 should be tuned alongside #47 using the bot report.
+- Doing this after contracts/refining means the tuning accounts for the new income sources.
 
-## Then: mid-game content
+## 3. Ongoing / fill-in work
 
-6. **#35 Contracts → #36 Refining.** These follow the order already set in #42. By this point the UI is modular and the balance bot can check the new income they add.
+- **Performance #13 (per-tick allocations) → #14–#16.** The benchmark (#12) is in CI, so we can measure. The game still holds 60 fps, so this isn't urgent, but it should land before #39 (hauler drones/outposts) grows the entity count.
+- **Audio #31 (laser hum + low-hull alarm).** Small, builds on the #29/#30 engine, touches nothing else. A good break from bigger work.
 
-**If you only want one thing:** start with #2, since the most other work builds on it. **If you'd rather work on something fun first:** #29 + #30 (audio) barely touch the parts being refactored, so they can go in parallel without conflicts.
+**If you only want one thing:** #35 Station contracts.
