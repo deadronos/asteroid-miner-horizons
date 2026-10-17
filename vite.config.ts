@@ -5,5 +5,6 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     target: 'es2022',
+    chunkSizeWarningLimit: 900, // three.js alone is ~600 kB
   },
 });
