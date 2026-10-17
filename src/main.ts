@@ -6,11 +6,9 @@ import { AudioEngine } from './audio/AudioEngine';
 import { TUNING } from './data/tuning';
 import { Input } from './input';
 import { Renderer } from './render/Renderer';
+import { GameSession } from './session';
 import type { Assists } from './sim/assists';
 import type { Command } from './sim/commands';
-import { newGame } from './sim/create';
-import { activeSlot, clearSlot, migrateLegacy, readSlot, setActiveSlot, writeSlot } from './sim/save';
-import type { GameState } from './sim/types';
 import { applyCommands, tick } from './sim/update';
 import { SettingsStore } from './settings';
 import { Hud } from './ui/Hud';
@@ -21,15 +19,6 @@ const sceneEl = document.createElement('div');
 sceneEl.id = 'scene';
 app.append(sceneEl);
 
-migrateLegacy();
-let slot = activeSlot();
-let state: GameState = readSlot(slot)?.state ?? newGame();
-if (state.run.time > 0)
-  state.out.log.push({
-    level: 'major',
-    text: `Slot ${slot + 1} loaded: system ${state.run.system.number}, ${state.run.system.name}.`,
-  });
-
 const commands: Command[] = [];
 const send = (c: Command): void => void commands.push(c);
 
@@ -39,92 +28,39 @@ const audio = new AudioEngine(settings);
 app.addEventListener('click', (e) => {
   if ((e.target as Element | null)?.closest?.('button')) audio.ui('uiClick');
 });
-const saveNow = (): void => writeSlot(slot, state);
 
-/** Swap the running game (and the slot it autosaves to). */
-function switchTo(next: number, nextState: GameState): void {
-  saveNow();
-  slot = next;
-  setActiveSlot(slot);
-  state = nextState;
-  commands.length = 0;
-  renderer.follow = true;
-  saveNow();
-}
-
-const hud = new Hud(
-  app,
-  () => state,
-  {
-    send,
-    saves: {
-      active: () => slot,
-      current: () => state,
-      saveNow: () => {
-        saveNow();
-        state.out.log.push({ level: 'info', text: `Saved to slot ${slot + 1}.` });
-      },
-      load: (i) => {
-        const rec = readSlot(i);
-        if (!rec) return;
-        switchTo(i, rec.state);
-        state.out.log.push({
-          level: 'major',
-          text: `Slot ${i + 1} loaded: system ${state.run.system.number}, ${state.run.system.name}.`,
-        });
-      },
-      newGame: (i) => {
-        // Restarting the running slot must not first re-save the old game over it.
-        if (i === slot) clearSlot(i);
-        else saveNow();
-        slot = i;
-        setActiveSlot(i);
-        state = newGame();
-        commands.length = 0;
-        renderer.follow = true;
-        saveNow();
-      },
-      importTo: (i, rec) => {
-        writeSlot(i, rec.state);
-        state.out.log.push({ level: 'info', text: `Imported a save into slot ${i + 1}.` });
-      },
-      remove: (i) => {
-        if (i !== slot) clearSlot(i);
-      },
-    },
+// The session owns the running game and its save slot. Switching games drops
+// any queued command and re-centres the camera on the new flagship.
+const session = new GameSession(settings, {
+  onSwitch: () => {
+    commands.length = 0;
+    renderer.follow = true;
   },
-  settings,
-);
+});
+
+const hud = new Hud(app, () => session.state, { send, saves: session }, settings);
 let manualPause = false;
 const input = new Input(
   renderer,
   hud,
-  () => state,
+  () => session.state,
   send,
   settings,
   () => (manualPause = !manualPause),
 );
-
-// Persistence: autosave on the chosen interval, plus on tab hide / close.
-let autosaveTimer = 0;
-function armAutosave(): void {
-  clearInterval(autosaveTimer);
-  const sec = settings.value.autosaveSec;
-  if (sec > 0) autosaveTimer = window.setInterval(saveNow, sec * 1000);
-}
-armAutosave();
-document.addEventListener('visibilitychange', () => document.hidden && saveNow());
-window.addEventListener('beforeunload', saveNow);
 
 let assists: Assists = { avoid: true, autoDock: true, chain: true };
 function applySettings(): void {
   const s = settings.value;
   assists = { avoid: s.assistAvoid, autoDock: s.assistAutoDock, chain: s.assistChain };
   renderer.applySettings(s);
-  armAutosave();
 }
 settings.onChange(applySettings);
 applySettings();
+
+// Autosave on the chosen interval (re-armed when it changes), plus a save on
+// tab hide / close.
+session.start();
 
 /** Why the sim is paused right now, or null if it's running. */
 function pauseReason(): string | null {
@@ -141,6 +77,7 @@ let acc = 0;
 let hudAcc = 0;
 
 function frame(now: number): void {
+  const state = session.state;
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
   const paused = pauseReason();
@@ -177,4 +114,4 @@ hud.refresh(0);
 requestAnimationFrame(frame);
 
 // Debug hook for automated checks in the browser console.
-Object.assign(window, { __amh: { state: () => state, send, settings, renderer, audio } });
+Object.assign(window, { __amh: { state: () => session.state, send, settings, renderer, audio } });

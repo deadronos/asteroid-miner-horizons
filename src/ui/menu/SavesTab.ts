@@ -1,20 +1,11 @@
 // Saves tab: the 3 localStorage slots (load / save / new / delete), import
 // from a file or pasted text, export to text or a downloaded .json.
 
+import type { SaveActions } from '../../session';
 import { SLOT_COUNT, exportText, parseImport, readSlot, type SaveRecord } from '../../sim/save';
 import type { GameState } from '../../sim/types';
 import { h } from '../dom';
 import type { MenuCtx } from './context';
-
-export interface SaveActions {
-  active(): number;
-  current(): GameState;
-  saveNow(): void;
-  load(slot: number): void;
-  newGame(slot: number): void;
-  importTo(slot: number, record: SaveRecord): void;
-  remove(slot: number): void;
-}
 
 function ago(ms: number): string {
   const s = Math.max(0, (Date.now() - ms) / 1000);

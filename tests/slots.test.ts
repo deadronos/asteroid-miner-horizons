@@ -1,23 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { newGame } from '../src/sim/create';
 import { activeSlot, clearSlot, migrateLegacy, readSlot, serialize, setActiveSlot, writeSlot } from '../src/sim/save';
-
-// Minimal in-memory localStorage for the node test environment.
-class MemStorage {
-  private m = new Map<string, string>();
-  getItem(k: string) {
-    return this.m.get(k) ?? null;
-  }
-  setItem(k: string, v: string) {
-    this.m.set(k, String(v));
-  }
-  removeItem(k: string) {
-    this.m.delete(k);
-  }
-}
+import { memStorage } from './memStorage';
 
 beforeEach(() => {
-  Object.defineProperty(globalThis, 'localStorage', { value: new MemStorage(), configurable: true });
+  Object.defineProperty(globalThis, 'localStorage', { value: memStorage(), configurable: true });
 });
 
 describe('save slots', () => {
