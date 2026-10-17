@@ -9,7 +9,11 @@ import type { GameState } from './types';
 /** The persisted shape: all of GameState except the transient outbox. */
 export type SaveData = Pick<GameState, 'version' | 'profile' | 'run'>;
 
-/** Upgrades a save at version `n` to version `n + 1`; must not mutate its input. */
+/**
+ * Upgrades a save at version `n` to version `n + 1`. It may edit nested
+ * objects in place: migrate() only copies the top level, and its input is
+ * always freshly parsed JSON that nothing else holds.
+ */
 export type Migration = (data: SaveData) => SaveData;
 
 /** `migrations[n]` upgrades a v`n` save to v`n+1`. Empty until a schema change lands. */

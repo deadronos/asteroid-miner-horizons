@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { SAVE_VERSION } from '../src/sim/create';
 import { migrate, migrations, type Migration, type SaveData } from '../src/sim/migrations';
 import { deserialize, parseImport } from '../src/sim/save';
-// A real save frozen at version 2, committed so future bumps stay loadable.
+// A real save frozen at version 2 (belt trimmed to a few rocks), committed so
+// future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
@@ -81,20 +82,32 @@ describe('load through the production registry', () => {
   });
 
   it('migrates an older save up to the current version', () => {
-    const old = { ...fixtureState(), version: SAVE_VERSION - 1 };
-    migrations[SAVE_VERSION - 1] = (d) => d;
-    try {
-      const state = deserialize(JSON.stringify(old));
-      expect(state).not.toBeNull();
-      expect(state?.version).toBe(SAVE_VERSION);
-    } finally {
-      delete migrations[SAVE_VERSION - 1];
-    }
+    const old = JSON.stringify({ ...fixtureState(), version: SAVE_VERSION - 1 });
+    const table = { ...migrations, [SAVE_VERSION - 1]: (d: SaveData) => d };
+
+    const state = deserialize(old, { table });
+
+    expect(state).not.toBeNull();
+    expect(state?.version).toBe(SAVE_VERSION);
   });
 
-  it('still refuses an older save when no migration exists for it', () => {
-    const old = { ...fixtureState(), version: SAVE_VERSION - 1 };
-    expect(deserialize(JSON.stringify(old))).toBeNull();
+  it('refuses a save whose migration chain has a gap', () => {
+    // A version below everything the table covers, so this holds whatever real steps exist.
+    const old = JSON.stringify({ ...fixtureState(), version: 1 });
+    expect(deserialize(old, { table: {}, to: SAVE_VERSION })).toBeNull();
+    expect(parseImport(old, { table: {} })).toEqual({
+      ok: false,
+      error: `Unsupported save version 1 (expected ${SAVE_VERSION}).`,
+    });
+  });
+
+  it('does not blame the version when an upgradable save is malformed', () => {
+    const broken = JSON.stringify({ version: SAVE_VERSION - 1, profile: {}, run: {} });
+    const table = { [SAVE_VERSION - 1]: (d: SaveData) => d };
+    expect(parseImport(broken, { table })).toEqual({
+      ok: false,
+      error: 'This is not an Asteroid Miner Horizons save.',
+    });
   });
 
   it('explains that a save from a newer version cannot be loaded', () => {
