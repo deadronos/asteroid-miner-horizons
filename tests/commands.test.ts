@@ -114,4 +114,34 @@ describe('command handlers', () => {
     expect(s.run.selectedId).toBe(fs.id);
     expect(Object.keys(handlers)).toHaveLength(14);
   });
+
+  it('a command for a missing ship is a silent no-op', () => {
+    const s = newGame(1),
+      n = s.out.log.length;
+    send(s, { t: 'stop', shipId: 999 });
+    expect(s.out.log.length).toBe(n);
+  });
+  it('mine without a laser warns and sets no order', () => {
+    const s = newGame(1),
+      h = makeShip(s.run, s.profile, 'excavator', 'Ex', { ...s.run.system.station.pos });
+    s.run.ships.push(h);
+    send(s, { t: 'mine', shipId: h.id, rockId: s.run.rocks[0]!.id });
+    expect(h.order).toBeNull();
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn' });
+  });
+  it('install is rejected unless docked', () => {
+    const { s, fs } = fs1();
+    fs.pos = { x: 0, z: 5000 };
+    s.run.bank.ore = 1000;
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
+    expect(fs.slots[2]).toBeNull();
+  });
+  it('remove re-clamps hull to the new max', () => {
+    const { s, fs } = fs1();
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0 };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'armor' });
+    fs.hull = 1e9;
+    send(s, { t: 'remove', shipId: fs.id, slot: 2 });
+    expect(fs.hull).toBeLessThanOrEqual(100);
+  });
 });
