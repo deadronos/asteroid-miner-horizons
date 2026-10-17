@@ -136,6 +136,13 @@ describe('command handlers', () => {
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
     expect(fs.slots[2]).toBeNull();
   });
+  it('install is rejected when under-funded', () => {
+    const { s, fs } = fs1();
+    s.run.bank = { ore: 0, ice: 0, crystal: 0 };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
+    expect(fs.slots[2]).toBeNull();
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn' });
+  });
   it('remove re-clamps hull to the new max', () => {
     const { s, fs } = fs1();
     s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0 };
