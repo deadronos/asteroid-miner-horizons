@@ -26,7 +26,9 @@ export type Command =
   | { t: 'buyHull'; hullId: HullId }
   | { t: 'scrap'; shipId: number }
   | { t: 'buyPerk'; perk: PerkId }
-  | { t: 'warp' };
+  | { t: 'warp' }
+  | { t: 'acceptContract'; contractId: number }
+  | { t: 'abandonContract' };
 
 export function applyCommand(state: GameState, cmd: Command): void {
   // One cast: `handlers` is a mapped type, so `handlers[cmd.t]` is the handler for

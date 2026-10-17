@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { TUNING } from '../src/data/tuning';
 import { applyCommand, type Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { handlers } from '../src/sim/handlers';
@@ -106,13 +107,96 @@ describe('command handlers', () => {
     expect(s.run.system.number).toBe(2);
   });
 
+  it('acceptContract moves an offer to active and refills the board', () => {
+    const s = newGame(1);
+    const board = s.run.contracts;
+    const offer = board.offers[0]!;
+    const idsBefore = new Set(board.offers.map((o) => o.id));
+    const rngBefore = s.run.rng.s;
+    const nextIdBefore = s.run.nextId;
+
+    send(s, { t: 'acceptContract', contractId: offer.id });
+
+    expect(board.active).toMatchObject({
+      id: offer.id,
+      kind: offer.kind,
+      target: offer.target,
+      reward: offer.reward,
+      data: offer.data,
+      progress: 0,
+    });
+    expect(board.active!.timeLeft).toBe(offer.timeLimit);
+    expect(board.offers).toHaveLength(TUNING.contractOffers);
+    expect(board.offers.map((o) => o.id)).not.toContain(offer.id);
+    expect(board.offers.some((o) => !idsBefore.has(o.id))).toBe(true);
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'info', text: expect.stringMatching(/^Contract accepted: /) });
+    // Contracts run on the board's own RNG and id sequence, never the run's.
+    expect(s.run.rng.s).toBe(rngBefore);
+    expect(s.run.nextId).toBe(nextIdBefore);
+
+    send(s, { t: 'abandonContract' });
+
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'info', text: expect.stringMatching(/^Contract abandoned: /) });
+    expect(s.run.rng.s).toBe(rngBefore);
+    expect(s.run.nextId).toBe(nextIdBefore);
+  });
+
+  it('acceptContract is rejected while a contract is already active', () => {
+    const s = newGame(1);
+    const board = s.run.contracts;
+    send(s, { t: 'acceptContract', contractId: board.offers[0]!.id });
+    const before = JSON.stringify(board);
+
+    send(s, { t: 'acceptContract', contractId: board.offers[0]!.id });
+
+    expect(s.out.log.at(-1)).toMatchObject({
+      level: 'warn',
+      text: 'Finish or abandon the current contract first.',
+    });
+    expect(JSON.stringify(board)).toBe(before);
+  });
+
+  it('acceptContract warns and changes nothing for an unknown id', () => {
+    const s = newGame(1);
+    const board = s.run.contracts;
+    const before = JSON.stringify(board);
+
+    send(s, { t: 'acceptContract', contractId: 9999 });
+
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn', text: 'That contract is no longer offered.' });
+    expect(JSON.stringify(board)).toBe(before);
+  });
+
+  it('abandonContract clears the active contract and counts a failure', () => {
+    const s = newGame(1);
+    const board = s.run.contracts;
+    send(s, { t: 'acceptContract', contractId: board.offers[0]!.id });
+
+    send(s, { t: 'abandonContract' });
+
+    expect(board.active).toBeNull();
+    expect(board.failed).toBe(1);
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'info', text: expect.stringMatching(/^Contract abandoned: /) });
+  });
+
+  it('abandonContract is a silent no-op without an active contract', () => {
+    const s = newGame(1);
+    const n = s.out.log.length;
+    const before = JSON.stringify(s.run.contracts);
+
+    send(s, { t: 'abandonContract' });
+
+    expect(s.out.log.length).toBe(n);
+    expect(JSON.stringify(s.run.contracts)).toBe(before);
+  });
+
   it('handlers are exported and individually invokable', () => {
     const s = newGame(1),
       fs = flagship(s.run);
     s.run.selectedId = 0;
     handlers.select(s, { t: 'select', shipId: fs.id });
     expect(s.run.selectedId).toBe(fs.id);
-    expect(Object.keys(handlers)).toHaveLength(14);
+    expect(Object.keys(handlers)).toHaveLength(16);
   });
 
   it('a command for a missing ship is a silent no-op', () => {
