@@ -10,7 +10,7 @@ import { generateSystem, populateBelts } from './generate';
 import { makeShip } from './ships';
 import type { GameState, Profile, Run } from './types';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export function newProfile(seed: number): Profile {
   return {
