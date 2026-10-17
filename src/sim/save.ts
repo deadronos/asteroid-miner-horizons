@@ -2,10 +2,12 @@
 // so a save is its JSON minus the transient outbox, wrapped in a small record:
 //   { format: 'amh-save', savedAt: <epoch ms>, state: { version, profile, run } }
 // The same record is what export produces and import accepts (a bare state
-// object is accepted too). Unknown versions are rejected rather than half-loaded.
+// object is accepted too). Older versions are upgraded through sim/migrations;
+// saves from a newer version are rejected rather than half-loaded.
 
 import { SAVE_VERSION } from './create';
-import type { GameState } from './types';
+import { type MigrateOptions, migrate } from './migrations';
+import type { GameState, Profile, Run } from './types';
 
 export const SLOT_COUNT = 3;
 const PREFIX = 'asteroid-miner-horizons';
@@ -33,24 +35,26 @@ export function serialize(state: GameState): string {
   return JSON.stringify({ version: state.version, profile: state.profile, run: state.run });
 }
 
-export function deserialize(json: string): GameState | null {
+/** `opts` swaps in a migration table (tests); the game always uses the default. */
+export function deserialize(json: string, opts?: MigrateOptions): GameState | null {
   try {
-    return fromData(JSON.parse(json));
+    return fromData(JSON.parse(json), opts);
   } catch {
     return null;
   }
 }
 
 /** Validates the shape of parsed JSON well enough that the game can run on it. */
-function fromData(data: unknown): GameState | null {
-  const d = data as Partial<GameState> | null;
-  if (!d || typeof d !== 'object' || d.version !== SAVE_VERSION) return null;
-  const { profile, run } = d;
+function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
+  const migrated = migrate(data, opts);
+  if (!migrated) return null;
+  // migrate() only guarantees the version envelope; validate the payload shape.
+  const { profile, run } = migrated as { profile?: Profile; run?: Run };
   if (!profile || typeof profile.seed !== 'number' || typeof profile.perks !== 'object') return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
   if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
-  return { version: d.version, profile, run, out: { fx: [], log: [] } };
+  return { version: migrated.version, profile, run, out: { fx: [], log: [] } };
 }
 
 /** Text for export: a save record with metadata, pretty enough to eyeball. */
@@ -59,7 +63,10 @@ export function exportText(state: GameState, savedAt = Date.now()): string {
 }
 
 /** Parses exported text (a save record or a bare state). */
-export function parseImport(text: string): { ok: true; record: SaveRecord } | { ok: false; error: string } {
+export function parseImport(
+  text: string,
+  opts?: MigrateOptions,
+): { ok: true; record: SaveRecord } | { ok: false; error: string } {
   let data: unknown;
   try {
     data = JSON.parse(text.trim());
@@ -68,16 +75,18 @@ export function parseImport(text: string): { ok: true; record: SaveRecord } | { 
   }
   const rec = data as { format?: string; savedAt?: number; state?: unknown };
   const isRecord = rec && typeof rec === 'object' && rec.format === FORMAT;
-  const state = fromData(isRecord ? rec.state : data);
+  const payload = isRecord ? rec.state : data;
+  const state = fromData(payload, opts);
   if (!state) {
-    const v = (isRecord ? (rec.state as { version?: unknown }) : (data as { version?: unknown }))?.version;
-    return {
-      ok: false,
-      error:
-        v != null && v !== SAVE_VERSION
-          ? `Unsupported save version ${String(v)} (expected ${SAVE_VERSION}).`
-          : 'This is not an Asteroid Miner Horizons save.',
-    };
+    const v = (payload as { version?: unknown } | null | undefined)?.version;
+    const to = opts?.to ?? SAVE_VERSION;
+    if (typeof v === 'number' && v > to)
+      return { ok: false, error: `This save is from a newer version (v${v}) and can't be loaded by this build.` };
+    // Only blame the version when it's one we can't upgrade; an upgradable save
+    // that still fails validation is just not a usable save.
+    if (Number.isInteger(v) && (v as number) >= 1 && !migrate(payload, opts))
+      return { ok: false, error: `Unsupported save version ${String(v)} (expected ${to}).` };
+    return { ok: false, error: 'This is not an Asteroid Miner Horizons save.' };
   }
   return {
     ok: true,
