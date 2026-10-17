@@ -27,7 +27,7 @@ const c = new THREE.Color();
 
 class InstancePool {
   mesh: THREE.InstancedMesh;
-  /** Per-instance (damage 0..1, crack seed), only when `withDamage`. */
+  /** Per-instance (damage 0..1, crack seed, self-glow), only when `withDamage`. */
   damage: THREE.InstancedBufferAttribute | null = null;
   constructor(
     private readonly parent: THREE.Object3D,
@@ -41,7 +41,7 @@ class InstancePool {
 
   private make(capacity: number): THREE.InstancedMesh {
     if (this.withDamage) {
-      this.damage = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 2), 2);
+      this.damage = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
       this.damage.setUsage(THREE.DynamicDrawUsage);
       this.geo.setAttribute('aDamage', this.damage);
     }
@@ -77,12 +77,13 @@ class InstancePool {
 function addCracks(mat: THREE.MeshLambertMaterial): void {
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = crackTime;
+    shader.uniforms.uGlow = selfGlow;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
         `#include <common>
-attribute vec2 aDamage;
-varying vec2 vDamage;
+attribute vec3 aDamage;
+varying vec3 vDamage;
 varying vec3 vObj;`,
       )
       .replace(
@@ -96,7 +97,8 @@ vObj = position;`,
         '#include <common>',
         `#include <common>
 uniform float uTime;
-varying vec2 vDamage;
+uniform float uGlow;
+varying vec3 vDamage;
 varying vec3 vObj;
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float vnoise(vec3 p) {
@@ -112,6 +114,7 @@ float vnoise(vec3 p) {
       .replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
+totalEmissiveRadiance += diffuseColor.rgb * vDamage.z * uGlow * (0.85 + 0.15 * sin(uTime * 2.0 + vDamage.y * 20.0));
 if (vDamage.x > 0.001) {
   vec3 q = vObj * 2.6 + vDamage.y * 17.0;
   float n = vnoise(q) * 0.65 + vnoise(q * 2.3) * 0.35;
@@ -127,12 +130,22 @@ if (vDamage.x > 0.001) {
 }
 
 const crackTime = { value: 0 };
+const selfGlow = { value: 0.22 };
 
 export class RockView {
   readonly group = new THREE.Group();
   private rocks: InstancePool[] = [];
   private pickups: InstancePool;
   private buckets: Rock[][] = Array.from({ length: VARIANTS }, () => []);
+  /**
+   * HDR boost for things that should bloom (crystals, pickups). 1 without
+   * bloom, so colours stay exactly as authored when there's no post-processing.
+   */
+  set glow(k: number) {
+    this.glowK = k;
+    selfGlow.value = 0.22 * k;
+  }
+  private glowK = 1;
   /** Cosmetic hit tracking: last seen hp and when the rock last lost some. */
   private lastHp = new Map<number, number>();
   private hitAt = new Map<number, number>();
@@ -182,7 +195,7 @@ export class RockView {
           .multiplyScalar(0.85 + h * 0.3)
           .lerp(HOT, dmg * 0.35);
         pool.mesh.setColorAt(i, c);
-        pool.damage!.setXY(i, dmg, h);
+        pool.damage!.setXYZ(i, dmg, h, r.kind === 'crystal' ? 1 : 0);
       });
       pool.commit(bucket.length);
     });
@@ -196,7 +209,7 @@ export class RockView {
       p.set(pk.pos.x, 4, pk.pos.z);
       s.setScalar(Math.max(0.01, size));
       pp.mesh.setMatrixAt(i, m.compose(p, q, s));
-      pp.mesh.setColorAt(i, c.setHex(RESOURCE_INFO[pk.kind].color));
+      pp.mesh.setColorAt(i, c.setHex(RESOURCE_INFO[pk.kind].color).multiplyScalar(this.glowK));
     });
     pp.commit(pickups.length);
   }

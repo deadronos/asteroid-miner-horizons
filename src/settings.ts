@@ -118,11 +118,11 @@ export const DEFAULTS: Settings = {
   keys: DEFAULT_KEYS,
 };
 
-/** What each quality preset means for the renderer. */
-export const QUALITY: Record<Quality, { pixelRatioCap: number; stars: number; particles: number }> = {
-  low: { pixelRatioCap: 1, stars: 0.3, particles: 0.3 },
-  medium: { pixelRatioCap: 1.5, stars: 0.6, particles: 0.65 },
-  high: { pixelRatioCap: 2, stars: 1, particles: 1 },
+/** What each quality preset means for the renderer. `bloom` is the glow strength (0 = no post-processing). */
+export const QUALITY: Record<Quality, { pixelRatioCap: number; stars: number; particles: number; bloom: number }> = {
+  low: { pixelRatioCap: 1, stars: 0.3, particles: 0.3, bloom: 0 },
+  medium: { pixelRatioCap: 1.5, stars: 0.6, particles: 0.65, bloom: 0.75 },
+  high: { pixelRatioCap: 2, stars: 1, particles: 1, bloom: 0.9 },
 };
 
 export const SHAKE_SCALE: Record<Shake, number> = { off: 0, low: 0.35, full: 1 };

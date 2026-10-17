@@ -3,6 +3,10 @@
 // Owns the view state (zoom, pan, follow) and turns sim fx into particles.
 
 import * as THREE from 'three';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { clamp, damp, type Vec2 } from '../core/vec';
 import { HULLS } from '../data/hulls';
 import { RESOURCE_INFO } from '../data/resources';
@@ -17,6 +21,27 @@ import { ROCK_TINT, RockView } from './rocks';
 import { ShipView } from './shipView';
 import { SystemView } from './systemView';
 import { additive, flat } from './util';
+
+/**
+ * Final composer pass: presents the sRGB-encoded buffer as-is (no second
+ * encode). Values above 1 (boosted glow colours plus bloom) are pulled back
+ * mostly hue-preserving, so a bright orange pickup stays orange rather than
+ * clipping to yellow, while some white-hot clipping is kept for beams and the star.
+ */
+const PRESENT_SHADER = {
+  uniforms: { tDiffuse: { value: null }, hueKeep: { value: 0.5 } },
+  vertexShader: `varying vec2 vUv;
+void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `uniform sampler2D tDiffuse;
+uniform float hueKeep;
+varying vec2 vUv;
+void main() {
+  vec3 c = texture2D(tDiffuse, vUv).rgb;
+  float m = max(max(c.r, c.g), c.b);
+  vec3 hue = c / max(1.0, m);
+  gl_FragColor = vec4(mix(min(c, 1.0), hue, hueKeep), 1.0);
+}`,
+};
 
 export const ZOOM_MIN = 90;
 export const ZOOM_MAX = 3200;
@@ -38,6 +63,11 @@ export class Renderer {
   private hoverRing: THREE.Mesh;
   private moveMarker: THREE.Mesh;
   private shake = 0;
+  /** Bloom post-processing; created the first time a quality preset wants it. */
+  private composer: EffectComposer | null = null;
+  private bloom: UnrealBloomPass | null = null;
+  private bloomOn = false;
+  private readonly msaa: number;
   private warpFlash = 0;
 
   /** View state. `follow` keeps the camera on the selected ship. */
@@ -57,6 +87,7 @@ export class Renderer {
   ) {
     this.gl = new THREE.WebGLRenderer({ antialias: settings.antialias, powerPreference: 'high-performance' });
     this.gl.setClearColor(0x03060d);
+    this.msaa = settings.antialias ? 4 : 0;
     this.canvas = this.gl.domElement;
     container.appendChild(this.canvas);
     this.floaters = new FloatingText(container);
@@ -86,6 +117,9 @@ export class Renderer {
   applySettings(s: Settings): void {
     const q = QUALITY[s.quality];
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatioCap));
+    this.bloomOn = q.bloom > 0;
+    if (this.bloomOn) this.ensureComposer().bloom.strength = q.bloom;
+    this.rocks.glow = this.ships.glow = this.bloomOn ? 1.8 : 1;
     this.resize();
     this.backdrop.configure(q.stars, s.nebula);
     this.particles.density = q.particles;
@@ -94,10 +128,37 @@ export class Renderer {
     this.alwaysBars = s.alwaysShowBars;
   }
 
+  private ensureComposer(): { composer: EffectComposer; bloom: UnrealBloomPass } {
+    if (!this.composer || !this.bloom) {
+      // The scene leans on low-opacity layers (nebula, belts, haze) that were tuned
+      // for blending in sRGB on the canvas. Render targets normally blend in linear
+      // space, which lifts those layers into a grey-blue fog, so the composer's
+      // buffers take the XR-target path: shaders write sRGB-encoded values into a
+      // half-float buffer and blend exactly as on screen; PRESENT_SHADER shows
+      // it with no second encode. MSAA on the target replaces the context's
+      // antialiasing, which post-processing bypasses.
+      const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: this.msaa });
+      target.texture.colorSpace = THREE.SRGBColorSpace;
+      this.composer = new EffectComposer(this.gl, target);
+      for (const t of [this.composer.renderTarget1, this.composer.renderTarget2])
+        Object.assign(t, { isXRRenderTarget: true });
+      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      // Threshold keeps lit rocks and hulls crisp; only bright additive light glows.
+      this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.9, 0.35, 0.96);
+      this.composer.addPass(this.bloom);
+      this.composer.addPass(new ShaderPass(PRESENT_SHADER));
+    }
+    return { composer: this.composer, bloom: this.bloom };
+  }
+
   private resize(): void {
     const w = Math.max(1, this.container.clientWidth);
     const h = Math.max(1, this.container.clientHeight);
     this.gl.setSize(w, h, false);
+    if (this.composer) {
+      this.composer.setPixelRatio(this.gl.getPixelRatio());
+      this.composer.setSize(w, h);
+    }
     this.canvas.style.width = '100%';
     this.canvas.style.height = '100%';
   }
@@ -220,7 +281,8 @@ export class Renderer {
     );
 
     this.warpFlash = Math.max(0, this.warpFlash - dt * 1.2);
-    this.gl.render(this.scene, this.camera);
+    if (this.bloomOn && this.composer) this.composer.render(dt);
+    else this.gl.render(this.scene, this.camera);
   }
 
   private onScreen(p: Vec2): boolean {

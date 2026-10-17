@@ -85,6 +85,8 @@ export class ShipView {
   readonly group = new THREE.Group();
   private visuals = new Map<number, Visual>();
   private geos = new Map<HullId, THREE.BufferGeometry>();
+  /** HDR boost for flames and beams while bloom is on (1 = as authored). */
+  glow = 1;
 
   private geo(id: HullId): THREE.BufferGeometry {
     let g = this.geos.get(id);
@@ -220,6 +222,7 @@ export class ShipView {
 
       const flick = 0.75 + Math.random() * 0.5;
       v.flame.visible = ship.thrusting;
+      (v.flame.material as THREE.MeshBasicMaterial).color.setHex(0xff8a3a).multiplyScalar(this.glow);
       v.flame.scale.set(flick, 1, 0.8 + Math.random() * 0.3);
 
       if (ship.shield < v.shieldPrev - 0.5) v.hitFlash = 1;
@@ -275,6 +278,8 @@ export class ShipView {
         v.beamGlow.scale.set(L, 1, Math.max(5, 8 * wpp) * pulse);
         v.tip.position.set(tx, 22, tz);
         v.tip.scale.setScalar(Math.max(18, 26 * wpp) * (0.8 + Math.random() * 0.4));
+        (v.beam.material as THREE.MeshBasicMaterial).color.setHex(0xff6a4a).multiplyScalar(this.glow);
+        (v.tip.material as THREE.SpriteMaterial).color.setHex(0xffb070).multiplyScalar(this.glow);
         v.beam.visible = v.beamGlow.visible = v.tip.visible = true;
         hits.push({ x: tx, z: tz, ship });
       } else {
