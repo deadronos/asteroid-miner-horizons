@@ -28,6 +28,10 @@ interface WarpStats {
   hd: number;
   flagshipValue: number;
   droneValue: number;
+  /** walletValue of contract rewards paid this warp. */
+  contractValue: number;
+  /** Contracts completed this warp. */
+  contracts: number;
 }
 
 interface SeedResult {
@@ -68,7 +72,7 @@ export function playSeed(seed: number, warps: number): SeedResult {
   for (let w = 0; w < warps; w++) {
     const startWarps = state.profile.warps;
     const earnedBefore = state.profile.dataEarned;
-    const cur: WarpStats = { sec: 0, value: 0, hd: 0, flagshipValue: 0, droneValue: 0 };
+    const cur: WarpStats = { sec: 0, value: 0, hd: 0, flagshipValue: 0, droneValue: 0, contractValue: 0, contracts: 0 };
     const ran = runBot(state, {
       seconds: WARP_CAP_SEC,
       before: (s) => {
@@ -94,6 +98,8 @@ export function playSeed(seed: number, warps: number): SeedResult {
           }
         }
         cur.value = s.run.runValue;
+        cur.contractValue = s.run.contracts.rewardValue;
+        cur.contracts = s.run.contracts.completed;
       },
     });
     cur.sec = ran;
@@ -153,8 +159,8 @@ function report(results: SeedResult[], seeds: number, warps: number): string {
     '',
     '## Per warp',
     '',
-    '| System | Time in system | vs previous | Value delivered | Value / min | HD earned | Drone share of income | Walls |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| System | Time in system | vs previous | Value delivered | Value / min | HD earned | Drone share of income | Contract share of income | Contracts done | Walls |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   );
   for (let w = 0; w < warps; w++) {
     const rows = results.map((r) => r.warps[w]).filter((x): x is WarpStats => !!x);
@@ -180,6 +186,12 @@ function report(results: SeedResult[], seeds: number, warps: number): string {
       )} | ${stat(
         rows.map((x) => x.droneValue / Math.max(1, x.droneValue + x.flagshipValue)),
         (n) => `${Math.round(n * 100)}%`,
+      )} | ${stat(
+        rows.map((x) => x.contractValue / Math.max(1, x.value + x.contractValue)),
+        (n) => `${Math.round(n * 100)}%`,
+      )} | ${stat(
+        rows.map((x) => x.contracts),
+        (n) => `${Math.round(n)}`,
       )} | ${walls ? `${walls} (cap ${WARP_CAP_SEC / 60} min)` : '—'} |`,
     );
   }
@@ -188,11 +200,11 @@ function report(results: SeedResult[], seeds: number, warps: number): string {
     '## Raw data',
     '',
     '```csv',
-    'seed,system,sec,value,hd,flagship_value,drone_value,wall',
+    'seed,system,sec,value,hd,flagship_value,drone_value,contract_value,contracts,wall',
     ...results.flatMap((r) =>
       r.warps.map(
         (x, w) =>
-          `${r.seed},${w + 1},${x.sec.toFixed(1)},${Math.round(x.value)},${x.hd},${Math.round(x.flagshipValue)},${Math.round(x.droneValue)},${r.wall === w ? 1 : 0}`,
+          `${r.seed},${w + 1},${x.sec.toFixed(1)},${Math.round(x.value)},${x.hd},${Math.round(x.flagshipValue)},${Math.round(x.droneValue)},${Math.round(x.contractValue)},${x.contracts},${r.wall === w ? 1 : 0}`,
       ),
     ),
     '```',

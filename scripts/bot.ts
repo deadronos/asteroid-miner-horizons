@@ -2,9 +2,10 @@
 // purely through sim Commands, like the UI would; drones keep their own AI.
 //
 // Each call looks at the state and returns the commands for the next tick:
-//   buy affordable perks → warp when the bank has the ice → dock when the
-//   hold is full → while docked, repair / buy one thing → chase nearby
-//   debris → mine the nearest rock of whichever resource the bank needs.
+//   buy affordable perks → warp when the bank has the ice → accept a
+//   serviceable contract → dock when the hold is full → while docked,
+//   repair / buy one thing → chase nearby debris → mine the nearest rock of
+//   whichever resource the bank (or the active delivery contract) needs.
 //
 // Ice reserve: any purchase must leave at least ICE_RESERVE × warp cost of
 // ice in the bank, otherwise ice-priced
@@ -12,6 +13,7 @@
 
 import { dist, distSq } from '../src/core/vec';
 import { COMPONENTS, type ComponentId } from '../src/data/components';
+import { CONTRACTS } from '../src/data/contracts';
 import { HULLS } from '../src/data/hulls';
 import type { PerkId } from '../src/data/perks';
 import { canAfford, type Cost } from '../src/data/resources';
@@ -45,6 +47,10 @@ export function botCommands(state: GameState, opts: BotOptions = {}): Command[] 
 
   const wc = warpCost(state);
   if (opts.warp !== false && run.bank.ice >= wc) return [{ t: 'warp' }];
+
+  const contract = nextContract(state);
+  if (contract) return [contract];
+
   if (!isAlive(fs)) return [];
 
   const st = shipStats(fs, profile);
@@ -85,6 +91,15 @@ function nextPerk(state: GameState): PerkId | null {
   return pick;
 }
 
+/** First offered contract this system can serve (crystal only where crystal rocks exist). */
+function nextContract(state: GameState): Command | null {
+  const { run } = state;
+  if (run.contracts.active) return null;
+  const hasCrystal = run.rocks.some((r) => r.kind === 'crystal');
+  const offer = run.contracts.offers.find((o) => o.kind !== 'deliverCrystal' || hasCrystal);
+  return offer ? { t: 'acceptContract', contractId: offer.id } : null;
+}
+
 /** Repair, then one purchase per call: drone, empty-slot installs, upgrades, bigger flagship. */
 function nextPurchase(state: GameState, wc: number): Command | null {
   const { run, profile } = state;
@@ -117,14 +132,21 @@ function nextPurchase(state: GameState, wc: number): Command | null {
   return null;
 }
 
-/** Nearest rock, with the resource the bank is shorter on counting as half the distance. */
+/**
+ * Nearest rock, with the resource the bank is shorter on counting as half the
+ * distance. An active delivery contract overrides that want with its resource;
+ * an active breakLarge scores large (size-0) rocks at half distance.
+ */
 function pickRock(state: GameState, fs: Ship, wc: number): Rock | null {
   const { bank } = state.run;
-  const want = bank.ice / wc < bank.ore / 300 ? 'ice' : 'ore';
+  const active = state.run.contracts.active;
+  const want = (active && CONTRACTS[active.kind].resource) ?? (bank.ice / wc < bank.ore / 300 ? 'ice' : 'ore');
+  const breakLarge = active?.kind === 'breakLarge';
   let best: Rock | null = null;
   let bestScore = Infinity;
   for (const r of state.run.rocks) {
-    const score = dist(fs.pos, r.pos) * (r.kind === want || r.kind === 'crystal' ? 0.5 : 1);
+    let score = dist(fs.pos, r.pos) * (r.kind === want || r.kind === 'crystal' ? 0.5 : 1);
+    if (breakLarge && r.size === 0) score *= 0.5;
     if (score < bestScore) {
       bestScore = score;
       best = r;

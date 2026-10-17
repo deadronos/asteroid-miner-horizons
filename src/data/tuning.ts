@@ -40,9 +40,9 @@ export const TUNING = {
   /** Seconds an un-accepted offer stays on the board. */
   contractOfferTtl: 240,
   /** Per-system multiplier on a contract's target. */
-  contractGrowth: 1.3,
+  contractGrowth: 1.15,
   /** Reward value as a fraction of the target's own value. */
-  contractRewardMul: 0.5,
+  contractRewardMul: 0.68,
   /** Value of the units in one large rock, used to price breakLarge rewards. */
   contractRockValue: 25,
 
