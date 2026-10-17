@@ -1,35 +1,14 @@
 // Ship construction, derived stats and damage.
 
 import { v, type Vec2 } from '../core/vec';
-import {
-  ARMOR_DMG_MUL,
-  ARMOR_HULL,
-  CARGO_CAP,
-  ENGINE_SPEED,
-  LASER_DPS,
-  LASER_RANGE,
-  SENSOR_MAGNET,
-  SHIELD_CAP,
-  SHIELD_REGEN,
-} from '../data/components';
+import { COMPONENTS, type ShipStatKey } from '../data/components';
 import { HULLS, type HullId } from '../data/hulls';
 import { emptyWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { GameState, Profile, Run, Ship } from './types';
 
-export interface ShipStats {
-  maxHull: number;
-  maxShield: number;
-  shieldRegen: number;
-  speed: number;
-  accel: number;
-  dps: number;
-  range: number;
-  magnet: number;
-  cargoCap: number;
-  dmgMul: number;
-  size: number;
-}
+/** Derived stats; the key list lives with the component effects that target it. */
+export type ShipStats = Record<ShipStatKey, number>;
 
 export function shipStats(ship: Ship, profile: Profile): ShipStats {
   const h = HULLS[ship.hullId];
@@ -48,30 +27,10 @@ export function shipStats(ship: Ship, profile: Profile): ShipStats {
   };
   for (const f of ship.slots) {
     if (!f) continue;
-    const i = f.tier - 1;
-    switch (f.type) {
-      case 'laser':
-        s.dps += LASER_DPS[i]!;
-        s.range = Math.max(s.range, LASER_RANGE[i]!);
-        break;
-      case 'engine':
-        s.speed += ENGINE_SPEED[i]!;
-        s.accel += ENGINE_SPEED[i]! * 3;
-        break;
-      case 'shield':
-        s.maxShield += SHIELD_CAP[i]!;
-        s.shieldRegen += SHIELD_REGEN[i]!;
-        break;
-      case 'armor':
-        s.maxHull += ARMOR_HULL[i]!;
-        s.dmgMul *= ARMOR_DMG_MUL[i]!;
-        break;
-      case 'cargo':
-        s.cargoCap += CARGO_CAP[i]!;
-        break;
-      case 'sensor':
-        s.magnet += SENSOR_MAGNET[i]!;
-        break;
+    const tier = f.tier - 1;
+    for (const e of COMPONENTS[f.type].effects) {
+      const value = e.values[tier]!;
+      s[e.stat] = e.op === 'add' ? s[e.stat] + value : e.op === 'max' ? Math.max(s[e.stat], value) : s[e.stat] * value;
     }
   }
   const thrust = 1 + 0.08 * profile.perks.thrust;
