@@ -5,6 +5,7 @@ import type { Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { dataGain, warpCost } from '../src/sim/economy';
 import { makeRock } from '../src/sim/generate';
+import { SimIndex } from '../src/sim/index';
 import { destroyRock } from '../src/sim/mining';
 import { deserialize, exportText, parseImport, serialize } from '../src/sim/save';
 import { flagship, shipStats } from '../src/sim/ships';
@@ -15,7 +16,8 @@ const DT = 1 / 60;
 
 function run(state: GameState, seconds: number, commands: Command[] = []): void {
   const input = { thrust: { x: 0, z: 0 }, commands };
-  for (let t = 0; t < seconds; t += DT) tick(state, DT, input);
+  const index = new SimIndex();
+  for (let t = 0; t < seconds; t += DT) tick(state, DT, input, index);
 }
 
 function totalUnits(state: GameState): number {
@@ -190,5 +192,31 @@ describe('save', () => {
   it('rejects foreign data', () => {
     expect(deserialize('{"version":1}')).toBeNull();
     expect(deserialize('not json')).toBeNull();
+  });
+});
+
+describe('multiple games', () => {
+  it('ticks two games independently when interleaved', () => {
+    const input = { thrust: { x: 0, z: 0 }, commands: [] as Command[] };
+    const a1 = newGame(101),
+      a2 = newGame(202); // interleaved pair
+    const b1 = newGame(101),
+      b2 = newGame(202); // sequential pair, same seeds
+    const i1 = new SimIndex(),
+      i2 = new SimIndex();
+    const j1 = new SimIndex(),
+      j2 = new SimIndex();
+    for (let t = 0; t < 10; t += DT) {
+      tick(a1, DT, input, i1);
+      tick(a2, DT, input, i2);
+    }
+    for (let t = 0; t < 10; t += DT) tick(b1, DT, input, j1);
+    for (let t = 0; t < 10; t += DT) tick(b2, DT, input, j2);
+    expect(serialize(a1)).toEqual(serialize(b1));
+    expect(serialize(a2)).toEqual(serialize(b2));
+    // Distinct instances: a shared index would still pass the equality checks
+    // above, since `tick` rebuilds the index from its own state every tick.
+    expect(i1).not.toBe(i2);
+    expect(i1.rockHash).not.toBe(i2.rockHash);
   });
 });

@@ -91,7 +91,7 @@ function frame(now: number): void {
     const thrust = input.thrust();
     let steps = 0;
     while (acc >= STEP && steps < 8) {
-      tick(state, STEP, { thrust, commands, assists });
+      tick(state, STEP, { thrust, commands, assists }, session.sim);
       acc -= STEP;
       steps++;
     }

@@ -3,6 +3,7 @@
 // only wires the renderer, HUD, input and loop around this.
 
 import { newGame } from './sim/create';
+import { SimIndex } from './sim/index';
 import { activeSlot, clearSlot, migrateLegacy, readSlot, type SaveRecord, setActiveSlot, writeSlot } from './sim/save';
 import type { GameState } from './sim/types';
 import type { SettingsStore } from './settings';
@@ -30,6 +31,8 @@ export class GameSession implements SaveActions {
   /** The interval the timer runs at, or null while stopped. */
   private armedSec: number | null = null;
   private detach: (() => void) | null = null;
+  /** Per-session derived state for the running game; never serialized. */
+  readonly sim = new SimIndex();
 
   constructor(
     private readonly settings: SettingsStore,
@@ -82,6 +85,7 @@ export class GameSession implements SaveActions {
     this.slot = i;
     setActiveSlot(i);
     this.running = newGame();
+    this.clearIndex();
     this.hooks.onSwitch?.();
     this.persist();
   }
@@ -129,8 +133,14 @@ export class GameSession implements SaveActions {
     this.slot = next;
     setActiveSlot(next);
     this.running = nextState;
+    this.clearIndex();
     this.hooks.onSwitch?.();
     this.persist();
+  }
+
+  /** Drop the previous run's derived structures so its rocks/ships can be collected. */
+  private clearIndex(): void {
+    this.sim.clear();
   }
 
   /** (Re)start the autosave timer from the current settings. */

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULTS, SettingsStore, actionFor } from '../src/settings';
 import { newGame } from '../src/sim/create';
 import { makeRock } from '../src/sim/generate';
+import { SimIndex } from '../src/sim/index';
 import { flagship, makeShip } from '../src/sim/ships';
 import type { Assists } from '../src/sim/assists';
 import { tick } from '../src/sim/update';
@@ -58,7 +59,8 @@ describe('settings store', () => {
 
 function runFor(s: GameState, sec: number, assists: Assists, cmds: Parameters<typeof tick>[2]['commands'] = []): void {
   const input = { thrust: { x: 0, z: 0 }, commands: cmds, assists };
-  for (let t = 0; t < sec; t += 1 / 60) tick(s, 1 / 60, input);
+  const index = new SimIndex();
+  for (let t = 0; t < sec; t += 1 / 60) tick(s, 1 / 60, input, index);
 }
 
 describe('assists', () => {

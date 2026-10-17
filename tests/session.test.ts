@@ -134,6 +134,26 @@ describe('GameSession slot switching', () => {
   });
 });
 
+describe('GameSession sim index', () => {
+  it('clears the sim index when the session switches games', () => {
+    writeSlot(1, newGame(3));
+    const s = new GameSession(settings());
+    s.sim.rebuild(s.state);
+    expect(s.sim.rockById.size).toBeGreaterThan(0);
+    s.load(1);
+    expect(s.sim.rockById.size).toBe(0);
+    expect(s.sim.stats.size).toBe(0);
+  });
+
+  it('clears the sim index when starting a new game', () => {
+    const s = new GameSession(settings());
+    s.sim.rebuild(s.state);
+    expect(s.sim.rockById.size).toBeGreaterThan(0);
+    s.newGame(2);
+    expect(s.sim.rockById.size).toBe(0);
+  });
+});
+
 describe('GameSession saving', () => {
   it('saves the running game to the active slot and logs a notice', () => {
     const s = new GameSession(settings());
