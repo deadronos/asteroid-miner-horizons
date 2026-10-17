@@ -9,7 +9,6 @@ import { Renderer } from './render/Renderer';
 import { GameSession } from './session';
 import type { Assists } from './sim/assists';
 import type { Command } from './sim/commands';
-import { SimIndex } from './sim/index';
 import { applyCommands, tick } from './sim/update';
 import { SettingsStore } from './settings';
 import { Hud } from './ui/Hud';
@@ -73,7 +72,6 @@ function pauseReason(): string | null {
 }
 
 const STEP = 1 / TUNING.simHz;
-const simIndex = new SimIndex();
 let last = performance.now();
 let acc = 0;
 let hudAcc = 0;
@@ -93,7 +91,7 @@ function frame(now: number): void {
     const thrust = input.thrust();
     let steps = 0;
     while (acc >= STEP && steps < 8) {
-      tick(state, STEP, { thrust, commands, assists }, simIndex);
+      tick(state, STEP, { thrust, commands, assists }, session.sim);
       acc -= STEP;
       steps++;
     }
