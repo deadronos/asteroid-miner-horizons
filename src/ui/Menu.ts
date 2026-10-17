@@ -78,6 +78,7 @@ export class Menu {
   private tab: Tab = 'saves';
   private overlay: HTMLElement | null = null;
   private fileInput = h('input');
+  private importSlot = 0;
   private capture: { action: KeyAction; slot: 0 | 1; btn: HTMLButtonElement; note: HTMLElement } | null = null;
 
   constructor(
@@ -89,6 +90,7 @@ export class Menu {
     this.fileInput.type = 'file';
     this.fileInput.accept = '.json,.txt,application/json,text/plain';
     this.fileInput.hidden = true;
+    this.fileInput.addEventListener('change', this.onFilePicked);
 
     const tabBar = h('div', { class: 'tabs' });
     for (const [id, label] of TABS) {
@@ -97,7 +99,13 @@ export class Menu {
       tabBar.append(b);
     }
     const close = h('button', { class: 'icon', text: '✕', title: 'Close (Esc)', onclick: () => this.toggle(false) });
-    this.box = h('div', { class: 'hud box menu' }, h('div', { class: 'menu-head' }, tabBar, close), this.body, this.fileInput);
+    this.box = h(
+      'div',
+      { class: 'hud box menu' },
+      h('div', { class: 'menu-head' }, tabBar, close),
+      this.body,
+      this.fileInput,
+    );
     this.el = h('div', { class: 'modal hidden' }, this.box);
     this.el.addEventListener('click', (e) => {
       if (e.target === this.el) this.toggle(false);
@@ -201,7 +209,11 @@ export class Menu {
         }
         btns.append(
           h('button', { text: 'Export…', onclick: () => this.exportWindow(i, rec.state) }),
-          h('button', { text: 'Download', title: 'Download as a .json file', onclick: () => download(fileName(rec.state, i), exportText(rec.state)) }),
+          h('button', {
+            text: 'Download',
+            title: 'Download as a .json file',
+            onclick: () => download(fileName(rec.state, i), exportText(rec.state)),
+          }),
         );
         if (isActive) {
           btns.append(
@@ -210,7 +222,12 @@ export class Menu {
               text: 'Restart',
               title: 'Start a brand-new game in this slot (erases it, including research)',
               onclick: () => {
-                if (!this.settings.value.confirmDestructive || confirm(`Start a NEW GAME in slot ${i + 1}? This slot's progress, including research, will be erased.`)) {
+                if (
+                  !this.settings.value.confirmDestructive ||
+                  confirm(
+                    `Start a NEW GAME in slot ${i + 1}? This slot's progress, including research, will be erased.`,
+                  )
+                ) {
                   this.saves.newGame(i);
                   this.toggle(false);
                 }
@@ -223,7 +240,10 @@ export class Menu {
               class: 'danger',
               text: 'Delete',
               onclick: () => {
-                if (!this.settings.value.confirmDestructive || confirm(`Delete the save in slot ${i + 1}? Export it first if you might want it back.`)) {
+                if (
+                  !this.settings.value.confirmDestructive ||
+                  confirm(`Delete the save in slot ${i + 1}? Export it first if you might want it back.`)
+                ) {
                   this.saves.remove(i);
                   this.rerender();
                 }
@@ -253,24 +273,33 @@ export class Menu {
   }
 
   private importFile(slot: number): void {
-    const input = this.fileInput;
-    input.value = '';
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-      const res = parseImport(await file.text());
-      if (!res.ok) {
-        alert(`Couldn't import ${file.name}: ${res.error}`);
-        return;
-      }
-      this.saves.importTo(slot, res.record);
-      this.rerender();
-    };
-    input.click();
+    // One shared listener (registered in the constructor) reads the target slot,
+    // so a cancelled file dialog never leaves a stale handler behind.
+    this.importSlot = slot;
+    this.fileInput.value = '';
+    this.fileInput.click();
   }
 
+  private onFilePicked = async (): Promise<void> => {
+    const file = this.fileInput.files?.[0];
+    if (!file) return;
+    const res = parseImport(await file.text());
+    if (!res.ok) {
+      alert(`Couldn't import ${file.name}: ${res.error}`);
+      return;
+    }
+    this.saves.importTo(this.importSlot, res.record);
+    this.rerender();
+  };
+
   // ---------- Text windows ----------
-  private textWindow(title: string, note: string, text: string, readOnly: boolean, buttons: HTMLElement[]): { area: HTMLTextAreaElement; error: HTMLElement } {
+  private textWindow(
+    title: string,
+    note: string,
+    text: string,
+    readOnly: boolean,
+    buttons: HTMLElement[],
+  ): { area: HTMLTextAreaElement; error: HTMLElement } {
     this.closeOverlay();
     const area = h('textarea');
     area.value = text;
@@ -305,7 +334,7 @@ export class Menu {
       true,
       [copy, dl],
     );
-    copy.onclick = async () => {
+    copy.addEventListener('click', async () => {
       area.select();
       try {
         await navigator.clipboard.writeText(text);
@@ -314,13 +343,19 @@ export class Menu {
         document.execCommand('copy');
         copy.textContent = 'Copied ✓';
       }
-    };
+    });
   }
 
   private importWindow(slot: number): void {
     const go = h('button', { text: 'Import' });
-    const { area, error } = this.textWindow(`Import into slot ${slot + 1}`, 'Paste exported save text (JSON) below.', '', false, [go]);
-    go.onclick = () => {
+    const { area, error } = this.textWindow(
+      `Import into slot ${slot + 1}`,
+      'Paste exported save text (JSON) below.',
+      '',
+      false,
+      [go],
+    );
+    go.addEventListener('click', () => {
       const res = parseImport(area.value);
       if (!res.ok) {
         error.textContent = res.error;
@@ -328,7 +363,7 @@ export class Menu {
       }
       this.saves.importTo(slot, res.record);
       this.rerender();
-    };
+    });
   }
 
   private closeOverlay(): void {
@@ -349,11 +384,27 @@ export class Menu {
         [30, 'Every 30 seconds'],
         [60, 'Every minute'],
       ]),
-      this.toggleRow('confirmDestructive', 'Confirm restart, delete and scrap', 'Ask before erasing a save or scrapping a ship'),
+      this.toggleRow(
+        'confirmDestructive',
+        'Confirm restart, delete and scrap',
+        'Ask before erasing a save or scrapping a ship',
+      ),
       section('Autopilot assists'),
-      this.toggleRow('assistAvoid', 'Steer around asteroids', 'Move, dock and mining approaches avoid rocks. Off: straight lines; you may crash.'),
-      this.toggleRow('assistAutoDock', 'Drones unload automatically', 'Full drones fly home to unload. Off: they wait for a manual dock order.'),
-      this.toggleRow('assistChain', 'Keep mining fragments', 'After a rock breaks, the laser moves on to the nearest fragment'),
+      this.toggleRow(
+        'assistAvoid',
+        'Steer around asteroids',
+        'Move, dock and mining approaches avoid rocks. Off: straight lines; you may crash.',
+      ),
+      this.toggleRow(
+        'assistAutoDock',
+        'Drones unload automatically',
+        'Full drones fly home to unload. Off: they wait for a manual dock order.',
+      ),
+      this.toggleRow(
+        'assistChain',
+        'Keep mining fragments',
+        'After a rock breaks, the laser moves on to the nearest fragment',
+      ),
     ];
   }
 
@@ -368,7 +419,7 @@ export class Menu {
           ['medium', 'Medium: up to 1.5× resolution'],
           ['high', 'High: up to 2× resolution, full effects'],
         ],
-        'Resolution is capped at your display\'s pixel density',
+        "Resolution is capped at your display's pixel density",
       ),
       this.toggleRow('nebula', 'Nebula backdrop'),
       this.toggleRow('antialias', 'Anti-aliasing', 'Smooth edges. Takes effect after reloading the page.'),
@@ -386,7 +437,11 @@ export class Menu {
     return [
       section('HUD'),
       this.rangeRow('hudScale', 'HUD scale', 0.8, 1.4, 0.05, (v) => `${Math.round(v * 100)}%`),
-      this.toggleRow('alwaysShowBars', 'Always show ship bars', 'Otherwise only for the selected, damaged or loaded ships'),
+      this.toggleRow(
+        'alwaysShowBars',
+        'Always show ship bars',
+        'Otherwise only for the selected, damaged or loaded ships',
+      ),
       this.toggleRow('showHelp', 'Show help box'),
       this.selectRow(
         'logVerbosity',
@@ -398,7 +453,11 @@ export class Menu {
         'Important: warnings, losses and milestones',
       ),
       section('Camera'),
-      this.toggleRow('followByDefault', 'Follow the selected ship', 'Selecting a ship or flying re-centres the camera. The follow key always toggles it.'),
+      this.toggleRow(
+        'followByDefault',
+        'Follow the selected ship',
+        'Selecting a ship or flying re-centres the camera. The follow key always toggles it.',
+      ),
       this.rangeRow('zoomSpeed', 'Zoom speed', 0.4, 2.5, 0.1, (v) => `${v.toFixed(1)}×`),
       this.toggleRow('edgePan', 'Edge panning', 'Pan by resting the cursor at the screen edge'),
     ];
@@ -406,7 +465,10 @@ export class Menu {
 
   private renderAudio(): Node[] {
     return [
-      h('p', { class: 'dim', text: 'Sound isn\'t in the game yet. These levels are saved now and will apply once audio arrives.' }),
+      h('p', {
+        class: 'dim',
+        text: "Sound isn't in the game yet. These levels are saved now and will apply once audio arrives.",
+      }),
       this.rangeRow('volMaster', 'Master volume', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`, true),
       this.rangeRow('volSfx', 'Effects', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`, true),
       this.rangeRow('volMusic', 'Music', 0, 1, 0.05, (v) => `${Math.round(v * 100)}%`, true),
@@ -418,11 +480,16 @@ export class Menu {
     box.type = 'checkbox';
     box.name = key;
     box.checked = this.settings.value[key];
-    box.onchange = () => this.settings.set({ [key]: box.checked } as Partial<Settings>);
+    box.addEventListener('change', () => this.settings.set({ [key]: box.checked } as Partial<Settings>));
     return row(label, hint, box, true);
   }
 
-  private selectRow<K extends SelectKey>(key: K, label: string, options: [Settings[K], string][], hint = ''): HTMLElement {
+  private selectRow<K extends SelectKey>(
+    key: K,
+    label: string,
+    options: [Settings[K], string][],
+    hint = '',
+  ): HTMLElement {
     const sel = h('select');
     sel.name = key;
     for (const [v, text] of options) {
@@ -431,14 +498,22 @@ export class Menu {
       o.selected = this.settings.value[key] === v;
       sel.append(o);
     }
-    sel.onchange = () => {
+    sel.addEventListener('change', () => {
       const picked = options.find(([v]) => String(v) === sel.value);
       if (picked) this.settings.set({ [key]: picked[0] } as Partial<Settings>);
-    };
+    });
     return row(label, hint, sel);
   }
 
-  private rangeRow(key: NumKey, label: string, min: number, max: number, step: number, fmt: (v: number) => string, disabled = false): HTMLElement {
+  private rangeRow(
+    key: NumKey,
+    label: string,
+    min: number,
+    max: number,
+    step: number,
+    fmt: (v: number) => string,
+    disabled = false,
+  ): HTMLElement {
     const input = h('input');
     input.type = 'range';
     input.name = key;
@@ -448,10 +523,10 @@ export class Menu {
     input.value = String(this.settings.value[key]);
     input.disabled = disabled;
     const out = h('span', { class: 'val', text: fmt(this.settings.value[key]) });
-    input.oninput = () => {
+    input.addEventListener('input', () => {
       out.textContent = fmt(Number(input.value));
       this.settings.set({ [key]: Number(input.value) } as Partial<Settings>);
-    };
+    });
     return row(label, '', h('div', { class: 'rangewrap' }, input, out));
   }
 
@@ -460,13 +535,17 @@ export class Menu {
     const keys = this.settings.value.keys;
     const note = h('div', { class: 'bind-note' });
     const table = h('div', { class: 'binds' });
-    table.append(h('span', { class: 'dim small', text: 'Action' }), h('span', { class: 'dim small', text: 'Primary' }), h('span', { class: 'dim small', text: 'Secondary' }));
+    table.append(
+      h('span', { class: 'dim small', text: 'Action' }),
+      h('span', { class: 'dim small', text: 'Primary' }),
+      h('span', { class: 'dim small', text: 'Secondary' }),
+    );
     for (const { id, label } of KEY_ACTIONS) {
       table.append(h('span', { text: label }));
       for (const slot of [0, 1] as const) {
         const b = h('button', { class: 'bind', text: keyLabel(keys[id][slot]) });
         b.title = 'Click, then press a key. Backspace clears, Esc cancels.';
-        b.onclick = () => this.startCapture(id, slot, b, note);
+        b.addEventListener('click', () => this.startCapture(id, slot, b, note));
         table.append(b);
       }
     }
@@ -487,7 +566,14 @@ export class Menu {
         this.rerender();
       },
     });
-    return [section('Keyboard'), table, note, h('div', { class: 'row end' }, reset), section('Fixed controls'), fixedTable];
+    return [
+      section('Keyboard'),
+      table,
+      note,
+      h('div', { class: 'row end' }, reset),
+      section('Fixed controls'),
+      fixedTable,
+    ];
   }
 
   private startCapture(action: KeyAction, slot: 0 | 1, btn: HTMLButtonElement, note: HTMLElement): void {
@@ -534,7 +620,12 @@ function section(title: string): HTMLElement {
 }
 
 function row(label: string, hint: string, control: HTMLElement, inline = false): HTMLElement {
-  const text = h('div', { class: 'lbl' }, h('span', { text: label }), hint ? h('small', { class: 'dim', text: hint }) : null);
+  const text = h(
+    'div',
+    { class: 'lbl' },
+    h('span', { text: label }),
+    hint ? h('small', { class: 'dim', text: hint }) : null,
+  );
   if (inline) {
     // Whole row toggles the checkbox.
     return h('label', { class: 'setting' }, text, control);

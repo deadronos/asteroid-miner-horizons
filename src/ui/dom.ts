@@ -13,7 +13,7 @@ export function h<K extends keyof HTMLElementTagNameMap>(
   if (attrs.class) e.className = attrs.class;
   if (attrs.text != null) e.textContent = attrs.text;
   if (attrs.title) e.title = attrs.title;
-  if (attrs.onclick) e.onclick = attrs.onclick;
+  if (attrs.onclick) (e as HTMLElement).addEventListener('click', attrs.onclick);
   for (const c of children) if (c) e.append(c);
   return e;
 }

@@ -7,7 +7,18 @@ import { HULLS, HULL_IDS } from '../data/hulls';
 import { PERKS, PERK_IDS } from '../data/perks';
 import { RESOURCES, RESOURCE_INFO, canAfford, formatCost, walletTotal } from '../data/resources';
 import type { Command } from '../sim/commands';
-import { dataGain, halve, hullBlock, investedCost, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../sim/economy';
+import {
+  dataGain,
+  halve,
+  hullBlock,
+  investedCost,
+  isDocked,
+  perkCost,
+  refitBlock,
+  repairCost,
+  upgradeCost,
+  warpCost,
+} from '../sim/economy';
 import { droneCount, fleetCap, isAlive, isFlagship, shipStats } from '../sim/ships';
 import { keyLabel, type SettingsStore } from '../settings';
 import type { GameState, LogEntry, Rock, Ship } from '../sim/types';
@@ -44,7 +55,7 @@ export class Hud {
   private fleet: Panel;
   private ship: Panel;
   private research: Panel;
-  private log = h('div', { class: 'hud', }) as HTMLElement;
+  private log = h('div', { class: 'hud' }) as HTMLElement;
   private tooltip = h('div', { class: 'tooltip' });
   private flash = h('div', { class: 'flash' });
   private help: HTMLElement;
@@ -70,7 +81,11 @@ export class Hud {
       root.append(e);
       return e;
     };
-    this.top = new Panel(mk('topbar'), () => `${getState().run.system.number}`, (b) => this.buildTop(b));
+    this.top = new Panel(
+      mk('topbar'),
+      () => `${getState().run.system.number}`,
+      (b) => this.buildTop(b),
+    );
     this.fleet = new Panel(
       mk('fleet'),
       () => {
@@ -92,7 +107,11 @@ export class Hud {
     root.append(this.log);
 
     this.researchWrap = mk('research', 'modal hidden');
-    this.research = new Panel(this.researchWrap, () => `${getState().profile.warps}`, (b) => this.buildResearch(b));
+    this.research = new Panel(
+      this.researchWrap,
+      () => `${getState().profile.warps}`,
+      (b) => this.buildResearch(b),
+    );
     this.researchWrap.addEventListener('click', (e) => {
       if (e.target === this.researchWrap) this.toggleResearch(false);
     });
@@ -134,7 +153,10 @@ export class Hud {
     this.fpsTime += dt;
     this.fpsWorst = Math.max(this.fpsWorst, dt);
     if (this.fpsTime >= 0.5) {
-      setText(this.fps, `${Math.round(this.fpsFrames / this.fpsTime)} fps · worst ${(this.fpsWorst * 1000).toFixed(0)} ms`);
+      setText(
+        this.fps,
+        `${Math.round(this.fpsFrames / this.fpsTime)} fps · worst ${(this.fpsWorst * 1000).toFixed(0)} ms`,
+      );
       this.fpsFrames = 0;
       this.fpsTime = 0;
       this.fpsWorst = 0;
@@ -204,9 +226,14 @@ export class Hud {
     });
     const data = h('span', { class: 'res data', title: 'Horizon Data — spend on permanent research' });
     const warp = h('button', { class: 'warp', onclick: () => this.actions.send({ t: 'warp' }) });
-    warp.dataset.title = 'Jump to a fresh system. Resets your fleet and bank; keeps research. Grants Horizon Data based on value delivered this run.';
+    warp.dataset.title =
+      'Jump to a fresh system. Resets your fleet and bank; keeps research. Grants Horizon Data based on value delivered this run.';
     const researchBtn = h('button', { text: 'Research', onclick: () => this.toggleResearch() });
-    const menu = h('button', { class: 'icon gear', title: 'Menu: saves & controls', onclick: () => this.menu.toggle() });
+    const menu = h('button', {
+      class: 'icon gear',
+      title: 'Menu: saves & controls',
+      onclick: () => this.menu.toggle(),
+    });
     menu.innerHTML = GEAR_SVG;
     menu.setAttribute('aria-label', 'Menu');
     bind(() => {
@@ -217,8 +244,15 @@ export class Hud {
       const cost = warpCost(s);
       const gain = dataGain(s);
       setText(warp, `WARP ▸ ${cost}❄  (+${gain} HD)`);
-      setDisabled(warp, s.run.bank.ice < cost, `Need ${cost} ice in the station bank (have ${Math.floor(s.run.bank.ice)}). Would earn +${gain} HD.`);
-      researchBtn.classList.toggle('glow', PERK_IDS.some((p) => (perkCost(s, p) ?? Infinity) <= s.profile.data));
+      setDisabled(
+        warp,
+        s.run.bank.ice < cost,
+        `Need ${cost} ice in the station bank (have ${Math.floor(s.run.bank.ice)}). Would earn +${gain} HD.`,
+      );
+      researchBtn.classList.toggle(
+        'glow',
+        PERK_IDS.some((p) => (perkCost(s, p) ?? Infinity) <= s.profile.data),
+      );
     });
     return [sys, ...res, data, warp, researchBtn, menu];
   }
@@ -235,7 +269,14 @@ export class Hud {
       const stat = h('span', { class: 'st' });
       const hb = bar('hull mini');
       const cb = bar('cargo mini');
-      const row = h('div', { class: 'shiprow', onclick: () => this.actions.send({ t: 'select', shipId: id }) }, name, stat, hb.el, cb.el);
+      const row = h(
+        'div',
+        { class: 'shiprow', onclick: () => this.actions.send({ t: 'select', shipId: id }) },
+        name,
+        stat,
+        hb.el,
+        cb.el,
+      );
       let mode: HTMLButtonElement | null = null;
       if (!isFlagship(ship)) {
         mode = h('button', {
@@ -268,7 +309,10 @@ export class Hud {
       const def = HULLS[hid];
       const btn = h('button', { class: 'buy', onclick: () => this.actions.send({ t: 'buyHull', hullId: hid }) });
       btn.dataset.title = `${def.name}: ${def.slots} slots, ${def.hull} hull, ${def.cargo} cargo${def.role === 'flagship' ? ' — replaces your flagship hull, keeps fitted parts' : ''}`;
-      btn.append(h('span', { text: `${def.role === 'flagship' ? 'Refit flagship → ' : '+ '}${def.name}` }), h('small', { text: formatCost(def.cost) }));
+      btn.append(
+        h('span', { text: `${def.role === 'flagship' ? 'Refit flagship → ' : '+ '}${def.name}` }),
+        h('small', { text: formatCost(def.cost) }),
+      );
       bind(() => {
         const block = hullBlock(st(), hid);
         setDisabled(btn, !!block, block ?? '');
@@ -289,7 +333,11 @@ export class Hud {
     const cur = (): Ship | undefined => st().run.ships.find((x) => x.id === id);
     const send = this.actions.send;
 
-    const title = h('h3', { text: `${ship0.name}` }, h('small', { text: ` ${HULLS[ship0.hullId].name} · ${ship0.slots.length} slots` }));
+    const title = h(
+      'h3',
+      { text: `${ship0.name}` },
+      h('small', { text: ` ${HULLS[ship0.hullId].name} · ${ship0.slots.length} slots` }),
+    );
     const hull = bar('hull');
     const shield = bar('shield');
     const cargo = bar('cargo');
@@ -303,7 +351,8 @@ export class Hud {
       const scrap = h('button', {
         text: 'Scrap',
         onclick: () => {
-          if (!this.settings.value.confirmDestructive || confirm(`Scrap ${ship0.name} for half its value?`)) send({ t: 'scrap', shipId: id });
+          if (!this.settings.value.confirmDestructive || confirm(`Scrap ${ship0.name} for half its value?`))
+            send({ t: 'scrap', shipId: id });
         },
       });
       actions.append(scrap);
@@ -320,14 +369,22 @@ export class Hud {
       const state = st();
       const k = shipStats(s, state.profile);
       hull.set(s.hull / k.maxHull, `Hull ${Math.ceil(Math.max(0, s.hull))}/${k.maxHull}`);
-      shield.set(k.maxShield ? s.shield / k.maxShield : 0, k.maxShield ? `Shield ${Math.floor(s.shield)}/${k.maxShield}` : 'No shield fitted');
+      shield.set(
+        k.maxShield ? s.shield / k.maxShield : 0,
+        k.maxShield ? `Shield ${Math.floor(s.shield)}/${k.maxShield}` : 'No shield fitted',
+      );
       const tot = walletTotal(s.cargo);
       cargo.set(tot / k.cargoCap, `Cargo ${Math.floor(tot)}/${k.cargoCap}`);
       setText(
         cargoDetail,
-        RESOURCES.filter((r) => s.cargo[r] >= 1).map((r) => `${RESOURCE_INFO[r].icon} ${Math.floor(s.cargo[r])}`).join('  ') || 'Hold empty',
+        RESOURCES.filter((r) => s.cargo[r] >= 1)
+          .map((r) => `${RESOURCE_INFO[r].icon} ${Math.floor(s.cargo[r])}`)
+          .join('  ') || 'Hold empty',
       );
-      setText(stats, `SPD ${k.speed.toFixed(0)} · DPS ${k.dps.toFixed(0)} · RNG ${k.range.toFixed(0)} · MAG ${k.magnet.toFixed(0)} · ARM −${Math.round((1 - k.dmgMul) * 100)}%`);
+      setText(
+        stats,
+        `SPD ${k.speed.toFixed(0)} · DPS ${k.dps.toFixed(0)} · RNG ${k.range.toFixed(0)} · MAG ${k.magnet.toFixed(0)} · ARM −${Math.round((1 - k.dmgMul) * 100)}%`,
+      );
       const rc = repairCost(state, s);
       setText(repairBtn, rc > 0 ? `Repair ${rc}⬢` : 'Hull OK');
       const rb = refitBlock(state, s);
@@ -343,7 +400,13 @@ export class Hud {
       if (f) {
         const def = COMPONENTS[f.type];
         row.append(
-          h('div', { class: 'nm' }, h('b', { text: def.name }), h('span', { class: 'pips', text: ' ' + '●'.repeat(f.tier) + '○'.repeat(3 - f.tier) }), h('small', { text: def.describe(f.tier) })),
+          h(
+            'div',
+            { class: 'nm' },
+            h('b', { text: def.name }),
+            h('span', { class: 'pips', text: ' ' + '●'.repeat(f.tier) + '○'.repeat(3 - f.tier) }),
+            h('small', { text: def.describe(f.tier) }),
+          ),
         );
         const up = h('button', { onclick: () => send({ t: 'upgrade', shipId: id, slot: i }) });
         const rm = h('button', {
@@ -371,7 +434,9 @@ export class Hud {
         });
       } else {
         row.classList.add('empty');
-        row.append(h('div', { class: 'nm' }, h('b', { text: 'Empty slot' }), h('small', { text: 'Install a component' })));
+        row.append(
+          h('div', { class: 'nm' }, h('b', { text: 'Empty slot' }), h('small', { text: 'Install a component' })),
+        );
         const sel = h('select');
         sel.append(h('option', { text: 'Install…' }));
         for (const cid of COMPONENT_IDS) {
@@ -379,10 +444,10 @@ export class Hud {
           o.value = cid;
           sel.append(o);
         }
-        sel.onchange = () => {
+        sel.addEventListener('change', () => {
           if (sel.value) send({ t: 'install', shipId: id, slot: i, comp: sel.value as (typeof COMPONENT_IDS)[number] });
           sel.selectedIndex = 0;
-        };
+        });
         row.append(sel);
         bind(() => {
           const s = cur();

@@ -24,7 +24,14 @@ export interface TickCtx {
  * direction push the ship sideways (around them, not back), and rocks that
  * are nearly touching push straight away.
  */
-function avoidance(ctx: TickCtx, ship: Ship, st: ShipStats, dx: number, dz: number, ignoreId: number | null): Vec2 & { danger: number } {
+function avoidance(
+  ctx: TickCtx,
+  ship: Ship,
+  st: ShipStats,
+  dx: number,
+  dz: number,
+  ignoreId: number | null,
+): Vec2 & { danger: number } {
   const look = st.size + 60 + len(ship.vel) * 1.2;
   let ax = 0;
   let az = 0;
@@ -59,7 +66,15 @@ function avoidance(ctx: TickCtx, ship: Ship, st: ShipStats, dx: number, dz: numb
  * `avoid` enables autopilot obstacle avoidance (off for manual WASD flight);
  * `ignoreId` exempts the rock being approached for mining.
  */
-export function steer(ctx: TickCtx, ship: Ship, st: ShipStats, wx: number, wz: number, avoid = false, ignoreId: number | null = null): void {
+export function steer(
+  ctx: TickCtx,
+  ship: Ship,
+  st: ShipStats,
+  wx: number,
+  wz: number,
+  avoid = false,
+  ignoreId: number | null = null,
+): void {
   const { dt } = ctx;
   let want = Math.min(1, Math.hypot(wx, wz));
   let x = wx;
@@ -92,7 +107,14 @@ export function steer(ctx: TickCtx, ship: Ship, st: ShipStats, wx: number, wz: n
 }
 
 /** Arrival steering: decelerates into `target`. Returns true once there. */
-export function arrive(ctx: TickCtx, ship: Ship, st: ShipStats, target: Vec2, stopDist = 12, avoidId: number | null = null): boolean {
+export function arrive(
+  ctx: TickCtx,
+  ship: Ship,
+  st: ShipStats,
+  target: Vec2,
+  stopDist = 12,
+  avoidId: number | null = null,
+): boolean {
   const dx = target.x - ship.pos.x;
   const dz = target.z - ship.pos.z;
   const d = Math.hypot(dx, dz);

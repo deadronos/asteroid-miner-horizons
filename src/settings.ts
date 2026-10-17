@@ -79,7 +79,18 @@ export const DEFAULT_KEYS: KeyBindings = {
 };
 
 /** Keys with a fixed meaning that can't be bound to an action. */
-export const RESERVED_KEYS = new Set(['Escape', 'Digit1', 'Digit2', 'Digit3', 'Digit4', 'Digit5', 'Digit6', 'Digit7', 'Digit8', 'Digit9']);
+export const RESERVED_KEYS = new Set([
+  'Escape',
+  'Digit1',
+  'Digit2',
+  'Digit3',
+  'Digit4',
+  'Digit5',
+  'Digit6',
+  'Digit7',
+  'Digit8',
+  'Digit9',
+]);
 
 export const DEFAULTS: Settings = {
   pauseInMenus: true,
@@ -189,7 +200,8 @@ export class SettingsStore {
     if (keys && typeof keys === 'object') {
       for (const a of Object.keys(DEFAULT_KEYS) as KeyAction[]) {
         const b = keys[a];
-        if (Array.isArray(b) && b.length === 2 && b.every((x) => x === null || typeof x === 'string')) out.keys[a] = [b[0], b[1]];
+        if (Array.isArray(b) && b.length === 2 && b.every((x) => x === null || typeof x === 'string'))
+          out.keys[a] = [b[0], b[1]];
       }
     }
     return out;

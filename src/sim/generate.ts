@@ -64,7 +64,12 @@ export function generateSystem(seed: number, number: number): StarSystem {
   const richness = number === 1 ? 1 : range(r, 0.85, 1.35);
   const belts: Belt[] = [
     { inner: 610, outer: 870, mix: { ore: 0.72, ice: 0.28, crystal: 0 }, initialCount: Math.round(160 * richness) },
-    { inner: 1160, outer: 1440, mix: { ore: 0.3, ice: 0.7 - crystal, crystal }, initialCount: Math.round(140 * richness) },
+    {
+      inner: 1160,
+      outer: 1440,
+      mix: { ore: 0.3, ice: 0.7 - crystal, crystal },
+      initialCount: Math.round(140 * richness),
+    },
   ];
   if (number >= 3) {
     belts.push({ inner: 1950, outer: 2150, mix: { ore: 0.35, ice: 0.35, crystal: 0.3 }, initialCount: 90 });
@@ -97,7 +102,14 @@ export function rockHp(radius: number, kind: Resource): number {
   return TUNING.rockHpK * radius ** 1.5 * (kind === 'crystal' ? 2.2 : 1);
 }
 
-export function makeRock(run: Run, kind: Resource, size: RockSize, pos: Vec2, units: number | null, belt: number): Rock {
+export function makeRock(
+  run: Run,
+  kind: Resource,
+  size: RockSize,
+  pos: Vec2,
+  units: number | null,
+  belt: number,
+): Rock {
   const [lo, hi] = ROCK_RADII[size];
   const radius = range(run.rng, lo, hi);
   const hp = rockHp(radius, kind);

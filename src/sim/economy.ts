@@ -61,9 +61,7 @@ export function hullBlock(state: GameState, hullId: HullId): string | null {
 
 export function warpCost(state: GameState): number {
   const { profile } = state;
-  return Math.round(
-    TUNING.warpBaseIce * TUNING.warpCostGrowth ** profile.warps * (1 - 0.08 * profile.perks.warp),
-  );
+  return Math.round(TUNING.warpBaseIce * TUNING.warpCostGrowth ** profile.warps * (1 - 0.08 * profile.perks.warp));
 }
 
 export function dataGain(state: GameState): number {

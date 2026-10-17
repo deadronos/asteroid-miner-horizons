@@ -38,13 +38,22 @@ export class Particles {
     for (let i = 0; i < CAP; i++) this.pos[i * 3 + 1] = -9999;
   }
 
-  emit(x: number, z: number, color: THREE.Color, n: number, speed: number, life: number, opts: { dir?: number; spread?: number; drag?: number } = {}): void {
+  emit(
+    x: number,
+    z: number,
+    color: THREE.Color,
+    n: number,
+    speed: number,
+    life: number,
+    opts: { dir?: number; spread?: number; drag?: number } = {},
+  ): void {
     const scaled = n * this.density;
     n = Math.floor(scaled) + (Math.random() < scaled % 1 ? 1 : 0);
     for (let k = 0; k < n; k++) {
       const i = this.cursor;
       this.cursor = (this.cursor + 1) % CAP;
-      const a = opts.dir != null ? opts.dir + (Math.random() - 0.5) * (opts.spread ?? 0.5) : Math.random() * Math.PI * 2;
+      const a =
+        opts.dir != null ? opts.dir + (Math.random() - 0.5) * (opts.spread ?? 0.5) : Math.random() * Math.PI * 2;
       const sp = speed * (0.3 + Math.random() * 0.7);
       this.pos[i * 3] = x;
       this.pos[i * 3 + 1] = 12;

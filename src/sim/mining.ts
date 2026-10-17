@@ -49,7 +49,10 @@ export function destroyRock(state: GameState, rock: Rock): Rock[] {
     if (share >= 1) {
       for (let i = 0; i < kids; i++) {
         const a = (i / kids) * Math.PI * 2 + range(run.rng, -0.4, 0.4);
-        const p: Vec2 = { x: rock.pos.x + Math.cos(a) * rock.radius * 0.5, z: rock.pos.z + Math.sin(a) * rock.radius * 0.5 };
+        const p: Vec2 = {
+          x: rock.pos.x + Math.cos(a) * rock.radius * 0.5,
+          z: rock.pos.z + Math.sin(a) * rock.radius * 0.5,
+        };
         const frag = makeRock(run, rock.kind, (rock.size + 1) as RockSize, p, share, rock.belt);
         frag.vel = { x: rock.vel.x + Math.cos(a) * 22, z: rock.vel.z + Math.sin(a) * 22 };
         run.rocks.push(frag);

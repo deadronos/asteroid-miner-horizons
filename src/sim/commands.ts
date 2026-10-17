@@ -8,7 +8,17 @@ import { HULLS, type HullId } from '../data/hulls';
 import { PERKS, type PerkId } from '../data/perks';
 import { RESOURCES, pay, type Cost } from '../data/resources';
 import { newRun } from './create';
-import { dataGain, halve, hullBlock, investedCost, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from './economy';
+import {
+  dataGain,
+  halve,
+  hullBlock,
+  investedCost,
+  perkCost,
+  refitBlock,
+  repairCost,
+  upgradeCost,
+  warpCost,
+} from './economy';
 import { droneCount, findShip, flagship, isAlive, isFlagship, makeShip, shipStats } from './ships';
 import type { AiMode, GameState, Ship } from './types';
 
@@ -63,7 +73,10 @@ export function applyCommand(state: GameState, cmd: Command): void {
     profile.warps += 1;
     state.run = newRun(profile);
     out.fx.push({ t: 'warp' });
-    out.log.push({ level: 'major', text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.` });
+    out.log.push({
+      level: 'major',
+      text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.`,
+    });
     return;
   }
 
@@ -86,8 +99,16 @@ export function applyCommand(state: GameState, cmd: Command): void {
       const st = run.system.station.pos;
       const n = droneCount(run) + 1;
       const prefix = h.name.split(' ').pop()!;
-      const taken = run.ships.map((s) => (s.name.startsWith(`${prefix}-`) ? Number(s.name.slice(prefix.length + 1)) || 0 : 0));
-      const ship = makeShip(run, profile, cmd.hullId, `${prefix}-${Math.max(0, ...taken) + 1}`, v(st.x + n * 6, st.z - 20));
+      const taken = run.ships.map((s) =>
+        s.name.startsWith(`${prefix}-`) ? Number(s.name.slice(prefix.length + 1)) || 0 : 0,
+      );
+      const ship = makeShip(
+        run,
+        profile,
+        cmd.hullId,
+        `${prefix}-${Math.max(0, ...taken) + 1}`,
+        v(st.x + n * 6, st.z - 20),
+      );
       run.ships.push(ship);
       out.log.push({ level: 'info', text: `${ship.name} launched from the station.` });
     }

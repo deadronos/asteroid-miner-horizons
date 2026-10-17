@@ -15,7 +15,7 @@ describe('autopilot', () => {
       const ship = flagship(s.run);
       const st = s.run.system.station.pos;
       // Start on the far side of the inner belt.
-      ship.pos = fromAngle(Math.atan2(st.z, st.x) + (i % 5 - 2) * 0.15, 560);
+      ship.pos = fromAngle(Math.atan2(st.z, st.x) + ((i % 5) - 2) * 0.15, 560);
       const input = { thrust: { x: 0, z: 0 }, commands: [{ t: 'dock' as const, shipId: ship.id }] };
       for (let t = 0; t < 25; t += 1 / 60) tick(s, 1 / 60, input);
       if (isDocked(s.run, ship)) docked++;

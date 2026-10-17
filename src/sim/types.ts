@@ -39,10 +39,7 @@ export interface Fitted {
   tier: Tier;
 }
 
-export type Order =
-  | { kind: 'move'; to: Vec2 }
-  | { kind: 'mine'; rockId: number }
-  | { kind: 'dock' };
+export type Order = { kind: 'move'; to: Vec2 } | { kind: 'mine'; rockId: number } | { kind: 'dock' };
 
 /** Drone behaviour when it has no manual order. */
 export type AiMode = 'assist' | 'auto';

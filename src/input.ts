@@ -154,7 +154,8 @@ export class Input {
     const w = this.renderer.screenToWorld(clientX, clientY);
     const wpp = this.renderer.wpp;
     for (const ship of s.run.ships) {
-      if (isAlive(ship) && dist(ship.pos, w) < HULLS[ship.hullId].size * 1.6 + 6 * wpp) return { kind: 'ship', id: ship.id };
+      if (isAlive(ship) && dist(ship.pos, w) < HULLS[ship.hullId].size * 1.6 + 6 * wpp)
+        return { kind: 'ship', id: ship.id };
     }
     if (dist(s.run.system.station.pos, w) < 50 + 4 * wpp) return { kind: 'station' };
     let best: HoverTarget = null;
@@ -208,7 +209,7 @@ export class Input {
       hit?.kind === 'station'
         ? `${s.run.system.name} Station · click to dock & unload`
         : hit?.kind === 'ship'
-          ? s.run.ships.find((x) => x.id === hit.id)?.name ?? null
+          ? (s.run.ships.find((x) => x.id === hit.id)?.name ?? null)
           : null;
     this.hud.showTooltip(this.mouse.x, this.mouse.y, hit?.kind === 'rock' ? hit.rock : null, label);
   }

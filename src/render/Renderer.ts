@@ -47,7 +47,10 @@ export class Renderer {
   private alwaysBars = false;
 
   /** `antialias` is fixed for the WebGL context's lifetime; it applies on reload. */
-  constructor(private container: HTMLElement, settings: Settings) {
+  constructor(
+    private container: HTMLElement,
+    settings: Settings,
+  ) {
     this.gl = new THREE.WebGLRenderer({ antialias: settings.antialias, powerPreference: 'high-performance' });
     this.gl.setClearColor(0x03060d);
     this.canvas = this.gl.domElement;
@@ -123,7 +126,11 @@ export class Renderer {
   /** Toggle between a whole-system overview and the previous zoom. */
   private mapReturn = 420;
   toggleMap(sys: StarSystem): void {
-    const fit = clamp(Math.max(...sys.planets.map((p) => p.orbitR), ...sys.belts.map((b) => b.outer)) * 1.08, ZOOM_MIN, ZOOM_MAX);
+    const fit = clamp(
+      Math.max(...sys.planets.map((p) => p.orbitR), ...sys.belts.map((b) => b.outer)) * 1.08,
+      ZOOM_MIN,
+      ZOOM_MAX,
+    );
     if (Math.abs(this.targetHalfH - fit) > 1) {
       this.mapReturn = this.targetHalfH;
       this.follow = false;
@@ -189,7 +196,11 @@ export class Renderer {
     return this.warpFlash;
   }
 
-  private consumeFx(state: GameState, hits: { x: number; z: number; ship: { id: number; thrusting: boolean } }[], dt: number): void {
+  private consumeFx(
+    state: GameState,
+    hits: { x: number; z: number; ship: { id: number; thrusting: boolean } }[],
+    dt: number,
+  ): void {
     const P = this.particles;
     const col = new THREE.Color();
     for (const fx of state.out.fx) {
@@ -229,7 +240,11 @@ export class Renderer {
       const back = s.angle + Math.PI;
       const size = HULLS[s.hullId].size;
       if (Math.random() < dt * 45) {
-        P.emit(s.pos.x + Math.cos(back) * size, s.pos.z + Math.sin(back) * size, col.setHex(0xff7a30), 1, 70, 0.5, { dir: back, spread: 0.5, drag: 3 });
+        P.emit(s.pos.x + Math.cos(back) * size, s.pos.z + Math.sin(back) * size, col.setHex(0xff7a30), 1, 70, 0.5, {
+          dir: back,
+          spread: 0.5,
+          drag: 3,
+        });
       }
     }
   }
@@ -238,7 +253,8 @@ export class Renderer {
     const t = state.run.time;
     const h = this.hover;
     let target: { pos: Vec2; r: number; color: number } | null = null;
-    if (h?.kind === 'rock') target = { pos: h.rock.pos, r: h.rock.radius + 6 * wpp, color: RESOURCE_INFO[h.rock.kind].color };
+    if (h?.kind === 'rock')
+      target = { pos: h.rock.pos, r: h.rock.radius + 6 * wpp, color: RESOURCE_INFO[h.rock.kind].color };
     else if (h?.kind === 'station') target = { pos: state.run.system.station.pos, r: 60, color: 0x59ffa0 };
     else if (h?.kind === 'ship') {
       const s = state.run.ships.find((x) => x.id === h.id);

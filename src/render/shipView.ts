@@ -10,16 +10,52 @@ import type { GameState, Ship } from '../sim/types';
 import { additive, flat, glowTexture } from './util';
 
 const HULL_SHAPES: Record<HullId, [number, number][]> = {
-  prospector: [[16, 0], [2, 4], [-6, 11], [-11, 9], [-7, 0], [-11, -9], [-6, -11], [2, -4]],
-  excavator: [[20, 0], [10, 8], [-4, 16], [-16, 13], [-12, 0], [-16, -13], [-4, -16], [10, -8]],
-  drone: [[10, 0], [-2, 7], [-8, 0], [-2, -7]],
-  harvester: [[13, 0], [6, 9], [-8, 9], [-12, 0], [-8, -9], [6, -9]],
+  prospector: [
+    [16, 0],
+    [2, 4],
+    [-6, 11],
+    [-11, 9],
+    [-7, 0],
+    [-11, -9],
+    [-6, -11],
+    [2, -4],
+  ],
+  excavator: [
+    [20, 0],
+    [10, 8],
+    [-4, 16],
+    [-16, 13],
+    [-12, 0],
+    [-16, -13],
+    [-4, -16],
+    [10, -8],
+  ],
+  drone: [
+    [10, 0],
+    [-2, 7],
+    [-8, 0],
+    [-2, -7],
+  ],
+  harvester: [
+    [13, 0],
+    [6, 9],
+    [-8, 9],
+    [-12, 0],
+    [-8, -9],
+    [6, -9],
+  ],
 };
 
 function hullGeometry(id: HullId): THREE.BufferGeometry {
   const shape = new THREE.Shape(HULL_SHAPES[id].map(([x, y]) => new THREE.Vector2(x, y)));
   // Extrude a little so the star light gives the hull some shading.
-  const geo = new THREE.ExtrudeGeometry(shape, { depth: 4, bevelEnabled: true, bevelThickness: 1.5, bevelSize: 1.2, bevelSegments: 1 });
+  const geo = new THREE.ExtrudeGeometry(shape, {
+    depth: 4,
+    bevelEnabled: true,
+    bevelThickness: 1.5,
+    bevelSize: 1.2,
+    bevelSegments: 1,
+  });
   geo.rotateX(Math.PI / 2); // shape XY → ground XZ, extruded downward (hulls are symmetric in Y)
   return geo;
 }
@@ -59,7 +95,17 @@ export class ShipView {
     const h = HULLS[ship.hullId];
     const root = new THREE.Group();
     const body = new THREE.Group();
-    body.add(new THREE.Mesh(this.geo(ship.hullId), new THREE.MeshLambertMaterial({ color: h.color, emissive: h.color, emissiveIntensity: 0.25, flatShading: true })));
+    body.add(
+      new THREE.Mesh(
+        this.geo(ship.hullId),
+        new THREE.MeshLambertMaterial({
+          color: h.color,
+          emissive: h.color,
+          emissiveIntensity: 0.25,
+          flatShading: true,
+        }),
+      ),
+    );
     const flameShape = new THREE.Shape([new THREE.Vector2(0, 4), new THREE.Vector2(-14, 0), new THREE.Vector2(0, -4)]);
     const flame = new THREE.Mesh(flat(new THREE.ShapeGeometry(flameShape)), additive(0xff8a3a, 0.9));
     flame.position.set(-h.size * 0.6, 1, 0);
@@ -72,7 +118,10 @@ export class ShipView {
     const select = new THREE.Mesh(flat(new THREE.RingGeometry(0.92, 1, 48)), additive(0x59ffa0, 0.9));
     root.add(select);
 
-    const barBg = new THREE.Mesh(barPlane, new THREE.MeshBasicMaterial({ color: 0x0b1424, transparent: true, opacity: 0.8, depthWrite: false }));
+    const barBg = new THREE.Mesh(
+      barPlane,
+      new THREE.MeshBasicMaterial({ color: 0x0b1424, transparent: true, opacity: 0.8, depthWrite: false }),
+    );
     const hpBar = new THREE.Mesh(barPlane, new THREE.MeshBasicMaterial({ color: 0x59ffa0, depthWrite: false }));
     const cargoBar = new THREE.Mesh(barPlane, new THREE.MeshBasicMaterial({ color: 0xffa040, depthWrite: false }));
     for (const b of [barBg, hpBar, cargoBar]) {
@@ -82,14 +131,36 @@ export class ShipView {
 
     const beam = new THREE.Mesh(unitPlane, additive(0xff6a4a, 0.95));
     const beamGlow = new THREE.Mesh(unitPlane, additive(0xff3a2a, 0.35));
-    const tip = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture, color: 0xffb070, blending: THREE.AdditiveBlending, depthWrite: false }));
+    const tip = new THREE.Sprite(
+      new THREE.SpriteMaterial({
+        map: glowTexture,
+        color: 0xffb070,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+      }),
+    );
     for (const o of [beam, beamGlow, tip]) {
       o.visible = false;
       o.renderOrder = 15;
       this.group.add(o);
     }
     this.group.add(root);
-    return { hullId: ship.hullId, root, body, flame, shield, select, hpBar, cargoBar, barBg, beam, beamGlow, tip, shieldPrev: ship.shield, hitFlash: 0 };
+    return {
+      hullId: ship.hullId,
+      root,
+      body,
+      flame,
+      shield,
+      select,
+      hpBar,
+      cargoBar,
+      barBg,
+      beam,
+      beamGlow,
+      tip,
+      shieldPrev: ship.shield,
+      hitFlash: 0,
+    };
   }
 
   private remove(id: number, v: Visual): void {
@@ -98,7 +169,13 @@ export class ShipView {
   }
 
   /** Returns hit points for beams this frame so the caller can spawn sparks. */
-  update(state: GameState, time: number, dt: number, wpp: number, alwaysBars: boolean): { x: number; z: number; ship: Ship }[] {
+  update(
+    state: GameState,
+    time: number,
+    dt: number,
+    wpp: number,
+    alwaysBars: boolean,
+  ): { x: number; z: number; ship: Ship }[] {
     const { run, profile } = state;
     const seen = new Set<number>();
     const hits: { x: number; z: number; ship: Ship }[] = [];
@@ -153,7 +230,9 @@ export class ShipView {
       v.barBg.scale.set(bw + 2 * wpp, 1, bh * 2 + 3 * wpp);
       v.hpBar.position.set(-bw / 2, 2, -by);
       v.hpBar.scale.set(bw * hullF, 1, bh);
-      (v.hpBar.material as THREE.MeshBasicMaterial).color.setHex(hullF > 0.5 ? 0x59ffa0 : hullF > 0.25 ? 0xffc04d : 0xff5d5d);
+      (v.hpBar.material as THREE.MeshBasicMaterial).color.setHex(
+        hullF > 0.5 ? 0x59ffa0 : hullF > 0.25 ? 0xffc04d : 0xff5d5d,
+      );
       v.cargoBar.position.set(-bw / 2, 2, -by + bh + wpp);
       v.cargoBar.scale.set(Math.max(0.0001, bw * cargoF), 1, bh);
       const showBars = alwaysBars || selected || hullF < 0.999 || cargoF > 0.01;

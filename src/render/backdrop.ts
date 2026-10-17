@@ -38,7 +38,13 @@ export class Backdrop {
       geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
       const pts = new THREE.Points(
         geo,
-        new THREE.PointsMaterial({ size: L.size, sizeAttenuation: false, vertexColors: true, depthWrite: false, transparent: true }),
+        new THREE.PointsMaterial({
+          size: L.size,
+          sizeAttenuation: false,
+          vertexColors: true,
+          depthWrite: false,
+          transparent: true,
+        }),
       );
       pts.frustumCulled = false;
       this.group.add(pts);
