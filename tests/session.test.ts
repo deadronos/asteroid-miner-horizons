@@ -82,7 +82,7 @@ describe('GameSession slot switching', () => {
     expect(readSlot(0)).toBeNull();
   });
 
-  it('restarts the running slot without leaving the old game in it', () => {
+  it('restarts the running slot with a fresh game saved in it', () => {
     writeSlot(0, atTime(newGame(1), 99));
     let switched = 0;
     const s = new GameSession(settings(), { onSwitch: () => switched++ });
@@ -158,7 +158,7 @@ describe('GameSession autosave', () => {
     atTime(s.state, 7);
     const before = s.state.out.log.length;
 
-    s.armAutosave();
+    s.start();
     vi.advanceTimersByTime(10_000);
 
     expect(readSlot(0)!.state.run.time).toBe(7);
@@ -169,20 +169,104 @@ describe('GameSession autosave', () => {
     const s = new GameSession(settings(0));
     atTime(s.state, 5);
 
-    s.armAutosave();
+    s.start();
     vi.advanceTimersByTime(120_000);
 
     expect(readSlot(0)).toBeNull();
   });
 
-  it('stop() cancels the timer', () => {
-    const s = new GameSession(settings(10));
+  it('keeps its schedule through unrelated settings changes', () => {
+    const set = settings(10);
+    const s = new GameSession(set);
+    atTime(s.state, 4);
+    s.start();
+
+    vi.advanceTimersByTime(6_000);
+    set.set({ volMaster: 0.3 });
+    vi.advanceTimersByTime(4_000);
+
+    expect(readSlot(0)!.state.run.time).toBe(4);
+  });
+
+  it('re-arms when the interval changes, and stops when it is set to off', () => {
+    const set = settings(10);
+    const s = new GameSession(set);
+    atTime(s.state, 4);
+    s.start();
+
+    set.set({ autosaveSec: 30 });
+    vi.advanceTimersByTime(29_000);
+    expect(readSlot(0)).toBeNull();
+    vi.advanceTimersByTime(1_000);
+    expect(readSlot(0)!.state.run.time).toBe(4);
+
+    set.set({ autosaveSec: 0 });
+    atTime(s.state, 8);
+    vi.advanceTimersByTime(120_000);
+    expect(readSlot(0)!.state.run.time).toBe(4);
+  });
+
+  it('stop() cancels the timer, and later settings changes do not restart it', () => {
+    const set = settings(10);
+    const s = new GameSession(set);
     atTime(s.state, 5);
 
-    s.armAutosave();
+    s.start();
     s.stop();
-    vi.advanceTimersByTime(60_000);
+    set.set({ autosaveSec: 30 });
+    vi.advanceTimersByTime(120_000);
 
     expect(readSlot(0)).toBeNull();
+  });
+});
+
+/** How many save-slot writes a `setItem` spy has seen. */
+const slotWrites = (spy: { mock: { calls: unknown[][] } }): number =>
+  spy.mock.calls.filter(([k]) => String(k).includes('/slot/')).length;
+
+describe('GameSession page lifecycle', () => {
+  let win: EventTarget;
+  let doc: EventTarget & { hidden: boolean };
+
+  beforeEach(() => {
+    win = new EventTarget();
+    doc = Object.assign(new EventTarget(), { hidden: false });
+    Object.defineProperty(globalThis, 'window', { value: win, configurable: true });
+    Object.defineProperty(globalThis, 'document', { value: doc, configurable: true });
+  });
+  afterEach(() => {
+    Reflect.deleteProperty(globalThis, 'window');
+    Reflect.deleteProperty(globalThis, 'document');
+  });
+
+  it('saves when the tab is hidden or closed, not when it becomes visible', () => {
+    const s = new GameSession(settings(0));
+    s.start();
+    atTime(s.state, 3);
+
+    doc.dispatchEvent(new Event('visibilitychange'));
+    expect(readSlot(0)).toBeNull();
+
+    doc.hidden = true;
+    doc.dispatchEvent(new Event('visibilitychange'));
+    expect(readSlot(0)!.state.run.time).toBe(3);
+
+    atTime(s.state, 6);
+    win.dispatchEvent(new Event('beforeunload'));
+    expect(readSlot(0)!.state.run.time).toBe(6);
+  });
+
+  it('registers its listeners once, however often it is started, and drops them on stop()', () => {
+    const s = new GameSession(settings(0));
+    const write = vi.spyOn(store, 'setItem');
+
+    s.start();
+    s.start();
+    win.dispatchEvent(new Event('beforeunload'));
+    expect(slotWrites(write)).toBe(1);
+
+    s.stop();
+    win.dispatchEvent(new Event('beforeunload'));
+    expect(slotWrites(write)).toBe(1);
   });
 });

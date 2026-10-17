@@ -24,9 +24,11 @@ export interface GameSessionHooks {
 }
 
 export class GameSession implements SaveActions {
-  state: GameState;
-  slot: number;
+  private running: GameState;
+  private slot: number;
   private autosaveTimer = 0;
+  /** The interval the timer runs at, or null while stopped. */
+  private armedSec: number | null = null;
   private detach: (() => void) | null = null;
 
   constructor(
@@ -35,8 +37,18 @@ export class GameSession implements SaveActions {
   ) {
     migrateLegacy();
     this.slot = activeSlot();
-    this.state = readSlot(this.slot)?.state ?? newGame();
-    if (this.state.run.time > 0) this.logLoaded(this.slot);
+    this.running = readSlot(this.slot)?.state ?? newGame();
+    if (this.running.run.time > 0) this.logLoaded(this.slot);
+    // Only a change to the interval restarts the timer, so unrelated settings
+    // (a volume drag, say) don't keep pushing the next autosave back.
+    settings.onChange((v) => {
+      if (this.armedSec !== null && v.autosaveSec !== this.armedSec) this.armAutosave();
+    });
+  }
+
+  /** The running game. Replaced only through load / newGame. */
+  get state(): GameState {
+    return this.running;
   }
 
   active(): number {
@@ -63,12 +75,13 @@ export class GameSession implements SaveActions {
 
   /** Start a brand-new game in slot `i`. */
   newGame(i: number): void {
-    // Restarting the running slot must not first re-save the old game over it.
+    // Save the old game unless this restarts its own slot, which the new game
+    // overwrites anyway.
     if (i === this.slot) clearSlot(i);
     else this.persist();
     this.slot = i;
     setActiveSlot(i);
-    this.state = newGame();
+    this.running = newGame();
     this.hooks.onSwitch?.();
     this.persist();
   }
@@ -84,16 +97,9 @@ export class GameSession implements SaveActions {
     if (i !== this.slot) clearSlot(i);
   }
 
-  /** (Re)start the autosave timer from the current settings. */
-  armAutosave(): void {
-    clearInterval(this.autosaveTimer);
-    this.autosaveTimer = 0;
-    const sec = this.settings.value.autosaveSec;
-    if (sec > 0) this.autosaveTimer = setInterval(() => this.persist(), sec * 1000);
-  }
-
-  /** Autosave on the interval, plus a save when the tab is hidden or closed. */
+  /** Autosave on the interval, plus a save when the tab is hidden or closed. Idempotent. */
   start(): void {
+    if (this.armedSec !== null) return;
     this.armAutosave();
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
     const persist = (): void => this.persist();
@@ -112,6 +118,7 @@ export class GameSession implements SaveActions {
   stop(): void {
     clearInterval(this.autosaveTimer);
     this.autosaveTimer = 0;
+    this.armedSec = null;
     this.detach?.();
     this.detach = null;
   }
@@ -121,9 +128,18 @@ export class GameSession implements SaveActions {
     this.persist();
     this.slot = next;
     setActiveSlot(next);
-    this.state = nextState;
+    this.running = nextState;
     this.hooks.onSwitch?.();
     this.persist();
+  }
+
+  /** (Re)start the autosave timer from the current settings. */
+  private armAutosave(): void {
+    clearInterval(this.autosaveTimer);
+    this.autosaveTimer = 0;
+    const sec = this.settings.value.autosaveSec;
+    this.armedSec = sec;
+    if (sec > 0) this.autosaveTimer = setInterval(() => this.persist(), sec * 1000);
   }
 
   /** Write the running game to its slot, silently. */

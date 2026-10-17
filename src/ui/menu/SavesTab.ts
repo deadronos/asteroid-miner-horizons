@@ -7,10 +7,6 @@ import type { GameState } from '../../sim/types';
 import { h } from '../dom';
 import type { MenuCtx } from './context';
 
-// The save-slot actions this tab drives are declared with the session that
-// implements them; re-exported so Menu keeps its existing surface.
-export type { SaveActions };
-
 function ago(ms: number): string {
   const s = Math.max(0, (Date.now() - ms) / 1000);
   if (s < 45) return 'just now';

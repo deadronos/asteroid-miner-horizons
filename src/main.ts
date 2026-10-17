@@ -54,12 +54,12 @@ function applySettings(): void {
   const s = settings.value;
   assists = { avoid: s.assistAvoid, autoDock: s.assistAutoDock, chain: s.assistChain };
   renderer.applySettings(s);
-  session.armAutosave();
 }
 settings.onChange(applySettings);
 applySettings();
 
-// Autosave on the chosen interval, plus a save on tab hide / close.
+// Autosave on the chosen interval (re-armed when it changes), plus a save on
+// tab hide / close.
 session.start();
 
 /** Why the sim is paused right now, or null if it's running. */

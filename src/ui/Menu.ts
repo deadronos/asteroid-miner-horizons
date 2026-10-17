@@ -2,15 +2,14 @@
 // ./menu/; this file owns only the modal, tab switching, the text-window
 // overlay slot and Esc handling.
 
+import type { SaveActions } from '../session';
 import type { SettingsStore } from '../settings';
 import { h } from './dom';
 import { renderAudio } from './menu/AudioTab';
 import type { MenuCtx } from './menu/context';
 import { ControlsTab } from './menu/ControlsTab';
-import { SavesTab, type SaveActions } from './menu/SavesTab';
+import { SavesTab } from './menu/SavesTab';
 import { renderGameplay, renderGraphics, renderInterface } from './menu/SettingsTabs';
-
-export type { SaveActions } from './menu/SavesTab';
 
 type Tab = 'saves' | 'gameplay' | 'graphics' | 'interface' | 'controls' | 'audio';
 

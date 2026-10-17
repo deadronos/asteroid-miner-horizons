@@ -4,11 +4,12 @@
 // Commands via `send`.
 
 import { RESOURCE_INFO } from '../data/resources';
+import type { SaveActions } from '../session';
 import type { Command } from '../sim/commands';
 import { keyLabel, type SettingsStore } from '../settings';
 import type { GameState, LogEntry, Rock } from '../sim/types';
 import { type Panel, h, setText } from './dom';
-import { Menu, type SaveActions } from './Menu';
+import { Menu } from './Menu';
 import type { PanelCtx } from './panels/context';
 import { createFleetPanel } from './panels/FleetPanel';
 import { ResearchPanel } from './panels/ResearchPanel';
