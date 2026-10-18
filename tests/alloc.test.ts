@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../src/sim/create';
 import { SimIndex } from '../src/sim/index';
+import { destroyRock } from '../src/sim/mining';
 import { damageShip, makeShip } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
 import { tick, type TickInput } from '../src/sim/update';
@@ -41,5 +42,21 @@ describe('in-place ship removal', () => {
     expect(run.ships).not.toContain(drones[1]);
     expect(drones[0]!.hull).toBeLessThan(100);
     expect(drones[2]!.hull).toBeLessThan(100); // the ship after the removed one still ran
+  });
+});
+
+describe('in-place rock removal', () => {
+  it('destroyRock keeps the rocks array identity and order', () => {
+    const state = newGame(1);
+    const rocks = state.run.rocks;
+    expect(rocks.length).toBeGreaterThan(10);
+    const target = rocks[5]!;
+    const next = rocks[6]!;
+    const before = rocks.length;
+    const frags = destroyRock(state, target);
+    expect(state.run.rocks).toBe(rocks); // no reassignment
+    expect(rocks[5]).toBe(next); // the next rock shifted into the freed slot
+    expect(rocks).not.toContain(target);
+    expect(rocks.length).toBe(before - 1 + frags.length); // fragments are appended
   });
 });
