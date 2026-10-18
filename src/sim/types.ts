@@ -11,6 +11,7 @@ import type { ModifierId } from '../data/modifiers';
 import type { PerkId } from '../data/perks';
 import type { RecipeId } from '../data/refining';
 import type { Cost, RawResource, Wallet } from '../data/resources';
+import type { RockTrait } from '../data/traits';
 
 export type RockSize = 0 | 1 | 2; // large, medium, small
 
@@ -26,6 +27,8 @@ export interface Rock {
   /** Resource units contained; conserved across cracking. */
   units: number;
   belt: number;
+  /** One seeded behaviour trait; absent on plain rocks, fragments and comets. */
+  trait?: RockTrait;
   /** Set on a live comet, which flies straight instead of settling into orbit. Absent on every other rock. */
   comet?: true;
 }

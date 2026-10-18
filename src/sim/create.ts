@@ -50,7 +50,7 @@ export function newRun(profile: Profile): Run {
     refinery: newRefinery(),
     hazards: newHazards(profile.seed, number),
   };
-  populateBelts(run);
+  populateBelts(run, profile.seed);
 
   const st = system.station.pos;
   const out = v(st.x * 0.92, st.z * 0.92); // just inside the station, toward the star

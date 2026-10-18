@@ -266,7 +266,7 @@ function regrowBelts(state: GameState, dt: number): void {
     if (counts[i]! >= b.initialCount * TUNING.beltRegrowTarget) return;
     // Spawn out of sight of every ship so rocks don't pop in on screen.
     for (let tries = 0; tries < 6; tries++) {
-      const rock = spawnBeltRock(run, i, range(run.rng, 0, 1) < 0.5 ? 0 : 1);
+      const rock = spawnBeltRock(run, state.profile.seed, i, range(run.rng, 0, 1) < 0.5 ? 0 : 1);
       if (run.ships.every((s) => dist(s.pos, rock.pos) > 900)) return;
       run.rocks.pop();
     }
