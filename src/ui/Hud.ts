@@ -9,6 +9,7 @@ import type { Command } from '../sim/commands';
 import { keyLabel, type SettingsStore } from '../settings';
 import type { GameState, LogEntry, Rock } from '../sim/types';
 import { type Panel, h, setText } from './dom';
+import { hazardBanner } from './hazardBanner';
 import { Menu } from './Menu';
 import type { PanelCtx } from './panels/context';
 import { createContractsPanel } from './panels/ContractsPanel';
@@ -35,6 +36,7 @@ export class Hud {
   private flash = h('div', { class: 'flash' });
   private help: HTMLElement;
   private paused = h('div', { class: 'paused hidden' });
+  private hazard = h('div', { class: 'hazard hidden' });
   private fps = h('div', { class: 'fps hidden' });
   private fpsFrames = 0;
   private fpsTime = 0;
@@ -73,7 +75,7 @@ export class Hud {
     this.help = mk('help');
 
     this.menu = new Menu(root, actions.saves, settings);
-    root.append(this.tooltip, this.flash, this.paused, this.fps);
+    root.append(this.tooltip, this.flash, this.paused, this.hazard, this.fps);
     settings.onChange(() => this.applySettings());
     this.applySettings();
   }
@@ -140,6 +142,10 @@ export class Hud {
     for (const line of state.out.log.splice(0)) this.pushLog(line);
     for (const p of this.panels) p.refresh();
     this.research.refresh();
+    const banner = hazardBanner(state.run);
+    this.hazard.classList.toggle('hidden', !banner);
+    this.hazard.classList.toggle('active', state.run.hazards.flare?.phase === 'active');
+    if (banner) setText(this.hazard, banner);
     this.flash.style.opacity = warpFlash.toFixed(3);
   }
 

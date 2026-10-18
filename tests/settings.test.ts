@@ -36,6 +36,14 @@ describe('settings store', () => {
     expect(s.pauseInMenus).toBe(true);
   });
 
+  it('defaults hazards to normal and rejects unknown stored levels', () => {
+    expect(SettingsStore.merge(null).hazards).toBe('normal');
+    expect(SettingsStore.merge({ hazards: 'harsh' }).hazards).toBe('harsh');
+    expect(SettingsStore.merge({ hazards: 'off' }).hazards).toBe('off');
+    expect(SettingsStore.merge({ hazards: 'brutal' }).hazards).toBe('normal');
+    expect(SettingsStore.merge({ hazards: 3 }).hazards).toBe('normal');
+  });
+
   it('persists changes and notifies subscribers', () => {
     const st = new MemStorage();
     const a = new SettingsStore(st as unknown as Storage);

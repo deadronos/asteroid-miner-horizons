@@ -26,6 +26,8 @@ export interface Rock {
   /** Resource units contained; conserved across cracking. */
   units: number;
   belt: number;
+  /** Set on a live comet, which flies straight instead of settling into orbit. Absent on every other rock. */
+  comet?: true;
 }
 
 export interface Pickup {
@@ -176,6 +178,38 @@ export interface Run {
   regrowTimer: number;
   contracts: ContractBoard;
   refinery: Refinery;
+  hazards: Hazards;
+}
+
+export interface CometWarning {
+  /** Where the comet will appear (on the `cometEdge` circle). */
+  from: Vec2;
+  /** Velocity it will have; the renderer draws the predicted path from `from` along this. */
+  vel: Vec2;
+  /** Belt index it is aimed through. */
+  belt: number;
+  /** Seconds until it appears. */
+  timeLeft: number;
+}
+
+export interface Flare {
+  phase: 'warning' | 'active';
+  /** Seconds left in the current phase. */
+  timeLeft: number;
+}
+
+export interface Hazards {
+  /** Dedicated stream: hazard rolls never touch run.rng. */
+  rng: Rng;
+  /** Seconds until the next comet warning. */
+  cometTimer: number;
+  comet: CometWarning | null;
+  /** Seconds until the next flare warning; unused in G systems. */
+  flareTimer: number;
+  flare: Flare | null;
+  /** Comets and flares this run (balance metrics, HUD). */
+  comets: number;
+  flares: number;
 }
 
 export interface Profile {
@@ -192,7 +226,8 @@ export type Fx =
   | { t: 'dock'; pos: Vec2; shipId: number; value: number }
   | { t: 'impact'; pos: Vec2 }
   | { t: 'explode'; pos: Vec2 }
-  | { t: 'warp' };
+  | { t: 'warp' }
+  | { t: 'hazard'; kind: 'comet' | 'flare'; phase: 'warn' | 'start'; pos?: Vec2 };
 
 export interface LogEntry {
   /** info: routine · warn: rejected command / danger · major: milestones and losses */

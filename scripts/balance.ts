@@ -6,6 +6,7 @@
 //
 //   npm run balance
 //   npm run balance -- --seeds 10 --warps 5 --out docs/balance.md
+//   npm run balance -- --hazards normal --out /tmp/hazards.md   (hazards are off by default)
 //
 // The per-warp table counts seeds whose time more than doubles (> 2× prev), and
 // a modifiers table compares each modifier's time to its system median.
@@ -17,6 +18,7 @@ import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { HAZARD_LEVEL_IDS, type HazardLevel } from '../src/data/hazards';
 import { MODIFIER_IDS, MODIFIERS } from '../src/data/modifiers';
 import { walletValue } from '../src/data/resources';
 import { newGame } from '../src/sim/create';
@@ -71,7 +73,7 @@ const arg = (name: string, fallback: string): string => {
 const tierSum = (s: GameState): number =>
   s.run.ships.filter(isFlagship).reduce((n, sh) => n + sh.slots.reduce((m, f) => m + (f?.tier ?? 0), 0), 0);
 
-export function playSeed(seed: number, warps: number): SeedResult {
+export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'off'): SeedResult {
   const state = newGame(seed);
   const res: SeedResult = {
     seed,
@@ -103,6 +105,7 @@ export function playSeed(seed: number, warps: number): SeedResult {
     };
     const ran = runBot(state, {
       seconds: WARP_CAP_SEC,
+      hazards,
       before: (s) => {
         cargoBefore.clear();
         for (const sh of s.run.ships) cargoBefore.set(sh.id, walletValue(sh.cargo));
@@ -170,14 +173,15 @@ const share = (part: number, whole: number): number => part / Math.max(1, whole)
  */
 const activeShare = (x: WarpStats): number => share(x.flagshipValue + x.contractValue, warpIncome(x));
 
-function report(results: SeedResult[], seeds: number, warps: number, seedStart: number): string {
+function report(results: SeedResult[], seeds: number, warps: number, seedStart: number, hazards: HazardLevel): string {
   let commit = 'unknown';
   try {
     commit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
   } catch {
     // Not a git checkout.
   }
-  const seedArg = seedStart === 1000 ? '' : ` --seed-start ${seedStart}`;
+  const seedArg =
+    (seedStart === 1000 ? '' : ` --seed-start ${seedStart}`) + (hazards === 'off' ? '' : ` --hazards ${hazards}`);
   const lines: string[] = [
     '# Balance report',
     '',
@@ -321,13 +325,16 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
 }
 
 /** Plays seeds across a pool of worker threads; results come back in seed order. */
-async function playAll(seedList: number[], warps: number): Promise<SeedResult[]> {
+async function playAll(seedList: number[], warps: number, hazards: HazardLevel): Promise<SeedResult[]> {
   const results: SeedResult[] = Array.from({ length: seedList.length });
   let next = 0;
   const pool = Math.min(seedList.length, availableParallelism());
   await Promise.all(
     Array.from({ length: pool }, async () => {
-      const worker = new Worker(new URL(import.meta.url), { execArgv: ['--import', 'tsx'], workerData: { warps } });
+      const worker = new Worker(new URL(import.meta.url), {
+        execArgv: ['--import', 'tsx'],
+        workerData: { warps, hazards },
+      });
       try {
         while (next < seedList.length) {
           const i = next++;
@@ -354,17 +361,20 @@ if (isMainThread) {
   const warps = Number(arg('warps', '5'));
   const seedStart = Number(arg('seed-start', '1000'));
   const out = arg('out', 'docs/balance.md');
+  const hazards = arg('hazards', 'off') as HazardLevel;
+  if (!HAZARD_LEVEL_IDS.includes(hazards)) throw new Error(`--hazards must be one of ${HAZARD_LEVEL_IDS.join(', ')}`);
   const t0 = performance.now();
   const results = await playAll(
     Array.from({ length: seeds }, (_, i) => seedStart + i),
     warps,
+    hazards,
   );
-  writeFileSync(out, report(results, seeds, warps, seedStart));
+  writeFileSync(out, report(results, seeds, warps, seedStart, hazards));
   console.log(`wrote ${out} in ${((performance.now() - t0) / 1000).toFixed(1)} s`);
 } else {
-  const { warps } = workerData as { warps: number };
+  const { warps, hazards } = workerData as { warps: number; hazards: HazardLevel };
   parentPort!.on('message', (seed: number) =>
     // oxlint-disable-next-line unicorn/require-post-message-target-origin -- worker_threads, not window
-    parentPort!.postMessage(playSeed(seed, warps)),
+    parentPort!.postMessage(playSeed(seed, warps, hazards)),
   );
 }

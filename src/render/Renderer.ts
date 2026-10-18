@@ -17,6 +17,7 @@ import { Backdrop } from './backdrop';
 import type { ViewRect } from './cull';
 import { Debris } from './debris';
 import { FloatingText } from './floatingText';
+import { HazardView } from './hazardView';
 import { Particles } from './particles';
 import { ROCK_TINT, RockView } from './rocks';
 import { ShipView } from './shipView';
@@ -58,7 +59,10 @@ export class Renderer {
   private system = new SystemView();
   private rocks = new RockView();
   private ships = new ShipView();
+  private hazardView = new HazardView();
   private particles = new Particles();
+  /** 0..1 star-glow boost, eased toward 1 while a solar flare is active. */
+  private flareGlow = 0;
   private debris = new Debris();
   private floaters: FloatingText;
   private hoverRing: THREE.Mesh;
@@ -102,6 +106,7 @@ export class Renderer {
       this.system.group,
       this.rocks.group,
       this.ships.group,
+      this.hazardView.line,
       this.particles.points,
       this.debris.mesh,
     );
@@ -240,6 +245,7 @@ export class Renderer {
     const key = `${sys.name}#${sys.number}`;
     if (this.system.key !== key) {
       this.system.build(sys);
+      this.flareGlow = 0;
       this.backdrop.setSystem(state.profile.seed + sys.number);
       this.snapped = false;
     }
@@ -270,7 +276,8 @@ export class Renderer {
     this.camera.updateProjectionMatrix();
 
     this.backdrop.update(cx, cz, this.halfH);
-    this.system.update(sys, run.time);
+    this.flareGlow += ((run.hazards.flare?.phase === 'active' ? 1 : 0) - this.flareGlow) * (1 - damp(4, dt));
+    this.system.update(sys, run.time, this.flareGlow);
     const v = this.cullView;
     v.x = cx;
     v.z = cz;
@@ -279,6 +286,7 @@ export class Renderer {
     this.rocks.update(run.rocks, run.pickups, run.time, v);
     const wpp = this.wpp;
     const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars);
+    this.hazardView.update(run.hazards, run.time, wpp);
 
     this.consumeFx(state, hits, dt);
     this.particles.update(dt);
@@ -345,12 +353,26 @@ export class Renderer {
           this.warpFlash = 1;
           this.follow = true;
           break;
+        case 'hazard':
+          if (fx.phase !== 'start') break;
+          if (fx.kind === 'comet' && fx.pos) P.emit(fx.pos.x, fx.pos.z, col.setHex(0xa8dcff), 30, 160, 1);
+          else if (fx.kind === 'flare') this.shake = Math.max(this.shake, 12);
+          break;
       }
     }
     state.out.fx.length = 0;
 
     for (const h of hits) {
       if (Math.random() < dt * 40) P.emit(h.x, h.z, col.setHex(0xffc080), 1, 90, 0.35);
+    }
+    // Comets trail a pale tail opposite their velocity.
+    for (const r of state.run.rocks) {
+      if (!r.comet) continue;
+      P.emit(r.pos.x, r.pos.z, col.setHex(0x9fd4ff), dt * 90, 60, 1.2, {
+        dir: Math.atan2(-r.vel.z, -r.vel.x),
+        spread: 0.35,
+        drag: 1,
+      });
     }
     for (const s of state.run.ships) {
       if (!s.thrusting || !isAlive(s)) continue;

@@ -2,17 +2,19 @@ import { describe, expect, it } from 'vitest';
 import { RESOURCES } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { SAVE_VERSION } from '../src/sim/create';
+import { newHazards } from '../src/sim/hazards';
 import { SimIndex } from '../src/sim/index';
 import { migrate, migrations, type Migration, type SaveData } from '../src/sim/migrations';
 import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
-// Real saves frozen at versions 2, 3 and 4 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 5 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
 import V4_FIXTURE from './fixtures/save-v4.json?raw';
+import V5_FIXTURE from './fixtures/save-v5.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -23,12 +25,14 @@ function saveAt(version: number): SaveData {
   return { version, profile: { marker: 'original' }, run: { ships: [] } } as unknown as SaveData;
 }
 
-/** The v3 fixture's run reshaped as current: refined columns added, and a system with no modifiers. */
+/** The v3 fixture's run reshaped as current: refined columns added, a system with no modifiers, and a hazard board. */
 const currentRun = () => {
-  const run = v3FixtureState().run;
+  const fixture = v3FixtureState();
+  const run = fixture.run;
   const ships = run.ships.map((s) => ({ ...s, cargo: { ...s.cargo, alloy: 0, fuel: 0 } }));
   const system = { ...run.system, modifiers: [] };
-  return { ...run, system, bank: { ...run.bank, alloy: 0, fuel: 0 }, ships, refinery: newRefinery() };
+  const hazards = newHazards(fixture.profile.seed, run.system.number);
+  return { ...run, system, bank: { ...run.bank, alloy: 0, fuel: 0 }, ships, refinery: newRefinery(), hazards };
 };
 
 /** A valid current-version save, with the given run overrides applied on top. */
@@ -333,10 +337,10 @@ describe('system modifiers migration to v5', () => {
     ['v4', V4_FIXTURE],
   ];
 
-  it.each(frozen)('loads the %s fixture as v5 with no modifiers', (_label, raw) => {
+  it.each(frozen)('loads the %s fixture with no modifiers', (_label, raw) => {
     const state = loadFrozen(raw);
 
-    expect(state.version).toBe(5);
+    expect(state.version).toBe(SAVE_VERSION);
     expect(state.run.system.modifiers).toEqual([]);
   });
 
@@ -380,5 +384,62 @@ describe('system modifiers migration to v5', () => {
     const state = JSON.parse(V4_FIXTURE).state;
     const r = parseImport(JSON.stringify({ ...state, run: { ...state.run, system: undefined } }));
     expect(r.ok).toBe(false);
+  });
+});
+
+describe('hazards migration to v6', () => {
+  const frozen: Array<[string, string]> = [
+    ['v2', FIXTURE],
+    ['v3', V3_FIXTURE],
+    ['v4', V4_FIXTURE],
+    ['v5', V5_FIXTURE],
+  ];
+
+  it.each(frozen)('upgrades the %s fixture to a fresh hazard board', (_label, raw) => {
+    const state = loadFrozen(raw);
+
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.run.hazards).toEqual(newHazards(state.profile.seed, state.run.system.number));
+  });
+
+  it('runs a tick on the v5 fixture', () => {
+    const state = loadFrozen(V5_FIXTURE);
+
+    tick(state, 1 / 60, { thrust: { x: 0, z: 0 }, commands: [] as Command[] }, new SimIndex());
+
+    expect(Number.isFinite(state.run.hazards.cometTimer)).toBe(true);
+  });
+
+  it('rejects a v6 save without hazards or with a malformed board', () => {
+    const run = loadFrozen(V5_FIXTURE).run;
+    const good = newHazards(1, 1);
+    const bad: unknown[] = [
+      undefined,
+      null,
+      'x',
+      { ...good, rng: undefined },
+      { ...good, rng: { s: 'a' } },
+      { ...good, cometTimer: Number.NaN },
+      { ...good, flareTimer: 'soon' },
+      { ...good, comet: {} },
+      { ...good, comet: { from: { x: 0, z: 0 }, vel: { x: 1, z: 0 }, belt: 0, timeLeft: 'x' } },
+      { ...good, flare: { phase: 'bogus', timeLeft: 1 } },
+      { ...good, flare: { phase: 'active' } },
+    ];
+    for (const hazards of bad) {
+      const state = { version: 6, profile: loadFrozen(V5_FIXTURE).profile, run: { ...run, hazards } };
+      expect(parseImport(JSON.stringify(state)).ok).toBe(false);
+    }
+  });
+
+  it('accepts pending hazards', () => {
+    const run = loadFrozen(V5_FIXTURE).run;
+    const hazards = {
+      ...newHazards(1, 1),
+      comet: { from: { x: 3200, z: 0 }, vel: { x: -130, z: 0 }, belt: 1, timeLeft: 4 },
+      flare: { phase: 'active', timeLeft: 2 },
+    };
+    const state = { version: 6, profile: loadFrozen(V5_FIXTURE).profile, run: { ...run, hazards } };
+    expect(parseImport(JSON.stringify(state)).ok).toBe(true);
   });
 });

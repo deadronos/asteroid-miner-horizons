@@ -14,6 +14,7 @@ export class SystemView {
   private stationRing!: THREE.Mesh;
   private beacons: THREE.Mesh[] = [];
   private starGlow: THREE.Sprite[] = [];
+  private glowOpacity: number[] = [];
   key = '';
 
   constructor() {
@@ -52,6 +53,7 @@ export class SystemView {
       s.position.y = 30;
       g.add(s);
       this.starGlow.push(s);
+      this.glowOpacity.push(op);
     }
     const heat = circleLoop(sys.heatRadius, 0xff5a3a, 0.35, 120);
     g.add(heat);
@@ -120,7 +122,8 @@ export class SystemView {
     this.group.add(st);
   }
 
-  update(sys: StarSystem, time: number): void {
+  /** `boost` (0..1) brightens and swells the star glow, e.g. during a solar flare. */
+  update(sys: StarSystem, time: number, boost = 0): void {
     sys.planets.forEach((p, i) => {
       const v = this.planets[i];
       if (!v) return;
@@ -138,7 +141,10 @@ export class SystemView {
       (b.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.65 * Math.max(0, Math.sin(time * 3 + i * 1.6));
     });
     const flicker = 1 + Math.sin(time * 1.7) * 0.03 + Math.sin(time * 5.3) * 0.015;
-    this.starGlow.forEach((s, i) => s.scale.setScalar(sys.starRadius * (i === 0 ? 4.5 : 11) * flicker));
+    this.starGlow.forEach((s, i) => {
+      s.scale.setScalar(sys.starRadius * (i === 0 ? 4.5 : 11) * flicker * (1 + 0.6 * boost));
+      s.material.opacity = Math.min(1, this.glowOpacity[i]! + 0.3 * boost);
+    });
   }
 
   private dispose(): void {
@@ -153,6 +159,7 @@ export class SystemView {
     this.planets = [];
     this.beacons = [];
     this.starGlow = [];
+    this.glowOpacity = [];
     this.station = new THREE.Group();
   }
 }

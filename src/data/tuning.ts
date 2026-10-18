@@ -59,5 +59,27 @@ export const TUNING = {
   /** Chance a system rolls a second modifier. */
   modifierTwoChance: 0.25,
 
+  // Hazards.
+  /** First system number that schedules comets and flares. */
+  hazardMinSystem: 2,
+  /** Grace seconds at the start of a run before any hazard. */
+  hazardFirstDelay: 75,
+  /** Seconds between comet warnings, rolled per comet. */
+  cometInterval: [140, 220],
+  /** Seconds between a comet warning and its appearance. */
+  cometWarning: 8,
+  /** Comet speed in units per second (before the level's damage multiplier). */
+  cometSpeed: 130,
+  /** Radius of the circle comets spawn on and despawn past. */
+  cometEdge: 3200,
+  /** Comet hit points relative to a rock of the same radius. */
+  cometHpMul: 1.6,
+  /** Comet resource units relative to a rock of the same radius. */
+  cometYieldMul: 3,
+  /** Seconds between a flare warning and the flare itself. */
+  flareWarning: 10,
+  /** Seconds a flare stays active. */
+  flareDuration: 6,
+
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;

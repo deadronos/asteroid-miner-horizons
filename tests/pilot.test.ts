@@ -11,7 +11,7 @@ const DT = 1 / 60;
 function ctxFor(state: ReturnType<typeof newGame>): TickCtx {
   const index = new SimIndex();
   index.rebuild(state);
-  return { state, index, dt: DT, assists: DEFAULT_ASSISTS };
+  return { state, index, dt: DT, assists: DEFAULT_ASSISTS, hazards: 'off' };
 }
 
 describe('pilot scratch reuse', () => {

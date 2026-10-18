@@ -64,6 +64,14 @@ All keys can be rebound in ⚙ → Controls.
   to its fragments (3 for a large, 2 for a medium) and drops the rest as debris; small
   rocks drop everything. Units are conserved (there's a test for this). Crystal rocks
   are tougher and only appear after the first warp.
+- **Hazards**: from system 2 on, space gets dangerous. A **comet** is an icy, fast rock
+  that crosses a belt in a straight line: it hits ships hard, and cracking one pays out
+  far more than a normal rock. A dashed line on the map shows its path for 8 seconds
+  before it appears. At M and B stars (never G) a **solar flare** can also burn every
+  undocked ship near the star; a banner counts down the warning, the alarm sounds, and
+  a docked ship takes nothing, so dock or fly clear. Both are announced in the banner
+  under the top bar and in the log. The ⚙ Gameplay tab sets them to Off, Normal or
+  Harsh (more often, hits harder).
 - **Hulls & slots**: every ship has a hull (base stats plus N generic slots). Each slot
   takes one component at tier 1–3: Mining Laser, Ion Engine, Deflector Shield,
   Composite Armor, Cargo Pod, or Sensor & Tractor Array. Effects stack, so two lasers
@@ -88,8 +96,9 @@ All keys can be rebound in ⚙ → Controls.
   readable error. The ⚙ menu also has a Controls tab.
 - **Settings** (⚙ menu, stored separately from saves so they apply to every slot):
   - _Gameplay_: pause while menus are open or the window is unfocused (P pauses
-    manually; menus keep working while paused), autosave interval, confirmations, and
-    the autopilot assists (rock avoidance, drone auto-unload, fragment chaining).
+    manually; menus keep working while paused), autosave interval, confirmations, the
+    hazard level (Off / Normal / Harsh), and the autopilot assists (rock avoidance,
+    drone auto-unload, fragment chaining).
   - _Graphics_: Low/Medium/High quality (resolution cap, star and particle density),
     nebula, anti-aliasing (applies on reload), screen shake, FPS counter.
   - _Interface_: HUD scale, always-on ship bars, help box, event log verbosity, camera

@@ -6,7 +6,7 @@ import { h } from '../dom';
 
 export type BoolKey = { [K in keyof Settings]: Settings[K] extends boolean ? K : never }[keyof Settings];
 export type NumKey = { [K in keyof Settings]: Settings[K] extends number ? K : never }[keyof Settings];
-export type SelectKey = 'autosaveSec' | 'quality' | 'shake' | 'logVerbosity';
+export type SelectKey = 'autosaveSec' | 'quality' | 'shake' | 'logVerbosity' | 'hazards';
 
 export function section(title: string): HTMLElement {
   return h('h3', { class: 'section', text: title });

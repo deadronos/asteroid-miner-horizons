@@ -5,6 +5,7 @@
 
 import { newBoard } from './contracts';
 import { SAVE_VERSION } from './create';
+import { newHazards } from './hazards';
 import { newRefinery } from './refining';
 import type { GameState } from './types';
 
@@ -41,6 +42,11 @@ export const migrations: Record<number, Migration> = {
   // generated, so it gets none; modifiers are rolled from the next warp on.
   4: (d) => {
     d.run.system.modifiers = [];
+    return d;
+  },
+  // v6 added `run.hazards`: a fresh hazard schedule for the current system.
+  5: (d) => {
+    d.run.hazards = newHazards(d.profile.seed, d.run.system.number);
     return d;
   },
 };
