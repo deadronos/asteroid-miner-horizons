@@ -133,6 +133,11 @@ Starting values (Task 6 may tune them):
 | `icePoor` | Ice-poor | ice rocks rarer | `mix: { ice: 0.55 }` |
 | `nebula` | Nebula | smaller pickup radius, faster regrow | `magnet: 0.7, regrowInterval: 0.5` |
 
+**Tuned in Task 6** (see the run log): `metalRich` ore 1.3, `icePoor` ice 0.7,
+`nebula` magnet 0.85 and regrowInterval 0.3, `dense` unchanged at 1.4;
+`modifierTwoChance` 0.25; `warpCostGrowth` 1.3. Each `ModifierDef` also has an
+`icon` (added in Task 4 so the chips can collapse to icons below 1200 px).
+
 `data/modifiers.ts` imports only types from `./resources` (data stays a leaf).
 
 `TUNING` gains a `// System modifiers.` block: `modifierMinSystem: 3` (first
@@ -233,7 +238,8 @@ The report gains:
   their previous warp;
 - a `## Modifiers` table: for each modifier, the number of seed-warps that had
   it, and the median (min–max) of **relative time** = `sec / (median sec of
-  all seeds at that system number)`. A `none (system ≥ 3)` row is the control.
+  all non-wall seeds at that system number)`. (A planned `none (system ≥ 3)`
+  control row was dropped: every system from 3 on rolls at least one modifier.)
 
 ### 8. #44: warp pacing (Task 6, after modifiers land)
 
