@@ -24,9 +24,12 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
       const res = RESOURCES.map((r) => {
         const e = h('span', { class: `res ${r}`, title: RESOURCE_INFO[r].name });
         bind(() => {
-          const b = st().run.bank;
+          const s = st();
+          const b = s.run.bank;
           const late = r === 'crystal' || r === 'alloy' || r === 'fuel';
-          e.style.display = late && b[r] <= 0 && st().run.system.number < 2 ? 'none' : '';
+          // Keep alloy/fuel on screen while a job of that recipe is queued.
+          const queued = s.run.refinery.queue.some((j) => j.recipe === r);
+          e.style.display = late && b[r] <= 0 && !queued && s.run.system.number < 2 ? 'none' : '';
           setText(e, `${RESOURCE_INFO[r].icon} ${fmt(b[r])}`);
         });
         return e;

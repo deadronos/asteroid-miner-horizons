@@ -1,6 +1,6 @@
 // DOM HUD composer: places the panels (top bar, fleet, contracts, selected
-// ship, research) and owns the small overlays — event log, help, hover tooltip,
-// warp flash, pause banner and FPS counter. All actions go out as sim
+// ship, refinery, research) and owns the small overlays — event log, help, hover
+// tooltip, warp flash, pause banner and FPS counter. All actions go out as sim
 // Commands via `send`.
 
 import { RESOURCE_INFO } from '../data/resources';
@@ -13,6 +13,7 @@ import { Menu } from './Menu';
 import type { PanelCtx } from './panels/context';
 import { createContractsPanel } from './panels/ContractsPanel';
 import { createFleetPanel } from './panels/FleetPanel';
+import { createRefineryPanel } from './panels/RefineryPanel';
 import { ResearchPanel } from './panels/ResearchPanel';
 import { createShipPanel } from './panels/ShipPanel';
 import { createTopBar } from './panels/TopBar';
@@ -63,6 +64,7 @@ export class Hud {
       createFleetPanel(mk('fleet'), ctx),
       createContractsPanel(mk('contracts'), ctx),
       createShipPanel(mk('ship'), ctx),
+      createRefineryPanel(mk('refinery'), ctx),
     ];
     this.log.id = 'log';
     root.append(this.log);
