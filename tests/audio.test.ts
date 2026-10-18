@@ -2,8 +2,10 @@ import { describe, expect, it } from 'vitest';
 import {
   alarmLevel,
   beamHums,
+  EDGE_GAIN,
   MAX_HUMS,
   MAX_VOICES,
+  PAN_WIDTH,
   PRESETS,
   RateLimiter,
   type SoundId,
@@ -55,15 +57,38 @@ describe('rate limiter', () => {
 });
 
 describe('spatial mixing', () => {
-  it('is full volume on screen and silent well off screen', () => {
-    expect(spatial({ x: 100, z: 50 }, view)[0]).toBe(1);
-    expect(spatial({ x: 800 * 1.25, z: 0 }, view)[0]).toBeCloseTo(0.5);
+  it('is full volume at the centre, quieter toward the edge and silent well off screen', () => {
+    expect(spatial({ x: 0, z: 0 }, view)[0]).toBe(1);
+    expect(spatial({ x: 400, z: 0 }, view)[0]).toBeCloseTo(0.8);
+    expect(spatial({ x: 800, z: 0 }, view)[0]).toBeCloseTo(EDGE_GAIN);
+    expect(spatial({ x: 800 * 1.25, z: 0 }, view)[0]).toBeCloseTo(EDGE_GAIN / 2);
     expect(spatial({ x: 5000, z: 0 }, view)[0]).toBe(0);
   });
 
-  it('pans by horizontal screen position', () => {
-    expect(spatial({ x: -800, z: 0 }, view)[1]).toBeLessThan(0);
-    expect(spatial({ x: 800, z: 0 }, view)[1]).toBeGreaterThan(0);
+  it('pans by horizontal screen position, widest at the edge', () => {
+    expect(spatial({ x: -800, z: 0 }, view)[1]).toBeCloseTo(-PAN_WIDTH);
+    expect(spatial({ x: 800, z: 0 }, view)[1]).toBeCloseTo(PAN_WIDTH);
+    expect(spatial({ x: 0, z: 300 }, view)[1]).toBe(0);
+  });
+
+  it('hears a drone mining off to the side on that side and quieter', () => {
+    const state = beamState(7);
+    const centre = addBeam(state, 'drone', { x: 0, z: 0 });
+    const side = addBeam(state, 'drone', { x: -700, z: 0 });
+    const hums = beamHums(state.run, state.profile, view);
+    const c = hums.find((h) => h.shipId === centre.id)!;
+    const s = hums.find((h) => h.shipId === side.id)!;
+    expect(s.pan).toBeLessThan(-0.5);
+    expect(s.gain).toBeLessThan(c.gain);
+  });
+
+  it('attenuates everything when zoomed out, but never below a floor', () => {
+    const near = spatial({ x: 0, z: 0 }, view)[0];
+    const out = spatial({ x: 0, z: 0 }, { ...view, halfW: 3200, halfH: 1600 })[0];
+    const overview = spatial({ x: 0, z: 0 }, { ...view, halfW: 80000, halfH: 40000 })[0];
+    expect(out).toBeLessThan(near);
+    expect(out).toBeCloseTo(Math.sqrt(420 / 1600));
+    expect(overview).toBeCloseTo(0.4);
   });
 
   it('drops off-screen fx entirely but always plays warp', () => {
@@ -128,7 +153,7 @@ describe('beam hums', () => {
       const hums = beamHums(state.run, state.profile, view);
       expect(hums).toHaveLength(1);
       expect(hums[0]!.shipId).toBe(ship.id);
-      expect(hums[0]!.gain).toBe(1);
+      expect(hums[0]!.gain).toBeCloseTo(0.8);
       expect(Math.sign(hums[0]!.pan)).toBe(Math.sign(x));
     });
   }
@@ -167,7 +192,11 @@ describe('beam hums', () => {
 
     const hums = beamHums(state.run, state.profile, view);
     expect(hums.map((h) => h.shipId)).toEqual([loudB.id, loudA.id, mid.id, quiet.id]);
-    expect(hums.map((h) => h.gain)).toEqual([1, 1, 0.5, 0.25]);
+    const gains = hums.map((h) => h.gain);
+    expect(gains[0]).toBe(1);
+    expect(gains[1]).toBe(1);
+    expect(gains[2]).toBeCloseTo(0.3);
+    expect(gains[3]).toBeCloseTo(0.15);
   });
 
   it('raises pitch with dps, kept inside the [60, 320] band', () => {
