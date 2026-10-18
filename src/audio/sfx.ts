@@ -134,6 +134,15 @@ export function voiceFor(fx: Fx, view: View, streak: Streak, now: number): Voice
   }
 }
 
+/** Which continuous layers may sound this frame. */
+export interface ContinuousPolicy {
+  readonly hums: boolean;
+  readonly alarm: boolean;
+}
+
+/** Nothing gates the continuous layer. */
+export const LIVE_CONTINUOUS: ContinuousPolicy = Object.freeze({ hums: true, alarm: true });
+
 /** Hard cap on simultaneous beam hums: past this the mix turns to mush anyway. */
 export const MAX_HUMS = 4;
 
