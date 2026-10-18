@@ -61,10 +61,16 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     assists: input.assists ?? DEFAULT_ASSISTS,
   };
 
-  // Safe while ships die mid-loop: removals reassign run.ships rather than mutating it.
-  for (const ship of run.ships) updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
+  // Index-based so a ship removed in `updateShip` (an in-place `removeItem`)
+  // does not shift the next ship into an already-visited slot: after a removal
+  // the element at `i` is a ship we have not seen, so do not advance.
+  for (let i = 0; i < run.ships.length; i++) {
+    const ship = run.ships[i]!;
+    updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
+    if (run.ships[i] !== ship) i--;
+  }
 
-  updatePickups(state, index.stats, dt);
+  updatePickups(state, index, dt);
   regrowBelts(state, dt);
   updateContracts(state, dt);
   updateRefinery(state, dt);
@@ -182,19 +188,23 @@ function unload(state: GameState, ship: Ship): void {
     state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts.join(' ')}.` });
 }
 
-function updatePickups(state: GameState, stats: Map<number, ShipStats>, dt: number): void {
+function updatePickups(state: GameState, index: SimIndex, dt: number): void {
   const { run } = state;
-  const live = run.ships.filter(isAlive);
+  const stats = index.stats;
   const drag = damp(0.8, dt);
-  run.pickups = run.pickups.filter((p) => {
+  const pickups = run.pickups;
+  let kept = 0;
+  for (let i = 0; i < pickups.length; i++) {
+    const p = pickups[i]!;
     p.age += dt;
-    if (p.age > TUNING.pickupLifetime) return false;
+    if (p.age > TUNING.pickupLifetime) continue; // dropped: age > lifetime
     p.vel.x *= drag;
     p.vel.z *= drag;
 
     let best: Ship | null = null;
     let bestD = Infinity;
-    for (const s of live) {
+    for (const s of run.ships) {
+      if (!isAlive(s)) continue; // was `const live = run.ships.filter(isAlive)`
       const st = stats.get(s.id)!;
       const d = dist(s.pos, p.pos);
       if (d < st.magnet && d < bestD && cargoFree(s, st) > 0.01) {
@@ -212,13 +222,14 @@ function updatePickups(state: GameState, stats: Map<number, ShipStats>, dt: numb
         best.cargo[p.kind] += take;
         p.amount -= take;
         state.out.fx.push({ t: 'collect', pos: { ...best.pos }, kind: p.kind, amount: take, shipId: best.id });
-        if (p.amount <= 1e-6) return false;
+        if (p.amount <= 1e-6) continue; // consumed: dropped
       }
     }
     p.pos.x += p.vel.x * dt;
     p.pos.z += p.vel.z * dt;
-    return true;
-  });
+    pickups[kept++] = p;
+  }
+  pickups.length = kept;
 }
 
 /** Belts slowly regrow so long sessions (and idle drones) never run dry. */

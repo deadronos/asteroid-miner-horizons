@@ -2,6 +2,7 @@
 // Resource units are conserved: a cracked rock hands `crackChildShare` of
 // its units to fragments and drops the rest; the smallest rocks drop all.
 
+import { removeItem } from '../core/array';
 import { range } from '../core/rng';
 import { fromAngle, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
@@ -39,7 +40,7 @@ export function dropPickups(state: GameState, rock: Rock, units: number): void {
 
 export function destroyRock(state: GameState, rock: Rock): Rock[] {
   const { run } = state;
-  run.rocks = run.rocks.filter((r) => r !== rock);
+  removeItem(run.rocks, rock);
   state.out.fx.push({ t: 'crack', pos: { ...rock.pos }, kind: rock.kind, radius: rock.radius });
   contractProgress(state, { t: 'break', size: rock.size });
 

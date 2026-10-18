@@ -22,14 +22,7 @@ export interface TickCtx {
  * direction push the ship sideways (around them, not back), and rocks that
  * are nearly touching push straight away.
  */
-function avoidance(
-  ctx: TickCtx,
-  ship: Ship,
-  st: ShipStats,
-  dx: number,
-  dz: number,
-  ignoreId: number | null,
-): Vec2 & { danger: number } {
+function avoidance(ctx: TickCtx, ship: Ship, st: ShipStats, dx: number, dz: number, ignoreId: number | null): number {
   const look = st.size + 60 + len(ship.vel) * 1.2;
   let ax = 0;
   let az = 0;
@@ -56,7 +49,9 @@ function avoidance(
     ax += -dz * side * urgency;
     az += dx * side * urgency;
   });
-  return { x: ax, z: az, danger };
+  ctx.index.avoid.x = ax;
+  ctx.index.avoid.z = az;
+  return danger;
 }
 
 /**
@@ -80,11 +75,21 @@ export function steer(
   if (avoid && want > 1e-6) {
     // Probe along where we're actually going once moving, else where we want to go.
     const sp = len(ship.vel);
-    const [px, pz] = sp > 30 ? [ship.vel.x / sp, ship.vel.z / sp] : [wx / Math.hypot(wx, wz), wz / Math.hypot(wx, wz)];
-    const a = avoidance(ctx, ship, st, px, pz, ignoreId);
+    let px: number;
+    let pz: number;
+    if (sp > 30) {
+      px = ship.vel.x / sp;
+      pz = ship.vel.z / sp;
+    } else {
+      const w = Math.hypot(wx, wz);
+      px = wx / w;
+      pz = wz / w;
+    }
+    const danger = avoidance(ctx, ship, st, px, pz, ignoreId);
+    const a = ctx.index.avoid;
     x += a.x * Math.max(want, 0.5);
     z += a.z * Math.max(want, 0.5);
-    want *= 1 - 0.7 * a.danger; // ease off the throttle while threading a cluster
+    want *= 1 - 0.7 * danger; // ease off the throttle while threading a cluster
   }
   const l = Math.hypot(x, z);
   if (l > 1e-6) {
@@ -160,8 +165,16 @@ function nearestRock(ctx: TickCtx, from: Vec2, radius: number, filter: (r: Rock)
 
 /** After a manual mining target breaks, chain onto the closest fragment. */
 export function chainTarget(ctx: TickCtx, ship: Ship, st: ShipStats, frags: Rock[]): number | null {
-  const near = frags.filter((f) => dist(f.pos, ship.pos) < st.range * 1.6);
-  if (near.length) return near.reduce((a, b) => (dist(a.pos, ship.pos) <= dist(b.pos, ship.pos) ? a : b)).id;
+  let best: Rock | null = null;
+  let bestD = Infinity;
+  for (const f of frags) {
+    const d = dist(f.pos, ship.pos);
+    if (d < st.range * 1.6 && d < bestD) {
+      best = f;
+      bestD = d;
+    }
+  }
+  if (best) return best.id;
   return nearestRock(ctx, ship.pos, st.range * 1.2, () => true)?.id ?? null;
 }
 
@@ -201,7 +214,9 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const fs = flagship(run);
   const anchor = ship.aiMode === 'assist' && isAlive(fs) ? fs.pos : station;
   const slot = (ship.id % 6) * ((Math.PI * 2) / 6);
-  const home = { x: anchor.x + Math.cos(slot) * 70, z: anchor.z + Math.sin(slot) * 70 };
+  const home = ctx.index.home;
+  home.x = anchor.x + Math.cos(slot) * 70;
+  home.z = anchor.z + Math.sin(slot) * 70;
 
   if (cargoFree(ship, st) < Math.max(2, st.cargoCap * 0.04)) {
     ship.aiTargetId = null;

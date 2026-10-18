@@ -2,6 +2,7 @@
 // keyed by Command['t']. Bodies are lifted verbatim from applyCommand so
 // behaviour is unchanged; the map type makes a missing variant a compile error.
 
+import { removeItem } from '../core/array';
 import { v } from '../core/vec';
 import { COMPONENTS, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
@@ -210,7 +211,7 @@ export const handlers: Handlers = {
     if (block) return fail(state, block);
     refund(state, halve(HULLS[ship.hullId].cost));
     for (const f of ship.slots) if (f) refund(state, halve(investedCost(f.type, f.tier)));
-    state.run.ships = state.run.ships.filter((s) => s !== ship);
+    removeItem(state.run.ships, ship);
     if (state.run.selectedId === ship.id) state.run.selectedId = flagship(state.run).id;
     state.out.log.push({ level: 'info', text: `${ship.name} scrapped for half value.` });
   }),
