@@ -67,7 +67,12 @@ const tiered =
       ? { ore: Math.round(25 * mul) }
       : tier === 2
         ? { ore: Math.round(120 * mul), ice: Math.round(40 * mul) }
-        : { ore: Math.round(420 * mul), ice: Math.round(160 * mul), crystal: Math.round(18 * mul) };
+        : {
+            ore: Math.round(100 * mul),
+            alloy: Math.round(80 * mul),
+            ice: Math.round(160 * mul),
+            crystal: Math.round(18 * mul),
+          };
 
 export const COMPONENTS: Record<ComponentId, ComponentDef> = {
   laser: {

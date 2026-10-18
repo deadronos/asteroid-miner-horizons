@@ -89,7 +89,7 @@ export const handlers: Handlers = {
   warp: (state) => {
     const { run, profile, out } = state;
     const cost = warpCost(state);
-    if (run.bank.ice < cost) return fail(state, `Warp needs ${cost} ice in the station bank.`);
+    if (run.bank.fuel < cost) return fail(state, `Warp needs ${cost} fuel in the station bank.`);
     const gain = dataGain(state);
     profile.data += gain;
     profile.dataEarned += gain;

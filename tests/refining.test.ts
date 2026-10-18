@@ -1,6 +1,16 @@
 import { describe, expect, it } from 'vitest';
+import { COMPONENTS, type ComponentId } from '../src/data/components';
+import { HULLS } from '../src/data/hulls';
 import { RECIPES, RECIPE_IDS, type RecipeId } from '../src/data/refining';
-import { emptyWallet, RAW_RESOURCES, RESOURCE_INFO, RESOURCES, walletValue, type Wallet } from '../src/data/resources';
+import {
+  emptyWallet,
+  RAW_RESOURCES,
+  RESOURCE_INFO,
+  RESOURCES,
+  walletValue,
+  type Cost,
+  type Wallet,
+} from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
@@ -32,6 +42,9 @@ function pushJobs(run: Run, recipe: RecipeId, count: number, n = 1): void {
 }
 
 const INPUT = { thrust: { x: 0, z: 0 }, commands: [] as Command[] };
+
+/** Ore-equivalent value gap between two prices. */
+const drift = (now: Cost, before: Cost): number => Math.abs(walletValue(now) - walletValue(before));
 
 /** A queue with more than 30 s of work: 7 fuel batches, then 20 alloy. */
 function mixedRefinery(): GameState {
@@ -351,5 +364,55 @@ describe('refinery in the tick', () => {
     expect(state.run.bank.fuel).toBe(2);
     expect(state.run.refinery.produced.fuel).toBe(2);
     expect(state.run.refinery.queue[0]!.count).toBe(1);
+  });
+});
+
+describe('cost table', () => {
+  // Pre-refining prices, kept as literals so the rebalance is deliberate: Task 7
+  // tuning must change these on purpose, not by drift.
+  const T1: Record<ComponentId, Cost> = {
+    laser: { ore: 31 },
+    engine: { ore: 25 },
+    shield: { ore: 25 },
+    armor: { ore: 25 },
+    cargo: { ore: 20 },
+    sensor: { ore: 23 },
+  };
+  const T2: Record<ComponentId, Cost> = {
+    laser: { ore: 150, ice: 50 },
+    engine: { ore: 120, ice: 40 },
+    shield: { ore: 120, ice: 40 },
+    armor: { ore: 120, ice: 40 },
+    cargo: { ore: 96, ice: 32 },
+    sensor: { ore: 108, ice: 36 },
+  };
+  const OLD_T3: Record<ComponentId, Cost> = {
+    laser: { ore: 525, ice: 200, crystal: 23 },
+    engine: { ore: 420, ice: 160, crystal: 18 },
+    shield: { ore: 420, ice: 160, crystal: 18 },
+    armor: { ore: 420, ice: 160, crystal: 18 },
+    cargo: { ore: 336, ice: 128, crystal: 14 },
+    sensor: { ore: 378, ice: 144, crystal: 16 },
+  };
+  const ids = Object.keys(COMPONENTS) as ComponentId[];
+
+  it('keeps every tier-1 and tier-2 price and the drone price unchanged', () => {
+    for (const id of ids) {
+      expect(COMPONENTS[id].cost(1)).toEqual(T1[id]);
+      expect(COMPONENTS[id].cost(2)).toEqual(T2[id]);
+    }
+    expect(HULLS.drone.cost).toEqual({ ore: 80, ice: 25 });
+  });
+
+  it('prices every tier-3 component and the big hulls in alloy', () => {
+    for (const id of ids) expect(COMPONENTS[id].cost(3).alloy ?? 0).toBeGreaterThan(0);
+    expect(HULLS.excavator.cost.alloy ?? 0).toBeGreaterThan(0);
+    expect(HULLS.harvester.cost.alloy ?? 0).toBeGreaterThan(0);
+  });
+
+  it('moves value rather than adding it: moved prices keep their ore-equivalent value', () => {
+    for (const id of ids) expect(drift(COMPONENTS[id].cost(3), OLD_T3[id])).toBe(0);
+    expect(drift(HULLS.excavator.cost, { ore: 900, ice: 300 })).toBe(0);
+    expect(drift(HULLS.harvester.cost, { ore: 350, ice: 120 })).toBe(0);
   });
 });

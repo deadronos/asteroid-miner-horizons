@@ -2,27 +2,37 @@
 // purely through sim Commands, like the UI would; drones keep their own AI.
 //
 // Each call looks at the state and returns the commands for the next tick:
-//   buy affordable perks → warp when the bank has the ice → accept a
+//   buy affordable perks → warp once the bank has the fuel → accept a
 //   serviceable contract → dock when the hold is full → while docked,
 //   repair / buy one thing → chase nearby debris → mine the nearest rock of
-//   whichever resource the bank (or the active delivery contract) needs.
+//   whichever resource the bank (or the active delivery contract) needs. A fuel
+//   refine rides alongside the flagship's order rather than replacing it, so
+//   refining never costs the pilot a decision cycle; a refine cycle skips
+//   purchases so a price is not checked against ice the refine is about to spend.
 //
-// Ice reserve: any purchase must leave at least ICE_RESERVE × warp cost of
-// ice in the bank, otherwise ice-priced
-// upgrades would starve the warp forever.
+// Ice reserve: any ice-priced purchase must leave at least ICE_RESERVE × warp
+// cost worth of ice (counting fuel as its ice equivalent), otherwise
+// ice-priced upgrades would starve the warp forever. An upgrade blocked only by
+// alloy is smelted from ore.
 
 import { dist, distSq } from '../src/core/vec';
 import { COMPONENTS, type ComponentId } from '../src/data/components';
 import { CONTRACTS } from '../src/data/contracts';
 import { HULLS } from '../src/data/hulls';
 import type { PerkId } from '../src/data/perks';
+import { RECIPES } from '../src/data/refining';
 import { canAfford, type Cost } from '../src/data/resources';
 import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
-import { cargoFree, flagship, isAlive, shipStats } from '../src/sim/ships';
+import { queuedOutput, refineBlock } from '../src/sim/refining';
+import { cargoFree, flagship, isAlive, shipStats, type ShipStats } from '../src/sim/ships';
 import type { GameState, Rock, Ship } from '../src/sim/types';
 
 export const ICE_RESERVE = 0.5;
+/** Ice the fuel recipe eats per unit of fuel produced. */
+const ICE_PER_FUEL = (RECIPES.fuel.input.ice ?? 0) / RECIPES.fuel.output;
+/** Ore the alloy recipe eats per unit of alloy produced. */
+const ORE_PER_ALLOY = (RECIPES.alloy.input.ore ?? 0) / RECIPES.alloy.output;
 /** Fill order for empty slots. */
 const INSTALL_ORDER: ComponentId[] = ['cargo', 'sensor', 'engine', 'armor', 'laser', 'shield'];
 /** Upgrade order for fitted components. */
@@ -46,19 +56,32 @@ export function botCommands(state: GameState, opts: BotOptions = {}): Command[] 
   if (perk) return [{ t: 'buyPerk', perk }];
 
   const wc = warpCost(state);
-  if (opts.warp !== false && run.bank.ice >= wc) return [{ t: 'warp' }];
+  if (opts.warp !== false && run.bank.fuel >= wc) return [{ t: 'warp' }];
 
   if (!isAlive(fs)) return [];
 
+  // The refinery is station-side, so its command rides alongside the flagship's
+  // order instead of consuming this decision cycle.
+  const fuel = refineFuel(state, wc);
+
   const contract = nextContract(state);
-  if (contract) return [contract];
+  if (contract) return fuel ? [fuel, contract] : [contract];
 
   const st = shipStats(fs, profile);
   if (isDocked(run, fs)) {
-    const buy = nextPurchase(state, wc);
+    // A refine cycle skips purchases: the refine is about to spend the ice a
+    // price would have been checked against.
+    const buy = fuel ? null : nextPurchase(state, wc);
     if (buy) return [buy];
   }
 
+  const order = flagshipOrder(state, fs, st, wc);
+  return fuel ? [fuel, ...order] : order;
+}
+
+/** The flagship's non-purchase order this cycle: dock, chase debris, or mine. */
+function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number): Command[] {
+  const { run } = state;
   const free = cargoFree(fs, st);
   if (isFull(st.cargoCap, free)) return fs.order?.kind === 'dock' ? [] : [{ t: 'dock', shipId: fs.id }];
   if (fs.order?.kind === 'dock' || fs.order?.kind === 'mine') return [];
@@ -91,6 +114,28 @@ function nextPerk(state: GameState): PerkId | null {
   return pick;
 }
 
+/** Ice worth of fuel the bank must keep back for the next warp. */
+const iceReserve = (wc: number): number => ICE_RESERVE * ICE_PER_FUEL * wc;
+
+/**
+ * Queues enough fuel for the next warp, keeping ICE_RESERVE of the warp's ice
+ * worth back. Issues nothing when the warp is already covered or the queue and
+ * bank can't take a batch.
+ */
+function refineFuel(state: GameState, wc: number): Command | null {
+  const { run } = state;
+  const fuelHave = run.bank.fuel + queuedOutput(run, 'fuel');
+  if (fuelHave >= wc) return null;
+  let want = wc - fuelHave;
+  if (run.bank.ice < ICE_PER_FUEL * want) {
+    // Short of a full warp's ice: bank fuel up to the reserve instead.
+    want = Math.min(wc * ICE_RESERVE - fuelHave, Math.floor(run.bank.ice / ICE_PER_FUEL));
+  }
+  if (want < 1) return null;
+  const block = refineBlock(run, 'fuel', want);
+  return 'n' in block ? { t: 'refine', recipe: 'fuel', count: block.n } : null;
+}
+
 /** First offered contract this system can serve (crystal only where crystal rocks exist). */
 function nextContract(state: GameState): Command | null {
   const { run } = state;
@@ -104,8 +149,19 @@ function nextContract(state: GameState): Command | null {
 function nextPurchase(state: GameState, wc: number): Command | null {
   const { run, profile } = state;
   const fs = flagship(run);
-  const reserve = ICE_RESERVE * wc;
-  const ok = (c: Cost): boolean => canAfford(run.bank, c) && (!c.ice || run.bank.ice - c.ice >= reserve);
+  const iceEq = run.bank.ice + ICE_PER_FUEL * (run.bank.fuel + queuedOutput(run, 'fuel'));
+  const reserve = iceReserve(wc);
+  const ok = (c: Cost): boolean => canAfford(run.bank, c) && (!c.ice || iceEq - c.ice >= reserve);
+  const alloyHave = run.bank.alloy + queuedOutput(run, 'alloy');
+  /** A price the bot can't pay yet only because alloy is short. */
+  const needsAlloy = (c: Cost): boolean => (c.alloy ?? 0) > alloyHave && ok({ ...c, alloy: 0 });
+  /** Smelts `c`'s alloy shortfall when the ore is there on top of the price. */
+  const smeltFor = (c: Cost): Command | null => {
+    const short = (c.alloy ?? 0) - alloyHave;
+    if (short <= 0 || run.bank.ore - (c.ore ?? 0) < short * ORE_PER_ALLOY) return null;
+    const block = refineBlock(run, 'alloy', short);
+    return 'n' in block ? { t: 'refine', recipe: 'alloy', count: block.n } : null;
+  };
 
   const rc = repairCost(state, fs);
   if (rc > 0 && fs.hull < shipStats(fs, profile).maxHull * 0.7 && run.bank.ore >= rc)
@@ -125,10 +181,21 @@ function nextPurchase(state: GameState, wc: number): Command | null {
     for (const s of docked) {
       const i = s.slots.findIndex((f) => f?.type === comp);
       const cost = i >= 0 ? upgradeCost(s, i) : null;
-      if (cost && ok(cost)) return { t: 'upgrade', shipId: s.id, slot: i };
+      if (!cost) continue;
+      if (ok(cost)) return { t: 'upgrade', shipId: s.id, slot: i };
+      if (needsAlloy(cost)) {
+        const refine = smeltFor(cost);
+        if (refine) return refine;
+      }
     }
   }
-  if (!hullBlock(state, 'excavator') && ok(HULLS.excavator.cost)) return { t: 'buyHull', hullId: 'excavator' };
+  if (!hullBlock(state, 'excavator')) {
+    if (ok(HULLS.excavator.cost)) return { t: 'buyHull', hullId: 'excavator' };
+    if (needsAlloy(HULLS.excavator.cost)) {
+      const refine = smeltFor(HULLS.excavator.cost);
+      if (refine) return refine;
+    }
+  }
   return null;
 }
 
@@ -140,7 +207,9 @@ function nextPurchase(state: GameState, wc: number): Command | null {
 function pickRock(state: GameState, fs: Ship, wc: number): Rock | null {
   const { bank } = state.run;
   const active = state.run.contracts.active;
-  const want = (active && CONTRACTS[active.kind].resource) ?? (bank.ice / wc < bank.ore / 300 ? 'ice' : 'ore');
+  const iceEq = bank.ice + ICE_PER_FUEL * (bank.fuel + queuedOutput(state.run, 'fuel'));
+  const want =
+    (active && CONTRACTS[active.kind].resource) ?? (iceEq / (ICE_PER_FUEL * wc) < bank.ore / 300 ? 'ice' : 'ore');
   const breakLarge = active?.kind === 'breakLarge';
   // A delivery contract owns the want: crystal stops being a free bonus while it runs.
   const bonusCrystal = !active || breakLarge;

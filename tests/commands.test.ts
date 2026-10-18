@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TUNING } from '../src/data/tuning';
 import { applyCommand, type Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
+import { warpCost } from '../src/sim/economy';
 import { handlers } from '../src/sim/handlers';
 import { flagship, makeShip } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
@@ -101,15 +102,26 @@ describe('command handlers', () => {
   });
   it('warp', () => {
     const s = newGame(1);
-    s.run.bank.ice = 1000;
+    s.run.bank.fuel = 1000;
     send(s, { t: 'warp' });
     expect(s.profile.warps).toBe(1);
     expect(s.run.system.number).toBe(2);
   });
 
-  it('warp logs an active contract it leaves behind', () => {
+  it('rejects a warp funded with ice only', () => {
     const s = newGame(1);
     s.run.bank.ice = 1000;
+    send(s, { t: 'warp' });
+    expect(s.profile.warps).toBe(0);
+    expect(s.out.log.at(-1)).toMatchObject({
+      level: 'warn',
+      text: `Warp needs ${warpCost(s)} fuel in the station bank.`,
+    });
+  });
+
+  it('warp logs an active contract it leaves behind', () => {
+    const s = newGame(1);
+    s.run.bank.fuel = 1000;
     send(s, { t: 'acceptContract', contractId: s.run.contracts.offers[0]!.id });
     s.out.log.length = 0;
     send(s, { t: 'warp' });
@@ -173,7 +185,7 @@ describe('command handlers', () => {
 
   it('warp leaves a queued refinery job behind', () => {
     const s = newGame(1);
-    s.run.bank = { ore: 100, ice: 1000, crystal: 0, alloy: 0, fuel: 0 };
+    s.run.bank = { ore: 100, ice: 0, crystal: 0, alloy: 0, fuel: 1000 };
     send(s, { t: 'refine', recipe: 'alloy', count: 5 });
     s.out.log.length = 0;
 

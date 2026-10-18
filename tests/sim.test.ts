@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COMPONENTS, type Tier } from '../src/data/components';
-import { RESOURCES, walletTotal } from '../src/data/resources';
+import { RESOURCES, walletTotal, walletValue } from '../src/data/resources';
 import type { Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { dataGain, warpCost } from '../src/sim/economy';
@@ -94,7 +94,7 @@ describe('progression', () => {
   it('every component can reach tier 3 (no cap blocks purchases)', () => {
     const s = newGame(3);
     const ship = flagship(s.run);
-    s.run.bank = { ore: 1e6, ice: 1e6, crystal: 1e6, alloy: 0, fuel: 0 };
+    s.run.bank = { ore: 1e6, ice: 1e6, crystal: 1e6, alloy: 1e6, fuel: 0 };
     ship.pos = { ...s.run.system.station.pos };
     const cmds: Command[] = [];
     ship.slots.forEach((_, i) => cmds.push({ t: 'install', shipId: ship.id, slot: i, comp: 'cargo' }));
@@ -103,11 +103,11 @@ describe('progression', () => {
     expect(ship.slots.every((f) => f?.type === 'cargo' && f.tier === 3)).toBe(true);
   });
 
-  it('tier costs rise monotonically', () => {
+  it('tier costs rise monotonically in value', () => {
     for (const c of Object.values(COMPONENTS)) {
-      const ore = [1, 2, 3].map((t) => c.cost(t as Tier).ore ?? 0);
-      expect(ore[0]).toBeLessThan(ore[1]!);
-      expect(ore[1]).toBeLessThan(ore[2]!);
+      const value = [1, 2, 3].map((t) => walletValue(c.cost(t as Tier)));
+      expect(value[0]).toBeLessThan(value[1]!);
+      expect(value[1]).toBeLessThan(value[2]!);
     }
   });
 
@@ -125,7 +125,7 @@ describe('warp / prestige', () => {
   it('resets the run, keeps the profile and grants Horizon Data', () => {
     const s = newGame(11);
     s.run.runValue = 5000;
-    s.run.bank.ice = warpCost(s);
+    s.run.bank.fuel = warpCost(s);
     s.run.bank.ore = 999;
     const gain = dataGain(s);
     expect(gain).toBeGreaterThan(0);
