@@ -11,6 +11,7 @@ import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
 import { spawnBeltRock } from './generate';
 import type { SimIndex } from './index';
+import { systemEffects } from './modifiers';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
 import { updateRefinery } from './refining';
 import { cargoFree, damageShip, isAlive, isFlagship, type ShipStats } from './ships';
@@ -224,7 +225,7 @@ function updatePickups(state: GameState, stats: Map<number, ShipStats>, dt: numb
 function regrowBelts(state: GameState, dt: number): void {
   const { run } = state;
   run.regrowTimer += dt;
-  if (run.regrowTimer < TUNING.beltRegrowInterval) return;
+  if (run.regrowTimer < TUNING.beltRegrowInterval * systemEffects(run.system.modifiers).regrowInterval) return;
   run.regrowTimer = 0;
   const counts = run.system.belts.map(() => 0);
   for (const r of run.rocks) counts[r.belt] = (counts[r.belt] ?? 0) + 1;

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { MODIFIER_IDS, MODIFIERS, type ModifierId } from '../src/data/modifiers';
+import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
 import { generateSystem } from '../src/sim/generate';
 import {
@@ -11,7 +12,9 @@ import {
   rollModifiers,
   systemEffects,
 } from '../src/sim/modifiers';
+import { SimIndex } from '../src/sim/index';
 import { flagship, shipStats } from '../src/sim/ships';
+import { tick } from '../src/sim/update';
 import type { Belt } from '../src/sim/types';
 
 // [seed, n, name, class, richness, station angle, planets, belt counts] captured at efc16f2.
@@ -174,5 +177,68 @@ describe('applySystemStats', () => {
     const nebula = { ...g.run.system, modifiers: ['nebula' as const] };
     expect(applySystemStats({ ...base }, nebula)).toEqual({ ...base, magnet: base.magnet * 0.7 });
     expect(applySystemStats({ ...base }, g.run.system)).toEqual(base);
+  });
+});
+
+const DT = 1 / 60;
+const idle = { thrust: { x: 0, z: 0 }, commands: [] };
+
+function withMods(mods: ModifierId[]) {
+  const g = newGame(1);
+  g.run.system.modifiers = mods;
+  return g;
+}
+
+function tickFor(g: ReturnType<typeof newGame>, seconds: number): void {
+  const index = new SimIndex();
+  for (let t = 0; t < seconds; t += DT) tick(g, DT, idle, index);
+}
+
+/** Velocity of a pickup placed at 0.85× the flagship's base magnet radius after one tick. */
+function pickupVelAfterTick(mods: ModifierId[]) {
+  const g = withMods(mods);
+  const fs = flagship(g.run)!;
+  fs.cargo = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+  const d = shipStats(fs, g.profile).magnet * 0.85;
+  const pos = { x: fs.pos.x + d, z: fs.pos.z };
+  g.run.pickups = [{ id: 9999, kind: 'ore', amount: 1, pos, vel: { x: 0, z: 0 }, age: 0 }];
+  tickFor(g, DT);
+  return g.run.pickups[0]!.vel;
+}
+
+/** Rocks in an emptied system after `seconds`, with every ship out of the way. */
+function rocksAfter(mods: ModifierId[], seconds: number): number {
+  const g = withMods(mods);
+  g.run.rocks = [];
+  g.run.regrowTimer = 0;
+  for (const s of g.run.ships) s.pos = { x: 1e5, z: 1e5 };
+  tickFor(g, seconds);
+  return g.run.rocks.length;
+}
+
+describe('per-tick effects', () => {
+  it('index stats carry the nebula pickup radius', () => {
+    for (const [mods, k] of [
+      [['nebula'], 0.7],
+      [[], 1],
+    ] as [ModifierId[], number][]) {
+      const g = withMods(mods);
+      const fs = flagship(g.run)!;
+      const index = new SimIndex();
+      index.rebuild(g);
+      expect(index.stats.get(fs.id)!.magnet).toBeCloseTo(shipStats(fs, g.profile).magnet * k);
+    }
+  });
+
+  it('a nebula leaves a pickup at 0.85× the base radius alone', () => {
+    expect(pickupVelAfterTick([]).x).toBeLessThan(0);
+    expect(pickupVelAfterTick(['nebula'])).toEqual({ x: 0, z: 0 });
+  });
+
+  it('a nebula regrows belts twice as fast', () => {
+    const half = 0.5 * TUNING.beltRegrowInterval + 0.1;
+    expect(rocksAfter([], half)).toBe(0);
+    expect(rocksAfter([], TUNING.beltRegrowInterval + 0.1)).toBeGreaterThan(0);
+    expect(rocksAfter(['nebula'], half)).toBeGreaterThan(0);
   });
 });
