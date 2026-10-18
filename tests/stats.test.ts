@@ -8,7 +8,7 @@ import {
   type Tier,
 } from '../src/data/components';
 import { newGame } from '../src/sim/create';
-import { shipStats, type ShipStats } from '../src/sim/ships';
+import { emptyStats, shipStats, writeShipStats, type ShipStats } from '../src/sim/ships';
 
 const TIERS: Tier[] = [1, 2, 3];
 
@@ -51,5 +51,11 @@ describe('shipStats', () => {
     for (const id of COMPONENT_IDS) {
       expect(COMPONENTS[id].effects.length).toBeGreaterThan(0);
     }
+  });
+
+  it('writeShipStats fills a provided object identically to shipStats', () => {
+    const state = newGame(7);
+    const ship = state.run.ships[0]!;
+    expect(writeShipStats(emptyStats(), ship, state.profile)).toEqual(shipStats(ship, state.profile));
   });
 });

@@ -55,10 +55,15 @@ export function applyBeltModifiers(belts: Belt[], mods: readonly ModifierId[]): 
   }
 }
 
+/** Folds already-computed system effects into a ship's stats (in place) and returns them. */
+export function applyEffects(st: ShipStats, fx: SystemEffects): ShipStats {
+  st.magnet *= fx.magnet;
+  return st;
+}
+
 /** Applies the system's pickup-radius effect to a ship's stats (in place) and returns them. */
 export function applySystemStats(st: ShipStats, system: StarSystem): ShipStats {
-  st.magnet *= systemEffects(system.modifiers).magnet;
-  return st;
+  return applyEffects(st, systemEffects(system.modifiers));
 }
 
 const pct = (x: number): string => `${x >= 1 ? '+' : '−'}${Math.round(Math.abs(x - 1) * 100)}%`;

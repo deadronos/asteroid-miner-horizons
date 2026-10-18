@@ -11,34 +11,59 @@ import type { GameState, Profile, Run, Ship } from './types';
 /** Derived stats; the key list lives with the component effects that target it. */
 export type ShipStats = Record<ShipStatKey, number>;
 
-export function shipStats(ship: Ship, profile: Profile): ShipStats {
-  const h = HULLS[ship.hullId];
-  const s: ShipStats = {
-    maxHull: h.hull,
+/** A `ShipStats` with every key at 0, ready to be overwritten by `writeShipStats`. */
+export function emptyStats(): ShipStats {
+  return {
+    maxHull: 0,
     maxShield: 0,
     shieldRegen: 0,
-    speed: h.speed,
-    accel: h.accel,
+    speed: 0,
+    accel: 0,
     dps: 0,
     range: 0,
-    magnet: h.magnet,
-    cargoCap: h.cargo,
-    dmgMul: 1,
-    size: h.size,
+    magnet: 0,
+    cargoCap: 0,
+    dmgMul: 0,
+    size: 0,
   };
+}
+
+/**
+ * Writes `ship`'s derived stats into `out` and returns it. Overwrites **every**
+ * `ShipStatKey`, so a reused object cannot keep a stale value (and a later
+ * `magnet *=` in `applyEffects` cannot compound across ticks).
+ */
+export function writeShipStats(out: ShipStats, ship: Ship, profile: Profile): ShipStats {
+  const h = HULLS[ship.hullId];
+  out.maxHull = h.hull;
+  out.maxShield = 0;
+  out.shieldRegen = 0;
+  out.speed = h.speed;
+  out.accel = h.accel;
+  out.dps = 0;
+  out.range = 0;
+  out.magnet = h.magnet;
+  out.cargoCap = h.cargo;
+  out.dmgMul = 1;
+  out.size = h.size;
   for (const f of ship.slots) {
     if (!f) continue;
     const tier = f.tier - 1;
     for (const e of COMPONENTS[f.type].effects) {
       const value = e.values[tier]!;
-      s[e.stat] = e.op === 'add' ? s[e.stat] + value : e.op === 'max' ? Math.max(s[e.stat], value) : s[e.stat] * value;
+      out[e.stat] =
+        e.op === 'add' ? out[e.stat] + value : e.op === 'max' ? Math.max(out[e.stat], value) : out[e.stat] * value;
     }
   }
   const thrust = 1 + 0.08 * profile.perks.thrust;
-  s.speed *= thrust;
-  s.accel *= thrust;
-  s.dps *= 1 + 0.12 * profile.perks.optics;
-  return s;
+  out.speed *= thrust;
+  out.accel *= thrust;
+  out.dps *= 1 + 0.12 * profile.perks.optics;
+  return out;
+}
+
+export function shipStats(ship: Ship, profile: Profile): ShipStats {
+  return writeShipStats(emptyStats(), ship, profile);
 }
 
 export const isFlagship = (ship: Ship): boolean => HULLS[ship.hullId].role === 'flagship';
