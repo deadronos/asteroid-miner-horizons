@@ -31,7 +31,7 @@ export const TUNING = {
   // Prestige.
   /** Bank fuel the first warp costs; grows per warp, cut by the warp perk. */
   warpBaseFuel: 50,
-  warpCostGrowth: 1.35,
+  warpCostGrowth: 1.3,
   /** Horizon Data = floor(sqrt(runValue / dataDivisor)). */
   dataDivisor: 60,
 
@@ -52,6 +52,12 @@ export const TUNING = {
   contractRewardMul: 0.58,
   /** Value of the units in one large rock (≈42 units at radius 30–44, ore/ice mix), used to price breakLarge rewards. */
   contractRockValue: 45,
+
+  // System modifiers.
+  /** First system number that rolls modifiers. */
+  modifierMinSystem: 3,
+  /** Chance a system rolls a second modifier. */
+  modifierTwoChance: 0.25,
 
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;

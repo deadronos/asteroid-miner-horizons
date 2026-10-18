@@ -5,6 +5,7 @@ import { COMPONENTS, COMPONENT_IDS } from '../../data/components';
 import { HULLS } from '../../data/hulls';
 import { RESOURCES, RESOURCE_INFO, canAfford, formatCost, walletTotal } from '../../data/resources';
 import { halve, investedCost, isDocked, refitBlock, repairCost, upgradeCost } from '../../sim/economy';
+import { applySystemStats } from '../../sim/modifiers';
 import { isAlive, isFlagship, shipStats } from '../../sim/ships';
 import type { Ship } from '../../sim/types';
 import { Panel, bar, h, setDisabled, setText } from '../dom';
@@ -75,9 +76,10 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             .map((r) => `${RESOURCE_INFO[r].icon} ${Math.floor(s.cargo[r])}`)
             .join('  ') || 'Hold empty',
         );
+        const mag = applySystemStats(k, state.run.system).magnet;
         setText(
           stats,
-          `SPD ${k.speed.toFixed(0)} · DPS ${k.dps.toFixed(0)} · RNG ${k.range.toFixed(0)} · MAG ${k.magnet.toFixed(0)} · ARM −${Math.round((1 - k.dmgMul) * 100)}%`,
+          `SPD ${k.speed.toFixed(0)} · DPS ${k.dps.toFixed(0)} · RNG ${k.range.toFixed(0)} · MAG ${mag.toFixed(0)} · ARM −${Math.round((1 - k.dmgMul) * 100)}%`,
         );
         const rc = repairCost(state, s);
         setText(repairBtn, rc > 0 ? `Repair ${rc}⬢` : 'Hull OK');

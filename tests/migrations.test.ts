@@ -8,10 +8,11 @@ import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
-// Real saves frozen at versions 2 and 3 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2, 3 and 4 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
+import V4_FIXTURE from './fixtures/save-v4.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -22,19 +23,20 @@ function saveAt(version: number): SaveData {
   return { version, profile: { marker: 'original' }, run: { ships: [] } } as unknown as SaveData;
 }
 
-/** The v3 fixture's run reshaped as v4: refined columns added to bank and cargo. */
-const v4Run = () => {
+/** The v3 fixture's run reshaped as current: refined columns added, and a system with no modifiers. */
+const currentRun = () => {
   const run = v3FixtureState().run;
   const ships = run.ships.map((s) => ({ ...s, cargo: { ...s.cargo, alloy: 0, fuel: 0 } }));
-  return { ...run, bank: { ...run.bank, alloy: 0, fuel: 0 }, ships, refinery: newRefinery() };
+  const system = { ...run.system, modifiers: [] };
+  return { ...run, system, bank: { ...run.bank, alloy: 0, fuel: 0 }, ships, refinery: newRefinery() };
 };
 
-/** A valid v4 save, with the given run overrides applied on top. */
-const saveV4 = (run: Record<string, unknown> = {}): SaveData =>
-  ({ ...v3FixtureState(), version: SAVE_VERSION, run: { ...v4Run(), ...run } }) as unknown as SaveData;
+/** A valid current-version save, with the given run overrides applied on top. */
+const saveCurrent = (run: Record<string, unknown> = {}): SaveData =>
+  ({ ...v3FixtureState(), version: SAVE_VERSION, run: { ...currentRun(), ...run } }) as unknown as SaveData;
 
-/** JSON for a v4 save whose run carries the given (unvalidated) contract board. */
-const saveWithBoard = (contracts: unknown): string => JSON.stringify(saveV4({ contracts }));
+/** JSON for a current save whose run carries the given (unvalidated) contract board. */
+const saveWithBoard = (contracts: unknown): string => JSON.stringify(saveCurrent({ contracts }));
 
 /** Parses a frozen fixture through the production registry, failing loudly if it will not load. */
 const loadFrozen = (raw: string) => {
@@ -130,7 +132,7 @@ describe('load through the production registry', () => {
     expect(state?.run.contracts.offers).toEqual([]);
   });
 
-  it('migrates the v2 fixture to a v4 save with an empty board and refinery', () => {
+  it('migrates the v2 fixture to a current save with an empty board and refinery', () => {
     const state = deserialize(JSON.stringify(fixtureState()));
 
     expect(state?.version).toBe(SAVE_VERSION);
@@ -148,68 +150,68 @@ describe('load through the production registry', () => {
     expect(state.run.contracts.offers).toHaveLength(TUNING.contractOffers);
   });
 
-  it('rejects a v4 save whose run has no contract board', () => {
-    expect(deserialize(JSON.stringify(saveV4({ contracts: undefined })))).toBeNull();
+  it('rejects a current save whose run has no contract board', () => {
+    expect(deserialize(JSON.stringify(saveCurrent({ contracts: undefined })))).toBeNull();
   });
 
-  it('rejects a v4 save whose contract board has no offers array', () => {
-    expect(deserialize(JSON.stringify(saveV4({ contracts: {} })))).toBeNull();
+  it('rejects a current save whose contract board has no offers array', () => {
+    expect(deserialize(JSON.stringify(saveCurrent({ contracts: {} })))).toBeNull();
   });
 
-  it('rejects a v4 save whose contract board cannot be walked by the tick', () => {
+  it('rejects a current save whose contract board cannot be walked by the tick', () => {
     expect(deserialize(saveWithBoard({ offers: [], nextId: 1, rng: {} }))).toBeNull(); // no rng.s
     expect(deserialize(saveWithBoard({ offers: [], nextId: 1, rng: null }))).toBeNull(); // no rng at all
     expect(deserialize(saveWithBoard({ offers: [], nextId: 'x', rng: { s: 1 } }))).toBeNull(); // bad counter
   });
 
-  it('rejects a v4 save whose run has no refinery', () => {
-    expect(deserialize(JSON.stringify(saveV4({ refinery: undefined })))).toBeNull();
+  it('rejects a current save whose run has no refinery', () => {
+    expect(deserialize(JSON.stringify(saveCurrent({ refinery: undefined })))).toBeNull();
   });
 
-  it('rejects a v4 save whose bank is missing a resource key', () => {
-    const run = v4Run();
-    expect(deserialize(JSON.stringify(saveV4({ bank: { ...run.bank, fuel: undefined } })))).toBeNull();
+  it('rejects a current save whose bank is missing a resource key', () => {
+    const run = currentRun();
+    expect(deserialize(JSON.stringify(saveCurrent({ bank: { ...run.bank, fuel: undefined } })))).toBeNull();
   });
 
-  it('rejects a v4 save whose ship cargo is missing a resource key', () => {
-    const ship = v4Run().ships[0];
+  it('rejects a current save whose ship cargo is missing a resource key', () => {
+    const ship = currentRun().ships[0];
     const cargo = { ...ship.cargo } as Record<string, unknown>;
     delete cargo.alloy;
-    expect(deserialize(JSON.stringify(saveV4({ ships: [{ ...ship, cargo }] })))).toBeNull();
+    expect(deserialize(JSON.stringify(saveCurrent({ ships: [{ ...ship, cargo }] })))).toBeNull();
   });
 
-  it('rejects a v4 save whose refinery queue is not an array', () => {
+  it('rejects a current save whose refinery queue is not an array', () => {
     expect(
-      deserialize(JSON.stringify(saveV4({ refinery: { queue: 'nope', produced: { alloy: 0, fuel: 0 } } }))),
+      deserialize(JSON.stringify(saveCurrent({ refinery: { queue: 'nope', produced: { alloy: 0, fuel: 0 } } }))),
     ).toBeNull();
   });
 
-  it('rejects a v4 save whose refinery has no produced map', () => {
-    expect(deserialize(JSON.stringify(saveV4({ refinery: { queue: [], produced: null } })))).toBeNull();
+  it('rejects a current save whose refinery has no produced map', () => {
+    expect(deserialize(JSON.stringify(saveCurrent({ refinery: { queue: [], produced: null } })))).toBeNull();
   });
 
-  it('rejects a v4 save whose refinery produced is an array', () => {
-    expect(deserialize(JSON.stringify(saveV4({ refinery: { queue: [], produced: [] } })))).toBeNull();
+  it('rejects a current save whose refinery produced is an array', () => {
+    expect(deserialize(JSON.stringify(saveCurrent({ refinery: { queue: [], produced: [] } })))).toBeNull();
   });
 
-  it('rejects a v4 save whose refinery produced lacks a recipe key', () => {
-    expect(deserialize(JSON.stringify(saveV4({ refinery: { queue: [], produced: { alloy: 0 } } })))).toBeNull();
+  it('rejects a current save whose refinery produced lacks a recipe key', () => {
+    expect(deserialize(JSON.stringify(saveCurrent({ refinery: { queue: [], produced: { alloy: 0 } } })))).toBeNull();
   });
 
-  it('rejects a v4 save whose refinery job names an unknown recipe', () => {
+  it('rejects a current save whose refinery job names an unknown recipe', () => {
     const job = { id: 1, recipe: 'gold', count: 2, total: 2, progress: 0 };
     const refinery = { queue: [job], nextId: 2, produced: { alloy: 0, fuel: 0 } };
-    expect(deserialize(JSON.stringify(saveV4({ refinery })))).toBeNull();
+    expect(deserialize(JSON.stringify(saveCurrent({ refinery })))).toBeNull();
   });
 
-  it('accepts a v4 save with a well-formed refinery job', () => {
+  it('accepts a current save with a well-formed refinery job', () => {
     const job = { id: 1, recipe: 'fuel', count: 2, total: 2, progress: 0 };
     const refinery = { queue: [job], nextId: 2, produced: { alloy: 0, fuel: 0 } };
-    const state = deserialize(JSON.stringify(saveV4({ refinery })));
+    const state = deserialize(JSON.stringify(saveCurrent({ refinery })));
     expect(state?.run.refinery.queue).toEqual([job]);
   });
 
-  it('rejects a v4 save whose refinery job counters are out of range', () => {
+  it('rejects a current save whose refinery job counters are out of range', () => {
     const bad = [
       { id: 1, recipe: 'fuel', count: 0, total: 0, progress: 0 },
       { id: 1, recipe: 'fuel', count: -1, total: 2, progress: 0 },
@@ -218,23 +220,25 @@ describe('load through the production registry', () => {
     ];
     for (const job of bad) {
       const refinery = { queue: [job], nextId: 2, produced: { alloy: 0, fuel: 0 } };
-      expect(deserialize(JSON.stringify(saveV4({ refinery })))).toBeNull();
+      expect(deserialize(JSON.stringify(saveCurrent({ refinery })))).toBeNull();
     }
   });
 
-  it('rejects a v4 save whose refinery ids could collide', () => {
+  it('rejects a current save whose refinery ids could collide', () => {
     const job = { id: 4, recipe: 'fuel', count: 2, total: 2, progress: 0 };
     for (const nextId of [undefined, 4, 2]) {
       const refinery = { queue: [job], nextId, produced: { alloy: 0, fuel: 0 } };
-      expect(deserialize(JSON.stringify(saveV4({ refinery })))).toBeNull();
+      expect(deserialize(JSON.stringify(saveCurrent({ refinery })))).toBeNull();
     }
   });
 
-  it('rejects a v4 save whose refinery job counters are not finite', () => {
+  it('rejects a current save whose refinery job counters are not finite', () => {
     // JSON.parse turns an overflowing literal into Infinity, so isQueue's finite
     // checks are load-bearing rather than merely defensive.
     const job = { id: 1, recipe: 'fuel', count: 2, total: 2, progress: 0 };
-    const json = JSON.stringify(saveV4({ refinery: { queue: [job], nextId: 2, produced: { alloy: 0, fuel: 0 } } }));
+    const json = JSON.stringify(
+      saveCurrent({ refinery: { queue: [job], nextId: 2, produced: { alloy: 0, fuel: 0 } } }),
+    );
     expect(deserialize(json)?.run.refinery.queue).toEqual([job]);
     const jobJson = '"recipe":"fuel","count":2,"total":2,"progress":0';
     for (const field of ['"count":2', '"total":2', '"progress":0']) {
@@ -319,5 +323,62 @@ describe('refining migration to v4', () => {
       ok: false,
       error: 'This is not an Asteroid Miner Horizons save.',
     });
+  });
+});
+
+describe('system modifiers migration to v5', () => {
+  const frozen: Array<[string, string]> = [
+    ['v2', FIXTURE],
+    ['v3', V3_FIXTURE],
+    ['v4', V4_FIXTURE],
+  ];
+
+  it.each(frozen)('loads the %s fixture as v5 with no modifiers', (_label, raw) => {
+    const state = loadFrozen(raw);
+
+    expect(state.version).toBe(5);
+    expect(state.run.system.modifiers).toEqual([]);
+  });
+
+  it.each(frozen)('runs a tick on the %s fixture with a finite bank', (_label, raw) => {
+    const state = loadFrozen(raw);
+
+    tick(state, 1 / 60, { thrust: { x: 0, z: 0 }, commands: [] as Command[] }, new SimIndex());
+
+    for (const r of RESOURCES) expect(Number.isFinite(state.run.bank[r])).toBe(true);
+  });
+
+  it('leaves the v4 fixture bank, refinery and contract board unchanged', () => {
+    const before = JSON.parse(V4_FIXTURE).state.run;
+    const run = loadFrozen(V4_FIXTURE).run;
+
+    expect(run.bank).toEqual(before.bank);
+    expect(run.refinery).toEqual(before.refinery);
+    expect(run.contracts).toEqual(before.contracts);
+  });
+
+  it('rejects a v5 save without system.modifiers', () => {
+    const { modifiers: _omit, ...system } = currentRun().system;
+    expect(parseImport(JSON.stringify(saveCurrent({ system }))).ok).toBe(false);
+  });
+
+  it('rejects modifiers that are not an array of known keys', () => {
+    for (const modifiers of ['dense', ['dense', 'warpStorm'], ['nebula', 'nebula'], [1], ['toString']]) {
+      const system = { ...currentRun().system, modifiers };
+      expect(parseImport(JSON.stringify(saveCurrent({ system }))).ok).toBe(false);
+    }
+  });
+
+  it('accepts and keeps known modifiers', () => {
+    const system = { ...currentRun().system, modifiers: ['dense', 'nebula'] };
+    const r = parseImport(JSON.stringify(saveCurrent({ system })));
+    if (!r.ok) throw new Error('expected the save to load');
+    expect(r.record.state.run.system.modifiers).toEqual(['dense', 'nebula']);
+  });
+
+  it('loads a malformed v4 payload with no run.system as unusable instead of throwing', () => {
+    const state = JSON.parse(V4_FIXTURE).state;
+    const r = parseImport(JSON.stringify({ ...state, run: { ...state.run, system: undefined } }));
+    expect(r.ok).toBe(false);
   });
 });

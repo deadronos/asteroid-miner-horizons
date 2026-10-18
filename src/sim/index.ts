@@ -1,4 +1,5 @@
 import { SpatialHash } from '../core/spatialHash';
+import { applySystemStats } from './modifiers';
 import { shipStats, type ShipStats } from './ships';
 import type { GameState, Rock } from './types';
 
@@ -9,6 +10,7 @@ import type { GameState, Rock } from './types';
 export class SimIndex {
   readonly rockHash = new SpatialHash<Rock>(128);
   readonly rockById = new Map<number, Rock>();
+  /** Each ship's stats with the current system's modifiers applied (see `applySystemStats`). */
   readonly stats = new Map<number, ShipStats>();
 
   /** Rebuild all three structures for `state`, reusing the same instances. */
@@ -18,7 +20,7 @@ export class SimIndex {
     this.rockById.clear();
     for (const r of run.rocks) this.rockById.set(r.id, r);
     this.stats.clear();
-    for (const s of run.ships) this.stats.set(s.id, shipStats(s, state.profile));
+    for (const s of run.ships) this.stats.set(s.id, applySystemStats(shipStats(s, state.profile), run.system));
   }
 
   /** Drop every reference; used when the running game is swapped. */

@@ -3,6 +3,7 @@ import { TUNING } from '../src/data/tuning';
 import { applyCommand, type Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { warpCost } from '../src/sim/economy';
+import { describeModifiers, rollModifiers } from '../src/sim/modifiers';
 import { handlers } from '../src/sim/handlers';
 import { flagship, makeShip } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
@@ -108,6 +109,26 @@ describe('command handlers', () => {
     expect(s.run.system.number).toBe(2);
   });
 
+  it('warp logs the new system modifiers right after Warp complete', () => {
+    let seed = 1;
+    while (rollModifiers(seed, 3).length === 0) seed++;
+    const s = newGame(seed);
+    s.profile.warps = 1;
+    s.run.bank.fuel = 1000;
+    s.out.log.length = 0;
+    send(s, { t: 'warp' });
+    const i = s.out.log.findIndex((l) => l.text.startsWith('Warp complete'));
+    expect(i).toBeGreaterThanOrEqual(0);
+    expect(s.run.system.modifiers.length).toBeGreaterThan(0);
+    expect(s.out.log[i + 1]!.text).toBe(`System modifiers: ${describeModifiers(s.run.system.modifiers)}.`);
+  });
+  it('warp into system 2 logs no modifier line', () => {
+    const s = newGame(1);
+    s.run.bank.fuel = 1000;
+    send(s, { t: 'warp' });
+    expect(s.run.system.number).toBe(2);
+    expect(s.out.log.some((l) => l.text.startsWith('System modifiers'))).toBe(false);
+  });
   it('rejects a warp funded with ice only', () => {
     const s = newGame(1);
     s.run.bank.ice = 1000;

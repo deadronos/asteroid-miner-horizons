@@ -5,6 +5,7 @@
 // object is accepted too). Older versions are upgraded through sim/migrations;
 // saves from a newer version are rejected rather than half-loaded.
 
+import { MODIFIERS } from '../data/modifiers';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
 import { RESOURCES } from '../data/resources';
 import { SAVE_VERSION } from './create';
@@ -84,6 +85,11 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!profile || typeof profile.seed !== 'number' || typeof profile.perks !== 'object') return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
+  // The tick indexes MODIFIERS by key, so every entry must be a known modifier;
+  // a duplicate would apply its effect twice.
+  const mods = run.system.modifiers as unknown;
+  if (!Array.isArray(mods) || !mods.every((m) => typeof m === 'string' && Object.hasOwn(MODIFIERS, m))) return null;
+  if (new Set(mods).size !== mods.length) return null;
   // A wallet missing a resource column (e.g. alloy) would poison every later
   // read with NaN, so the bank and each ship's cargo must be complete.
   if (!isWallet(run.bank) || !run.ships.every((s) => isWallet(s.cargo))) return null;

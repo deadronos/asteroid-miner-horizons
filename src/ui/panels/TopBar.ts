@@ -1,8 +1,11 @@
-// Top bar: system name, bank, Horizon Data, warp button, research and menu buttons.
+// Top bar: system name, system modifier chips, bank, Horizon Data, warp button, research and menu buttons.
 
+import { MODIFIERS } from '../../data/modifiers';
 import { PERK_IDS } from '../../data/perks';
 import { RESOURCES, RESOURCE_INFO } from '../../data/resources';
 import { dataGain, perkCost, warpCost } from '../../sim/economy';
+import { describeModifier } from '../../sim/modifiers';
+import type { GameState } from '../../sim/types';
 import { Panel, h, setDisabled, setText } from '../dom';
 import { GEAR_SVG } from '../Menu';
 import type { PanelCtx } from './context';
@@ -14,13 +17,29 @@ export interface TopBarHooks {
 
 const fmt = (n: number): string => (n >= 10000 ? `${(n / 1000).toFixed(1)}k` : `${Math.floor(n)}`);
 
+/** Panel key: rebuilds on warp and when a loaded slot has the same system number but different modifiers. */
+export function topBarKey(state: GameState): string {
+  const { number, modifiers } = state.run.system;
+  return `${number}|${modifiers.join(',')}`;
+}
+
 export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks): Panel {
   const st = ctx.getState;
   return new Panel(
     el,
-    () => `${st().run.system.number}`,
+    () => topBarKey(st()),
     (bind) => {
       const sys = h('span', { class: 'sys' });
+      const mods = st().run.system.modifiers.map((id) => {
+        const { name, icon } = MODIFIERS[id];
+        const chip = h(
+          'span',
+          { class: 'mod', text: icon, title: describeModifier(id) },
+          h('span', { class: 'mod-name', text: ` ${name}` }),
+        );
+        chip.setAttribute('aria-label', `${name}: ${describeModifier(id)}`);
+        return chip;
+      });
       const res = RESOURCES.map((r) => {
         const e = h('span', { class: `res ${r}`, title: RESOURCE_INFO[r].name });
         bind(() => {
@@ -64,7 +83,15 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
           PERK_IDS.some((p) => (perkCost(s, p) ?? Infinity) <= s.profile.data),
         );
       });
-      return [sys, ...res, data, warp, researchBtn, menu];
+      return [
+        sys,
+        ...(mods.length ? [h('span', { class: 'mods' }, ...mods)] : []),
+        ...res,
+        data,
+        warp,
+        researchBtn,
+        menu,
+      ];
     },
   );
 }

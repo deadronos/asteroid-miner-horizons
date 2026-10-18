@@ -37,6 +37,12 @@ export const migrations: Record<number, Migration> = {
     d.run.refinery = newRefinery();
     return d;
   },
+  // v5 added `system.modifiers`. A pre-modifier system keeps its belt as
+  // generated, so it gets none; modifiers are rolled from the next warp on.
+  4: (d) => {
+    d.run.system.modifiers = [];
+    return d;
+  },
 };
 
 export interface MigrateOptions {

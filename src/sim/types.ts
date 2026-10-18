@@ -7,6 +7,7 @@ import type { Vec2 } from '../core/vec';
 import type { ComponentId, Tier } from '../data/components';
 import type { ContractKind } from '../data/contracts';
 import type { HullId } from '../data/hulls';
+import type { ModifierId } from '../data/modifiers';
 import type { PerkId } from '../data/perks';
 import type { RecipeId } from '../data/refining';
 import type { Cost, RawResource, Wallet } from '../data/resources';
@@ -110,6 +111,8 @@ export interface StarSystem {
   belts: Belt[];
   station: { pos: Vec2; angle: number };
   richness: number;
+  /** Seeded per system; empty in systems 1–2 and in systems loaded from a pre-v5 save. */
+  modifiers: ModifierId[];
 }
 
 export interface Contract {

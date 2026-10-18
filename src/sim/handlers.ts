@@ -22,6 +22,7 @@ import {
   upgradeCost,
   warpCost,
 } from './economy';
+import { describeModifiers } from './modifiers';
 import { batchCost, cancelRefine, queueRefine } from './refining';
 import { droneCount, findShip, flagship, isAlive, isFlagship, makeShip, shipStats } from './ships';
 import type { Fitted, GameState, Ship } from './types';
@@ -102,6 +103,8 @@ export const handlers: Handlers = {
       level: 'major',
       text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.`,
     });
+    const mods = state.run.system.modifiers;
+    if (mods.length > 0) out.log.push({ level: 'major', text: `System modifiers: ${describeModifiers(mods)}.` });
     if (dropped) out.log.push({ level: 'warn', text: `Contract left behind: ${describeContract(dropped)}.` });
     if (left.length > 0) {
       const jobs = left.map((j) => `${j.count} × ${RECIPES[j.recipe].name.toLowerCase()}`).join(', ');
