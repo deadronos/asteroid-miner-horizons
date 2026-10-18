@@ -10,7 +10,7 @@ src/
   core/          primitives, no project knowledge (rng, vec, spatialHash, array)
   data/          pure tables and values, no logic
     tuning.ts      every global balance knob
-  audio/         Web Audio: AudioEngine.ts owns the AudioContext, sfx.ts holds the pure sound rules
+  audio/         Web Audio: AudioEngine.ts owns the AudioContext, sfx.ts / music.ts hold the pure sound rules
   sim/           the deterministic game; no DOM, no three.js
     types.ts       GameState / Profile / Run / Ship / Rock / Fx / LogEntry
     create.ts      newGame / newRun, SAVE_VERSION

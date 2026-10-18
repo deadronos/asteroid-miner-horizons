@@ -11,6 +11,6 @@ export function renderAudio(settings: SettingsStore): Node[] {
     rangeRow(settings, 'volMaster', 'Master volume', 0, 1, 0.05, pct),
     rangeRow(settings, 'volSfx', 'Effects', 0, 1, 0.05, pct),
     rangeRow(settings, 'volMusic', 'Music', 0, 1, 0.05, pct, true),
-    h('p', { class: 'dim', text: "There's no music yet; the music level is saved for when it arrives." }),
+    h('p', { class: 'dim', text: 'Ambient music is generated live and changes mood with each star class.' }),
   ];
 }

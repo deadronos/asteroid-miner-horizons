@@ -4,10 +4,12 @@
 // One-shots are ZzFX buffers rendered once per preset and replayed at any
 // pitch; continuous states (beam hums, the danger alarm) come from
 // `updateContinuous`, which is called every frame with a `ContinuousPolicy`
-// selecting which layers may sound that frame (see `pauseAudio`).
+// selecting which layers may sound that frame (see `pauseAudio`). Generative
+// ambient music (`MusicPlayer`) plays into the music bus via `updateMusic`.
 
 import type { SettingsStore } from '../settings';
 import type { Fx, GameState, LogEntry } from '../sim/types';
+import { MusicPlayer } from './MusicPlayer';
 import {
   alarmLevel,
   beamHums,
@@ -49,6 +51,7 @@ export class AudioEngine {
   private master: GainNode | null = null;
   private sfx: GainNode | null = null;
   private music: GainNode | null = null;
+  private player: MusicPlayer | null = null;
   private buffers = new Map<SoundId, AudioBuffer>();
   private limiter = new RateLimiter();
   private streak = new Streak();
@@ -90,6 +93,7 @@ export class AudioEngine {
       this.sfx.connect(this.master);
       this.music.connect(this.master);
       this.master.connect(this.ctx.destination);
+      this.player = new MusicPlayer(this.ctx, this.music);
       this.applyVolumes(true);
     }
     if (this.ctx.state === 'suspended' && !document.hidden) void this.ctx.resume();
@@ -258,6 +262,17 @@ export class AudioEngine {
     if (now < this.nextAlarm) return;
     this.play({ id: 'alarm', gain: 0.35 + 0.5 * level, pan: 0, rate: 1 });
     this.nextAlarm = now + ALARM_INTERVAL;
+  }
+
+  /**
+   * Ambient music in the current system's star-class mood, crossfading on warp.
+   * Keeps playing through pauses; silent until the context runs. Read-only on `state`.
+   */
+  updateMusic(state: GameState): void {
+    const { ctx, player } = this;
+    if (!ctx || !player || ctx.state !== 'running') return;
+    const s = this.settings.value;
+    player.update(state.run.system.starClass, state.run.system.number, s.volMaster > 0 && s.volMusic > 0);
   }
 
   /** Rejected commands (warn-level log lines) get a deny buzz. Read-only. */
