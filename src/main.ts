@@ -100,6 +100,7 @@ function frame(now: number): void {
   input.edgePan(dt);
   input.updateHover();
   audio.consumeFx(state.out.fx, renderer.view);
+  audio.updateContinuous(state, renderer.view);
   renderer.render(state, dt, input.moveMark);
   hud.frame(dt);
   hudAcc += dt;

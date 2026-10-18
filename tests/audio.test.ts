@@ -1,6 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { MAX_VOICES, PRESETS, RateLimiter, type SoundId, Streak, spatial, voiceFor } from '../src/audio/sfx';
+import {
+  alarmLevel,
+  beamHums,
+  MAX_HUMS,
+  MAX_VOICES,
+  PRESETS,
+  RateLimiter,
+  type SoundId,
+  Streak,
+  spatial,
+  voiceFor,
+} from '../src/audio/sfx';
 import { ZZFX_RATE, zzfxSamples } from '../src/audio/zzfx';
+import { newGame } from '../src/sim/create';
+import { makeShip } from '../src/sim/ships';
 
 const view = { center: { x: 0, z: 0 }, halfW: 800, halfH: 400 };
 
@@ -79,5 +92,127 @@ describe('pickup streak', () => {
     expect(s.next(2)).toBe(1);
     for (let t = 0; t < 40; t++) s.next(3 + t * 0.1);
     expect(s.next(7.05)).toBeCloseTo(2);
+  });
+});
+
+/** A game whose fleet is exactly the ships the test adds (the flagship is dropped). */
+function beamState(seed: number) {
+  const state = newGame(seed);
+  state.run.ships.length = 0;
+  return state;
+}
+
+/** The ship the HUD has selected (what the alarm keys off). */
+function selected(state: ReturnType<typeof newGame>) {
+  return state.run.ships.find((s) => s.id === state.run.selectedId)!;
+}
+
+/** Adds a ship with its beam aimed at a (fictional) rock id 1. */
+function addBeam(
+  state: ReturnType<typeof newGame>,
+  hullId: 'prospector' | 'excavator' | 'drone' | 'harvester',
+  pos: { x: number; z: number },
+) {
+  const ship = makeShip(state.run, state.profile, hullId, 'Beamer', pos);
+  ship.beamOn = true;
+  ship.beamTargetId = 1;
+  state.run.ships.push(ship);
+  return ship;
+}
+
+describe('beam hums', () => {
+  for (const x of [-400, 400]) {
+    it(`hums once for an on-screen beam at x=${x} and pans with its offset`, () => {
+      const state = beamState(1);
+      const ship = addBeam(state, 'prospector', { x, z: 0 });
+      const hums = beamHums(state.run, state.profile, view);
+      expect(hums).toHaveLength(1);
+      expect(hums[0]!.shipId).toBe(ship.id);
+      expect(hums[0]!.gain).toBe(1);
+      expect(Math.sign(hums[0]!.pan)).toBe(Math.sign(x));
+    });
+  }
+
+  it('ignores a beam that is off screen', () => {
+    const state = beamState(1);
+    addBeam(state, 'prospector', { x: 5000, z: 0 });
+    expect(beamHums(state.run, state.profile, view)).toHaveLength(0);
+  });
+
+  it('ignores ships that are not firing, have no target, or are dead', () => {
+    const state = beamState(1);
+    const idle = addBeam(state, 'drone', { x: 0, z: 0 });
+    idle.beamOn = false;
+    const noTarget = addBeam(state, 'drone', { x: 0, z: 0 });
+    noTarget.beamTargetId = null;
+    const dead = addBeam(state, 'drone', { x: 0, z: 0 });
+    dead.respawn = 3;
+    expect(beamHums(state.run, state.profile, view)).toHaveLength(0);
+  });
+
+  it('never returns more than MAX_HUMS hums', () => {
+    const state = beamState(2);
+    for (let i = 0; i < 6; i++) addBeam(state, 'drone', { x: i * 40, z: 0 });
+    const hums = beamHums(state.run, state.profile, view);
+    expect(hums).toHaveLength(MAX_HUMS);
+    expect(new Set(hums.map((h) => h.shipId)).size).toBe(MAX_HUMS);
+  });
+
+  it('orders hums loudest first, breaking ties by id', () => {
+    const state = beamState(3);
+    const quiet = addBeam(state, 'drone', { x: 1100, z: 0 });
+    const mid = addBeam(state, 'drone', { x: 1000, z: 0 });
+    const loudB = addBeam(state, 'drone', { x: 0, z: 0 });
+    const loudA = addBeam(state, 'drone', { x: 0, z: 0 });
+
+    const hums = beamHums(state.run, state.profile, view);
+    expect(hums.map((h) => h.shipId)).toEqual([loudB.id, loudA.id, mid.id, quiet.id]);
+    expect(hums.map((h) => h.gain)).toEqual([1, 1, 0.5, 0.25]);
+  });
+
+  it('raises pitch with dps, kept inside the [60, 320] band', () => {
+    const state = beamState(4);
+    const weak = addBeam(state, 'drone', { x: 0, z: 0 });
+    weak.slots[0] = { type: 'laser', tier: 1 };
+    const strong = addBeam(state, 'drone', { x: 100, z: 0 });
+    strong.slots[0] = { type: 'laser', tier: 3 };
+
+    const hums = beamHums(state.run, state.profile, view);
+    for (const h of hums) {
+      expect(h.freq).toBeGreaterThanOrEqual(60);
+      expect(h.freq).toBeLessThanOrEqual(320);
+    }
+    const weakFreq = hums.find((h) => h.shipId === weak.id)!.freq;
+    const strongFreq = hums.find((h) => h.shipId === strong.id)!.freq;
+    expect(strongFreq).toBeGreaterThan(weakFreq);
+  });
+});
+
+describe('alarm level', () => {
+  it('is silent for a healthy selected ship away from the star', () => {
+    const state = newGame(5);
+    selected(state).pos = { x: 5000, z: 0 };
+    expect(alarmLevel(state.run, state.profile)).toBe(0);
+  });
+
+  it('rises while the selected hull is below 25%', () => {
+    const state = newGame(6);
+    const ship = selected(state);
+    ship.pos = { x: 5000, z: 0 };
+    ship.hull = 1;
+    expect(alarmLevel(state.run, state.profile)).toBeGreaterThan(0);
+  });
+
+  it('rises while the selected ship is inside the star heat radius', () => {
+    const state = newGame(7);
+    selected(state).pos = { x: 0, z: 0 };
+    expect(alarmLevel(state.run, state.profile)).toBeGreaterThan(0);
+  });
+
+  it('starts at the minimum urgency just inside the heat edge', () => {
+    const state = newGame(8);
+    const { starRadius, heatRadius } = state.run.system;
+    selected(state).pos = { x: 0, z: starRadius + (heatRadius - starRadius) * 0.999 };
+    expect(alarmLevel(state.run, state.profile)).toBeCloseTo(0.2, 5);
   });
 });
