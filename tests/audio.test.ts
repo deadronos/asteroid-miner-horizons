@@ -217,6 +217,39 @@ describe('beam hums', () => {
   });
 });
 
+describe('hazard sounds', () => {
+  const streak = new Streak();
+  const hz = (kind: 'comet' | 'flare', phase: 'warn' | 'start') =>
+    voiceFor({ t: 'hazard', kind, phase }, view, streak, 0);
+
+  it('maps any warning to the alarm', () => {
+    for (const kind of ['comet', 'flare'] as const)
+      expect(hz(kind, 'warn')).toEqual({ id: 'alarm', gain: 1, pan: 0, rate: 1 });
+  });
+
+  it('thumps when a flare starts and is silent when a comet appears', () => {
+    expect(hz('flare', 'start')).toEqual({ id: 'impact', gain: 0.9, pan: 0, rate: 1 });
+    expect(hz('comet', 'start')).toBeNull();
+  });
+
+  it('raises the alarm for an undocked ship inside an active flare, but not docked or out of reach', () => {
+    const state = newGame(9);
+    state.run.system.starClass = 'M';
+    state.run.hazards.flare = { phase: 'active', timeLeft: 5 };
+    const ship = state.run.ships.find((s) => s.id === state.run.selectedId)!;
+    ship.pos = { x: -800, z: 0 };
+    expect(alarmLevel(state.run, state.profile)).toBeGreaterThanOrEqual(0.5);
+    ship.pos = { x: -1500, z: 0 };
+    expect(alarmLevel(state.run, state.profile)).toBe(0);
+    ship.pos = { x: -800, z: 0 };
+    state.run.hazards.flare = { phase: 'warning', timeLeft: 5 };
+    expect(alarmLevel(state.run, state.profile)).toBe(0);
+    state.run.hazards.flare = { phase: 'active', timeLeft: 5 };
+    ship.pos = { ...state.run.system.station.pos };
+    expect(alarmLevel(state.run, state.profile)).toBe(0);
+  });
+});
+
 describe('alarm level', () => {
   it('is silent for a healthy selected ship away from the star', () => {
     const state = newGame(5);

@@ -8,6 +8,7 @@ import { Input } from './input';
 import { pauseAudio, pauseBanner, pauseKind } from './pause';
 import { Renderer } from './render/Renderer';
 import { GameSession } from './session';
+import type { HazardLevel } from './data/hazards';
 import type { Assists } from './sim/assists';
 import type { Command } from './sim/commands';
 import { applyCommands, tick } from './sim/update';
@@ -51,9 +52,11 @@ const input = new Input(
 );
 
 let assists: Assists = { avoid: true, autoDock: true, chain: true };
+let hazards: HazardLevel = 'normal';
 function applySettings(): void {
   const s = settings.value;
   assists = { avoid: s.assistAvoid, autoDock: s.assistAutoDock, chain: s.assistChain };
+  hazards = s.hazards;
   renderer.applySettings(s);
 }
 settings.onChange(applySettings);
@@ -91,7 +94,7 @@ function frame(now: number): void {
     const thrust = input.thrust();
     let steps = 0;
     while (acc >= STEP && steps < 8) {
-      tick(state, STEP, { thrust, commands, assists }, session.sim);
+      tick(state, STEP, { thrust, commands, assists, hazards }, session.sim);
       acc -= STEP;
       steps++;
     }

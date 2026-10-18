@@ -11,7 +11,7 @@ import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
 import { spawnBeltRock } from './generate';
-import { updateHazards } from './hazards';
+import { flareExposure, updateHazards } from './hazards';
 import type { SimIndex } from './index';
 import { systemEffects } from './modifiers';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
@@ -148,14 +148,11 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
     if (!isAlive(ship) || !run.ships.includes(ship)) return;
   }
 
-  const flare = run.hazards.flare;
   const flareProfile = FLARES[sys.starClass];
-  if (flare?.phase === 'active' && flareProfile && !isDocked(run, ship)) {
-    const k = Math.min(1, Math.max(0, 1 - (dStar - sys.starRadius) / (flareProfile.reach - sys.starRadius)));
-    if (k > 0) {
-      damageShip(state, ship, flareProfile.dps * HAZARD_LEVELS[ctx.hazards].damage * k * dt);
-      if (!isAlive(ship) || !run.ships.includes(ship)) return;
-    }
+  const k = flareProfile ? flareExposure(run, ship) : 0;
+  if (flareProfile && k > 0) {
+    damageShip(state, ship, flareProfile.dps * HAZARD_LEVELS[ctx.hazards].damage * k * dt);
+    if (!isAlive(ship) || !run.ships.includes(ship)) return;
   }
 
   ship.shield = Math.min(st.maxShield, ship.shield + st.shieldRegen * dt);

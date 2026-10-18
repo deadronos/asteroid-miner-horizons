@@ -4,6 +4,7 @@
 // fleet of drones can't turn the mix into noise.
 
 import type { Vec2 } from '../core/vec';
+import { flareExposure } from '../sim/hazards';
 import { isAlive, shipStats } from '../sim/ships';
 import type { Fx, Profile, Run } from '../sim/types';
 import type { ZzfxParams } from './zzfx';
@@ -126,7 +127,10 @@ export class Streak {
 /** Maps one sim fx to a sound, or null if it's inaudible from here. */
 export function voiceFor(fx: Fx, view: View, streak: Streak, now: number): Voice | null {
   if (fx.t === 'warp') return { id: 'warp', gain: 1, pan: 0, rate: 1 };
-  if (fx.t === 'hazard') return null; // sounds arrive with the hazard presentation
+  if (fx.t === 'hazard') {
+    if (fx.phase === 'warn') return { id: 'alarm', gain: 1, pan: 0, rate: 1 };
+    return fx.kind === 'flare' ? { id: 'impact', gain: 0.9, pan: 0, rate: 1 } : null;
+  }
   const [g, pan] = spatial(fx.pos, view);
   if (g <= 0.02) return null;
   const jitter = 0.94 + Math.random() * 0.12;
@@ -206,5 +210,7 @@ export function alarmLevel(run: Run, profile: Profile): number {
     const k = 1 - (dStar - run.system.starRadius) / (run.system.heatRadius - run.system.starRadius);
     heatSev = Math.min(1, Math.max(0.2, k));
   }
-  return Math.max(hullSev, heatSev);
+  // Inside an active flare's reach and not safe in the station: a steady moderate urgency.
+  const flareSev = flareExposure(run, ship) > 0 ? 0.5 : 0;
+  return Math.max(hullSev, heatSev, flareSev);
 }

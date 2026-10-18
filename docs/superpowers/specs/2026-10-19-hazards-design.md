@@ -173,7 +173,7 @@ audio switch on it; anything else ignores it.
 - **HUD banner**: a pure `hazardBanner(run): string | null` in `src/ui/` (tested), e.g. `☄ Comet inbound · 6s`,
   `☀ Flare building · 8s`, `☀ SOLAR FLARE · 4s`; null when nothing is pending. Shown in the top bar (or a small
   banner element beneath it), refreshed in place, keyed so it does not rebuild every frame.
-- **Renderer**: during a comet warning, a dashed/fading line from `from` along `vel` (length ≈ 2 × cometEdge),
+- **Renderer**: during a comet warning, a dashed line from `from` along `vel` that pulses brighter as the comet nears (length ≈ 2 × cometEdge),
   scaled with world-units-per-pixel like other overlays. Live comets get a particle tail opposite their velocity
   (cosmetic `Math.random` is allowed in render). `hazard` fx: comet `start` → small burst; flare `warn` → nothing
   extra (banner + alarm); flare `start` → screen shake (respecting the shake setting via the existing shake

@@ -2,6 +2,8 @@
 // game. Loaded values are merged over DEFAULTS, so new settings get sensible
 // values on old installs. Subscribers are notified on every change.
 
+import { HAZARD_LEVEL_IDS, type HazardLevel } from './data/hazards';
+
 export type Quality = 'low' | 'medium' | 'high';
 export type Shake = 'off' | 'low' | 'full';
 export type LogVerbosity = 'all' | 'important';
@@ -30,6 +32,7 @@ export interface Settings {
   assistAvoid: boolean;
   assistAutoDock: boolean;
   assistChain: boolean;
+  hazards: HazardLevel;
   // Graphics
   quality: Quality;
   nebula: boolean;
@@ -100,6 +103,7 @@ export const DEFAULTS: Settings = {
   assistAvoid: true,
   assistAutoDock: true,
   assistChain: true,
+  hazards: 'normal',
   quality: 'high',
   nebula: true,
   antialias: true,
@@ -194,6 +198,10 @@ export class SettingsStore {
     const d = data as Record<string, unknown>;
     for (const k of Object.keys(DEFAULTS) as (keyof Settings)[]) {
       if (k === 'keys') continue;
+      if (k === 'hazards') {
+        if (HAZARD_LEVEL_IDS.includes(d[k] as HazardLevel)) out.hazards = d[k] as HazardLevel;
+        continue;
+      }
       if (typeof d[k] === typeof DEFAULTS[k]) (out as unknown as Record<string, unknown>)[k] = d[k];
     }
     const keys = d.keys as Partial<KeyBindings> | undefined;

@@ -6,8 +6,9 @@ import { makeRng, range } from '../core/rng';
 import { fromAngle, type Vec2 } from '../core/vec';
 import { FLARES, HAZARD_LEVELS, type HazardLevel } from '../data/hazards';
 import { TUNING } from '../data/tuning';
+import { isDocked } from './economy';
 import { rockHp } from './generate';
-import type { CometWarning, GameState, Hazards } from './types';
+import type { CometWarning, GameState, Hazards, Run, Ship } from './types';
 
 const BELT_NAMES = ['inner', 'middle', 'outer'];
 
@@ -149,4 +150,13 @@ export function updateHazards(state: GameState, dt: number, level: HazardLevel):
     hz.flares += 1;
     out.log.push({ level: 'info', text: 'Flare subsided.' });
   }
+}
+
+/** 0..1 flare exposure of `ship`: 0 unless a flare is active, the star class has flares, the ship is undocked and within reach. */
+export function flareExposure(run: Run, ship: Ship): number {
+  const profile = FLARES[run.system.starClass];
+  if (run.hazards.flare?.phase !== 'active' || !profile || isDocked(run, ship)) return 0;
+  const { starRadius } = run.system;
+  const d = Math.hypot(ship.pos.x, ship.pos.z);
+  return Math.min(1, Math.max(0, 1 - (d - starRadius) / (profile.reach - starRadius)));
 }

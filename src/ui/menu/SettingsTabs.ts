@@ -21,6 +21,18 @@ export function renderGameplay(settings: SettingsStore): Node[] {
       'Confirm restart, delete and scrap',
       'Ask before erasing a save or scrapping a ship',
     ),
+    section('Hazards'),
+    selectRow(
+      settings,
+      'hazards',
+      'Comets and solar flares',
+      [
+        ['off', 'Off'],
+        ['normal', 'Normal'],
+        ['harsh', 'Harsh: more often, hits harder'],
+      ],
+      'Comets cross the belts; flares burn ships near M and B stars.',
+    ),
     section('Autopilot assists'),
     toggleRow(
       settings,
