@@ -161,8 +161,8 @@ magnetTraitYieldMul: 1.3,
 - `spawnBeltRock` rolls the trait with the run's own `(seed, system number, rock
   id)`: it is handed `rollTrait(seed, run.system.number, run.nextId)` before
   `makeRock` increments the counter. `Run` does not carry the seed, so the seed
-  is **threaded explicitly**: `spawnBeltRock(run, beltIndex, sizeOverride,
-  seed)` and `populateBelts(run, seed)`, with `create.newRun` passing
+  is **threaded explicitly**: `spawnBeltRock(run, seed, beltIndex, sizeOverride)` and
+  `populateBelts(run, seed)`, with `create.newRun` passing
   `profile.seed` and `update.regrowBelts` passing `state.profile.seed`. Those are
   the only two production call sites.
 - `makeRock` gains a trailing `trait: RockTrait | null = null` parameter;
