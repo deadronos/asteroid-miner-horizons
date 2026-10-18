@@ -51,7 +51,7 @@ function isWallet(w: unknown): boolean {
   return !!w && typeof w === 'object' && RESOURCES.every((r) => typeof (w as Record<string, unknown>)[r] === 'number');
 }
 
-/** True when every entry is a refine job the tick can process: a known recipe and numeric counters. */
+/** True when every entry is a refine job the tick can process: a known recipe and sane numeric counters. */
 function isQueue(queue: unknown[]): boolean {
   return queue.every((j) => {
     const job = j as { recipe?: unknown; count?: unknown; total?: unknown; progress?: unknown };
@@ -61,8 +61,14 @@ function isQueue(queue: unknown[]): boolean {
       typeof job.recipe === 'string' &&
       Object.hasOwn(RECIPES, job.recipe) &&
       typeof job.count === 'number' &&
+      Number.isFinite(job.count) &&
+      job.count >= 1 &&
       typeof job.total === 'number' &&
-      typeof job.progress === 'number'
+      Number.isFinite(job.total) &&
+      job.total >= job.count &&
+      typeof job.progress === 'number' &&
+      Number.isFinite(job.progress) &&
+      job.progress >= 0
     );
   });
 }

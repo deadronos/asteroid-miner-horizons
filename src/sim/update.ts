@@ -1,5 +1,5 @@
 // The fixed-step simulation tick. Order of operations:
-// commands → orbits → rocks → ships (pilot, collide, heat, dock) → pickups → belt regrowth → contracts.
+// commands → orbits → rocks → ships (pilot, collide, heat, dock) → pickups → belt regrowth → contracts → refinery.
 
 import { range } from '../core/rng';
 import { damp, dist, type Vec2 } from '../core/vec';
@@ -12,6 +12,7 @@ import { isDocked } from './economy';
 import { spawnBeltRock } from './generate';
 import type { SimIndex } from './index';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
+import { updateRefinery } from './refining';
 import { cargoFree, damageShip, isAlive, isFlagship, type ShipStats } from './ships';
 import type { GameState, Ship } from './types';
 
@@ -65,6 +66,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   updatePickups(state, index.stats, dt);
   regrowBelts(state, dt);
   updateContracts(state, dt);
+  updateRefinery(state, dt);
 }
 
 function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void {

@@ -209,6 +209,32 @@ describe('load through the production registry', () => {
     expect(state?.run.refinery.queue).toEqual([job]);
   });
 
+  it('rejects a v4 save whose refinery job counters are out of range', () => {
+    const bad = [
+      { recipe: 'fuel', count: 0, total: 0, progress: 0 },
+      { recipe: 'fuel', count: -1, total: 2, progress: 0 },
+      { recipe: 'fuel', count: 3, total: 2, progress: 0 },
+      { recipe: 'fuel', count: 2, total: 2, progress: -1 },
+    ];
+    for (const job of bad) {
+      const refinery = { queue: [job], produced: { alloy: 0, fuel: 0 } };
+      expect(deserialize(JSON.stringify(saveV4({ refinery })))).toBeNull();
+    }
+  });
+
+  it('rejects a v4 save whose refinery job counters are not finite', () => {
+    // JSON.parse turns an overflowing literal into Infinity, so isQueue's finite
+    // checks are load-bearing rather than merely defensive.
+    const job = { recipe: 'fuel', count: 2, total: 2, progress: 0 };
+    const json = JSON.stringify(saveV4({ refinery: { queue: [job], produced: { alloy: 0, fuel: 0 } } }));
+    expect(deserialize(json)?.run.refinery.queue).toEqual([job]);
+    const jobJson = '"recipe":"fuel","count":2,"total":2,"progress":0';
+    for (const field of ['"count":2', '"total":2', '"progress":0']) {
+      const broken = json.replace(jobJson, jobJson.replace(field, field.replace(/:.*/, ':1e999')));
+      expect(deserialize(broken)).toBeNull();
+    }
+  });
+
   it('refuses a save whose migration chain has a gap', () => {
     // A version below everything the table covers, so this holds whatever real steps exist.
     const old = JSON.stringify({ ...fixtureState(), version: 1 });
