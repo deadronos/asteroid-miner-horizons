@@ -8,9 +8,11 @@ import { FLARES, HAZARD_LEVELS, type HazardLevel } from '../data/hazards';
 import { TUNING } from '../data/tuning';
 import { isDocked } from './economy';
 import { rockHp } from './generate';
-import type { CometWarning, GameState, Hazards, Run, Ship } from './types';
+import type { CometWarning, GameState, Hazards, Rock, Run, Ship } from './types';
 
 const BELT_NAMES = ['inner', 'middle', 'outer'];
+/** Comet radius range; a pending comet is treated as the largest. */
+const COMET_RADIUS = [34, 44] as const;
 
 /** A fresh hazard board for system `number`: timers set past the grace period, nothing pending. */
 export function newHazards(seed: number, number: number): Hazards {
@@ -56,7 +58,7 @@ function rollComet(state: GameState, speed: number): CometWarning {
 function spawnComet(state: GameState, w: CometWarning): void {
   const { run } = state;
   const rng = run.hazards.rng;
-  const radius = range(rng, 34, 44);
+  const radius = range(rng, COMET_RADIUS[0], COMET_RADIUS[1]);
   const hp = rockHp(radius, 'ice') * TUNING.cometHpMul;
   const units = Math.max(
     1,
@@ -159,4 +161,58 @@ export function flareExposure(run: Run, ship: Ship): number {
   const { starRadius } = run.system;
   const d = Math.hypot(ship.pos.x, ship.pos.z);
   return Math.min(1, Math.max(0, 1 - (d - starRadius) / (profile.reach - starRadius)));
+}
+
+/**
+ * True while a flare is pending or burning in a flaring system and `pos` lies within its reach plus
+ * `TUNING.flareShelterPad`: where the AI should not be.
+ */
+export function inFlareZone(run: Run, pos: Vec2): boolean {
+  const profile = FLARES[run.system.starClass];
+  if (!run.hazards.flare || !profile) return false;
+  const r = profile.reach + TUNING.flareShelterPad;
+  return pos.x * pos.x + pos.z * pos.z < r * r;
+}
+
+/** Writes the unit vector out of the path ahead of `from` along `vel` into `out` if `pos` lies within `half` of it. */
+function pathEscape(from: Vec2, vel: Vec2, half: number, pos: Vec2, out: Vec2): boolean {
+  const sp = Math.hypot(vel.x, vel.z);
+  if (sp < 1e-6) return false;
+  const dx = vel.x / sp;
+  const dz = vel.z / sp;
+  const rx = pos.x - from.x;
+  const rz = pos.z - from.z;
+  if (rx * dx + rz * dz < -half) return false; // safely behind
+  const lateral = rx * -dz + rz * dx; // + means left of the path
+  if (Math.abs(lateral) >= half) return false;
+  const side = lateral >= 0 ? 1 : -1;
+  out.x = -dz * side;
+  out.z = dx * side;
+  return true;
+}
+
+/**
+ * True if `pos` lies on the path ahead of the pending comet or a live one in `comets` (within the comet's radius
+ * plus `pad`; the comet's own body counts). Writes the unit vector straight out of that path into `out`.
+ */
+export function cometPathEscape(run: Run, comets: readonly Rock[], pos: Vec2, pad: number, out: Vec2): boolean {
+  const w = run.hazards.comet;
+  if (w && pathEscape(w.from, w.vel, COMET_RADIUS[1] + pad, pos, out)) return true;
+  for (const c of comets) if (pathEscape(c.pos, c.vel, c.radius + pad, pos, out)) return true;
+  return false;
+}
+
+/**
+ * Where a ship at `pos` inside the flare zone should shelter: `'dock'` when the station is no farther than the way
+ * out (or `preferDock`), else `'flee'` with the point just outside the zone, radially away from the star, in `out`.
+ */
+export function flareShelter(run: Run, pos: Vec2, preferDock: boolean, out: Vec2): 'dock' | 'flee' {
+  const profile = FLARES[run.system.starClass];
+  const d = Math.hypot(pos.x, pos.z) || 1;
+  const safe = (profile?.reach ?? 0) + TUNING.flareShelterPad + 40;
+  out.x = (pos.x / d) * safe;
+  out.z = (pos.z / d) * safe;
+  if (preferDock || Math.hypot(run.system.station.pos.x - pos.x, run.system.station.pos.z - pos.z) <= safe - d)
+    return 'dock';
+  return 'flee';
 }

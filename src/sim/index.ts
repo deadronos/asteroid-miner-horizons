@@ -21,6 +21,10 @@ export class SimIndex {
   readonly avoid: Vec2 = { x: 0, z: 0 };
   /** Scratch written by `pilot.droneThink`; never read without writing first. */
   readonly home: Vec2 = { x: 0, z: 0 };
+  /** Scratch for hazard escape vectors and flee points in `pilot`; never read without writing first. */
+  readonly escape: Vec2 = { x: 0, z: 0 };
+  /** Live comet rocks, collected in `rebuild`. */
+  readonly comets: Rock[] = [];
   /** Ids seen in the last `rebuild`, so the next one can prune the departed. */
   private readonly liveShipIds = new Set<number>();
 
@@ -29,7 +33,11 @@ export class SimIndex {
     const { run } = state;
     this.rockHash.rebuild(run.rocks);
     this.rockById.clear();
-    for (const r of run.rocks) this.rockById.set(r.id, r);
+    this.comets.length = 0;
+    for (const r of run.rocks) {
+      this.rockById.set(r.id, r);
+      if (r.comet) this.comets.push(r);
+    }
 
     const fx = systemEffects(run.system.modifiers); // once per tick, not per ship
     this.liveShipIds.clear();
@@ -47,6 +55,7 @@ export class SimIndex {
   clear(): void {
     this.rockHash.rebuild([]);
     this.rockById.clear();
+    this.comets.length = 0;
     this.stats.clear();
     this.liveShipIds.clear();
   }
