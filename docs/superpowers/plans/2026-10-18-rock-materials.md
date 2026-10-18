@@ -314,7 +314,7 @@ git commit -m "Bucket rocks by kind and shape so each kind uses its own pools (#
   - Screenshot the belt and confirm the three kinds read differently by silhouette and shading, not only colour.
   - Report the screenshot path, the console result, and the browser/OS used.
 
-- [ ] **Step 3: Measure runtime draw calls.** In the same session, read `__amh.renderer.gl.info.render.calls` with the belt on screen and record it; confirm it is comfortably under ~20 and unchanged from `main` at the same camera (compare against a run on `main` if the number is close to the cap).
+- [ ] **Step 3: Measure runtime draw calls.** In the same session, read `__amh.renderer.gl.info.render.calls` with the belt on screen and record it. Measured (bloom off, same camera/scenario): branch **39**, `main` **42**. The rock path is **7** meshes (6 shape pools + 1 pickups), unchanged, so this change adds **zero** draws. The ~20 criterion is met for the rock path (7) and **not** at whole-scene scope (39); the remainder is pre-existing scenery outside this issue. Do not claim the ~20 criterion is met scene-wide.
 
 - [ ] **Step 4: Confirm no commit is needed.** `git status` must be clean apart from the controller's docs. If anything else is dirty, stop and report rather than commit.
 

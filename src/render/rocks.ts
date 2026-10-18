@@ -20,7 +20,8 @@ export const rockStyleOf = (kind: RawResource): RockStyle => STYLE_OF[kind];
  * Which of the six shape pools a rock uses: each kind owns a two-pool block
  * (`ore` 0–1, `ice` 2–3, `crystal` 4–5) and `id` picks within it.
  */
-export const rockShapeIndex = (kind: RawResource, id: number): number => RAW_RESOURCES.indexOf(kind) * 2 + (id % 2);
+export const rockShapeIndex = (kind: RawResource, id: number): number =>
+  RAW_RESOURCES.indexOf(kind) * 2 + (((id % 2) + 2) % 2);
 
 export const ROCK_TINT: Record<RawResource, THREE.Color> = {
   ore: new THREE.Color(0x9c7b5e),
@@ -156,7 +157,7 @@ if (uKind < 0.5) {
   totalEmissiveRadiance += vec3(1.0, 0.55, 0.2) * vein * 0.1;
 } else if (uKind < 1.5) {
   // Ice: a fresnel rim fakes the pale glow of a translucent block.
-  float rim = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 3.0);
+  float rim = pow(max(0.0, 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)))), 3.0);
   totalEmissiveRadiance += vec3(0.55, 0.88, 1.0) * rim * (0.4 + 0.35 * uGlow);
 } else {
   // Crystal: hash the flat facet normal so whole facets light as units, gated

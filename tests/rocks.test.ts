@@ -40,6 +40,13 @@ describe('rock shapes are kind-correlated', () => {
     expect(ROCK_POOLS).toBe(6);
   });
 
+  it('keeps negative odd ids inside their kind block', () => {
+    // `-1 % 2` is `-1`, which would point at the previous kind's pool (or -1
+    // for ore); the parity must be made non-negative.
+    expect([0, 1]).toContain(rockShapeIndex('ore', -1));
+    expect([4, 5]).toContain(rockShapeIndex('crystal', -1));
+  });
+
   it('assigns a distinct style per kind', () => {
     expect(rockStyleOf('ore')).toBe('rock');
     expect(rockStyleOf('ice')).toBe('gem');
@@ -62,7 +69,13 @@ describe('rockGeometry styles', () => {
   });
 
   it('defaults to the rock style (debris is unchanged)', () => {
-    expect(attr(rockGeometry(4242)).count).toBe(attr(rockGeometry(4242, 'rock')).count);
+    const dflt = attr(rockGeometry(4242));
+    const rock = attr(rockGeometry(4242, 'rock'));
+    expect(dflt.count).toBe(rock.count);
+    // Byte-identity: a changed default style must be caught, not just a changed
+    // vertex count.
+    for (let i = 0; i < dflt.count; i++)
+      expect([dflt.getX(i), dflt.getY(i), dflt.getZ(i)]).toEqual([rock.getX(i), rock.getY(i), rock.getZ(i)]);
   });
 });
 
@@ -94,9 +107,11 @@ describe('per-kind rock materials', () => {
   });
 
   it('attaches the shading patch to every kind', () => {
+    // `KIND_INDEX` in `rocks.ts`; the fragment branch keys off these values.
+    const kindIndex: Record<RawResource, number> = { ore: 0, ice: 1, crystal: 2 };
     for (const kind of ['ore', 'ice', 'crystal'] as RawResource[]) {
       const stub = compile(rockMaterial(kind));
-      expect(stub.uniforms.uKind).toBeDefined();
+      expect(stub.uniforms.uKind).toEqual({ value: kindIndex[kind] });
       expect(stub.fragmentShader).toContain('uKind');
       expect(stub.vertexShader).toContain('aDamage');
     }

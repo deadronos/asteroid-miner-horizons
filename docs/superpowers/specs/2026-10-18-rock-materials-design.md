@@ -109,12 +109,18 @@ The existing orange damage-crack block runs for every kind, unchanged.
 
 ## Draw calls
 
-Rock path stays at **6 shape meshes + 1 pickups mesh = 7**, independent of the
-number of rocks (unchanged from today). The issue's ~20 budget is about the
-whole scene; this change adds zero draws. Verified at runtime from
-`renderer.gl.info.render.calls` in the browser (Task 4) and pinned in a unit
-test as `RockView.group.children.length === 7` (6 pools + pickups) regardless
-of rock count.
+The rock path stays at **6 shape meshes + 1 pickups mesh = 7**, independent of
+the number of rocks (unchanged from today), and this change adds **zero** draws.
+It is pinned in a unit test as `RockView.group.children.length === 7`
+(6 pools + pickups) regardless of rock count.
+
+**Honest whole-scene accounting:** the issue's "draw calls stay under ~20"
+criterion is met **for the rock path** (7) but **not at whole-scene scope**.
+Measured at runtime (`renderer.gl.info.render.calls`, bloom off, same camera and
+scenario): branch **39**, `main` **42**. The branch is 3 draws *lower* than
+`main` and adds nothing to the rock path; the remainder is pre-existing scenery
+outside this issue's blast radius. The ~20 figure is not met scene-wide, and
+that is a pre-existing condition this change does not worsen.
 
 ## Non-goals
 
