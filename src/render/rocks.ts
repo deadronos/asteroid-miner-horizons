@@ -5,13 +5,23 @@
 
 import * as THREE from 'three';
 import { hash01 } from '../core/rng';
-import { RESOURCE_INFO, type RawResource } from '../data/resources';
+import { RAW_RESOURCES, RESOURCE_INFO, type RawResource } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { Pickup, Rock } from '../sim/types';
 import { inView, type ViewRect } from './cull';
-import { rockGeometry } from './util';
+import { rockGeometry, type RockStyle } from './util';
 
-const VARIANTS = 6;
+/** Number of shared rock shape pools: two shapes for each of the three kinds. */
+export const ROCK_POOLS = 6;
+const STYLE_OF: Record<RawResource, RockStyle> = { ore: 'rock', ice: 'gem', crystal: 'shard' };
+/** Shape family a kind is drawn with: ore `rock`, ice `gem`, crystal `shard`. */
+export const rockStyleOf = (kind: RawResource): RockStyle => STYLE_OF[kind];
+/**
+ * Which of the six shape pools a rock uses: each kind owns a two-pool block
+ * (`ore` 0–1, `ice` 2–3, `crystal` 4–5) and `id` picks within it.
+ */
+export const rockShapeIndex = (kind: RawResource, id: number): number => RAW_RESOURCES.indexOf(kind) * 2 + (id % 2);
+
 export const ROCK_TINT: Record<RawResource, THREE.Color> = {
   ore: new THREE.Color(0x9c7b5e),
   ice: new THREE.Color(0xc4ecf8),
@@ -143,7 +153,7 @@ export class RockView {
   readonly group = new THREE.Group();
   private rocks: InstancePool[] = [];
   private pickups: InstancePool;
-  private buckets: Rock[][] = Array.from({ length: VARIANTS }, () => []);
+  private buckets: Rock[][] = Array.from({ length: ROCK_POOLS }, () => []);
   /**
    * HDR boost for things that should bloom (crystals, pickups). 1 without
    * bloom, so colours stay exactly as authored when there's no post-processing.
@@ -160,7 +170,7 @@ export class RockView {
   constructor() {
     const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
     addCracks(mat);
-    for (let i = 0; i < VARIANTS; i++)
+    for (let i = 0; i < ROCK_POOLS; i++)
       this.rocks.push(new InstancePool(this.group, rockGeometry(1000 + i * 77), mat, 256, true));
     this.pickups = new InstancePool(
       this.group,
@@ -184,7 +194,7 @@ export class RockView {
       const prev = this.lastHp.get(r.id);
       if (prev != null && r.hp < prev - 1e-6) this.hitAt.set(r.id, time);
       this.lastHp.set(r.id, r.hp);
-      if (inView(view, r.pos.x, r.pos.z, r.radius * ROCK_BOUND)) this.buckets[r.id % VARIANTS]!.push(r);
+      if (inView(view, r.pos.x, r.pos.z, r.radius * ROCK_BOUND)) this.buckets[r.id % ROCK_POOLS]!.push(r);
     }
     // Forget rocks that no longer exist (cracked or despawned).
     if (this.lastHp.size > rocks.length + 64) {
