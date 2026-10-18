@@ -61,8 +61,14 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     assists: input.assists ?? DEFAULT_ASSISTS,
   };
 
-  // Safe while ships die mid-loop: removals reassign run.ships rather than mutating it.
-  for (const ship of run.ships) updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
+  // Index-based so a ship removed in `updateShip` (an in-place `removeItem`)
+  // does not shift the next ship into an already-visited slot: after a removal
+  // the element at `i` is a ship we have not seen, so do not advance.
+  for (let i = 0; i < run.ships.length; i++) {
+    const ship = run.ships[i]!;
+    updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
+    if (run.ships[i] !== ship) i--;
+  }
 
   updatePickups(state, index.stats, dt);
   regrowBelts(state, dt);

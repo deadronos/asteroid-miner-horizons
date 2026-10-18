@@ -1,5 +1,6 @@
 // Ship construction, derived stats and damage.
 
+import { removeItem } from '../core/array';
 import { v, type Vec2 } from '../core/vec';
 import { COMPONENTS, type ShipStatKey } from '../data/components';
 import { HULLS, type HullId } from '../data/hulls';
@@ -108,7 +109,7 @@ export function damageShip(state: GameState, ship: Ship, raw: number): void {
     ship.vel = v();
   } else {
     out.log.push({ level: 'major', text: `${ship.name} was destroyed.` });
-    run.ships = run.ships.filter((s) => s !== ship);
+    removeItem(run.ships, ship);
     if (run.selectedId === ship.id) run.selectedId = flagship(run).id;
   }
 }
