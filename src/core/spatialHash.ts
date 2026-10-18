@@ -5,7 +5,11 @@
 import type { Vec2 } from './vec';
 
 export class SpatialHash<T extends { pos: Vec2 }> {
-  private cells = new Map<number, T[]>();
+  private readonly cells = new Map<number, T[]>();
+  /** Buckets detached from the map last rebuild, empty and ready to be refilled. */
+  private readonly pool: T[][] = [];
+  /** Keys currently in `cells`, so the next rebuild can detach exactly those. */
+  private readonly live: number[] = [];
 
   constructor(private readonly cell = 128) {}
 
@@ -14,12 +18,24 @@ export class SpatialHash<T extends { pos: Vec2 }> {
   }
 
   rebuild(items: readonly T[]): void {
-    this.cells.clear();
+    for (const k of this.live) {
+      const b = this.cells.get(k);
+      if (b) {
+        this.cells.delete(k);
+        b.length = 0;
+        this.pool.push(b);
+      }
+    }
+    this.live.length = 0;
     for (const it of items) {
       const k = this.key(Math.floor(it.pos.x / this.cell), Math.floor(it.pos.z / this.cell));
-      const bucket = this.cells.get(k);
-      if (bucket) bucket.push(it);
-      else this.cells.set(k, [it]);
+      let bucket = this.cells.get(k);
+      if (!bucket) {
+        bucket = this.pool.pop() ?? [];
+        this.cells.set(k, bucket);
+        this.live.push(k);
+      }
+      bucket.push(it);
     }
   }
 
