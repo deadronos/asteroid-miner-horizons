@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { RockView, ROCK_POOLS, rockMaterial, rockShapeIndex, rockStyleOf } from '../src/render/rocks';
 import { rockGeometry } from '../src/render/util';
 import type { RawResource } from '../src/data/resources';
+import type { Rock } from '../src/sim/types';
 
 // `util.ts` builds `glowTexture` at import time, which needs a canvas. Vitest
 // runs in the node env, so stub just enough of `document` before the imports
@@ -114,5 +115,46 @@ describe('RockView pools are built per kind', () => {
     expect(poolMat(2)).toBe(poolMat(3));
     expect(poolMat(4)).toBe(poolMat(5));
     expect(new Set([poolMat(0), poolMat(2), poolMat(4)]).size).toBe(3);
+  });
+});
+
+const VIEW = { x: 0, z: 0, halfW: 1e9, halfH: 1e9 };
+const rock = (id: number, kind: RawResource): Rock => ({
+  id,
+  kind,
+  size: 0,
+  pos: { x: 0, z: 0 },
+  vel: { x: 0, z: 0 },
+  radius: 10,
+  hp: 1,
+  maxHp: 1,
+  units: 1,
+  belt: 0,
+});
+
+/** Which of the six rock pools received the only rock, or -1. */
+const usedPool = (view: RockView): number =>
+  view.group.children
+    .slice(0, 6)
+    .map((m, i) => ({ i, count: (m as THREE.InstancedMesh).count }))
+    .filter((p) => p.count > 0)
+    .map((p) => p.i)[0] ?? -1;
+
+describe('RockView bucketing', () => {
+  it('sends rocks to their kind pools even when `id % 6` would not', () => {
+    // id 2 → `id % 6` = 2 (an ice pool); a crystal rock must not land there.
+    const crystal = new RockView();
+    crystal.update([rock(2, 'crystal')], [], 0, VIEW);
+    expect([4, 5]).toContain(usedPool(crystal));
+    // id 0 → `id % 6` = 0 (an ore pool); an ice rock must not land there.
+    const ice = new RockView();
+    ice.update([rock(0, 'ice')], [], 0, VIEW);
+    expect([2, 3]).toContain(usedPool(ice));
+  });
+
+  it('keeps the rock path at 7 meshes regardless of rock count', () => {
+    const view = new RockView();
+    view.update([rock(0, 'ore'), rock(1, 'ice'), rock(2, 'crystal'), rock(3, 'ore')], [], 0, VIEW);
+    expect(view.group.children).toHaveLength(7);
   });
 });

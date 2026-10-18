@@ -1,5 +1,5 @@
 // Asteroids and pickups drawn with InstancedMesh: a handful of draw calls no
-// matter how many rocks exist. Rocks pick one of several shared shapes by id.
+// matter how many rocks exist. Rocks pick a shape pool by kind, then by id.
 // Damage reads at a glance: rocks shrink a little, glowing cracks spread
 // across them (a per-instance shader attribute) and they shudder while hit.
 
@@ -29,8 +29,9 @@ export const ROCK_TINT: Record<RawResource, THREE.Color> = {
 };
 const HOT = new THREE.Color(0xff5a2a);
 /**
- * Cull radii. Rock shapes reach 1.22× their radius (see `rockGeometry`) and
- * shudder adds 3.5%; a pickup's octahedron tops out near 8 units.
+ * Cull radii. The `rock` style is the largest at 1.22× a rock's radius (see
+ * `rockGeometry`), so it drives this bound; shudder adds 3.5%. A pickup's
+ * octahedron tops out near 8 units.
  */
 const ROCK_BOUND = 1.3;
 const PICKUP_BOUND = 10;
@@ -217,7 +218,7 @@ export class RockView {
 
   constructor() {
     // Two shape pools per kind (`ore` 0–1, `ice` 2–3, `crystal` 4–5), each pair
-    // sharing its kind's material. `update` still buckets by `id` for now.
+    // sharing its kind's material. `update` buckets by `rockShapeIndex`.
     const mats = RAW_RESOURCES.map(rockMaterial);
     for (let i = 0; i < ROCK_POOLS; i++) {
       const kind = RAW_RESOURCES[Math.floor(i / 2)]!;
@@ -253,7 +254,7 @@ export class RockView {
       const prev = this.lastHp.get(r.id);
       if (prev != null && r.hp < prev - 1e-6) this.hitAt.set(r.id, time);
       this.lastHp.set(r.id, r.hp);
-      if (inView(view, r.pos.x, r.pos.z, r.radius * ROCK_BOUND)) this.buckets[r.id % ROCK_POOLS]!.push(r);
+      if (inView(view, r.pos.x, r.pos.z, r.radius * ROCK_BOUND)) this.buckets[rockShapeIndex(r.kind, r.id)]!.push(r);
     }
     // Forget rocks that no longer exist (cracked or despawned).
     if (this.lastHp.size > rocks.length + 64) {
