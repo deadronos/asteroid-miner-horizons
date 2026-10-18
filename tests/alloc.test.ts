@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
 import { SimIndex } from '../src/sim/index';
 import { destroyRock } from '../src/sim/mining';
-import { damageShip, makeShip } from '../src/sim/ships';
+import { damageShip, flagship, makeShip } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
 import { tick, type TickInput } from '../src/sim/update';
 
@@ -13,6 +14,18 @@ function runTick(state: GameState, seconds = DT): void {
   const index = new SimIndex();
   const input: TickInput = { thrust: { x: 0, z: 0 }, commands: [] };
   for (let t = 0; t < seconds; t += DT) tick(state, DT, input, index);
+}
+
+/** A pickup at `5000 + id`, with the given age. */
+function mk(id: number, age: number) {
+  return {
+    id,
+    kind: 'ore' as const,
+    amount: 1,
+    pos: { x: 5000 + id, z: 5000 },
+    vel: { x: 0, z: 0 },
+    age,
+  };
 }
 
 describe('in-place ship removal', () => {
@@ -58,5 +71,38 @@ describe('in-place rock removal', () => {
     expect(rocks[5]).toBe(next); // the next rock shifted into the freed slot
     expect(rocks).not.toContain(target);
     expect(rocks.length).toBe(before - 1 + frags.length); // fragments are appended
+  });
+});
+
+describe('pickups tick in place', () => {
+  it('keeps the pickups array identity over a tick', () => {
+    const state = newGame(1);
+    state.run.pickups = [{ id: 1, kind: 'ore', amount: 1, pos: { x: 5000, z: 5000 }, vel: { x: 0, z: 0 }, age: 0 }];
+    const pickups = state.run.pickups;
+    runTick(state);
+    expect(state.run.pickups).toBe(pickups);
+    expect(pickups).toHaveLength(1);
+  });
+
+  it('drops expired pickups in place, preserving the order of the rest', () => {
+    const state = newGame(1);
+    state.run.pickups = [mk(1, 1), mk(2, TUNING.pickupLifetime + 1), mk(3, 3)];
+    const pickups = state.run.pickups;
+    runTick(state);
+    expect(state.run.pickups).toBe(pickups);
+    expect(pickups.map((p) => p.id)).toEqual([1, 3]);
+  });
+
+  it('ignores dead ships when pulling pickups', () => {
+    const state = newGame(1);
+    const fs = flagship(state.run);
+    fs.respawn = 5; // not alive this tick
+    state.run.pickups = [
+      { id: 1, kind: 'ore', amount: 1, pos: { x: fs.pos.x + 10, z: fs.pos.z }, vel: { x: 0, z: 0 }, age: 0 },
+    ];
+    const pickups = state.run.pickups;
+    runTick(state);
+    expect(state.run.pickups).toBe(pickups);
+    expect(pickups[0]!.vel).toEqual({ x: 0, z: 0 });
   });
 });
