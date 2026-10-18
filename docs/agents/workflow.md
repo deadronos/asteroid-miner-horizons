@@ -68,5 +68,5 @@ After every task, before committing:
 
 ## Local-only scratch
 
-`.superpowers/` is untracked working space (plan pointers, review diffs, screenshots). `scratch.md` is tracked
-but is the maintainer's notebook of suggested next issues — leave it alone unless you are asked to edit it.
+`.superpowers/` is git-ignored working space (plan pointers, review diffs, screenshots). `scratch.md` is tracked
+but off limits; see AGENTS.md.

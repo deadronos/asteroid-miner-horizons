@@ -29,7 +29,8 @@ A player action is a `Command`: input and UI enqueue it, `tick()` applies it.
 3. **Reject invalid input with `fail(state, message)`**, which pushes a `warn` log line and returns. Do not
    throw: a command is untrusted input and the sim must survive it.
 4. **Send it from the UI** via the `send` function a panel receives (see `src/ui/panels/context.ts`).
-5. **Test it** in `tests/commands.test.ts` — happy path, and that the rejection leaves state unchanged.
+5. **Test it** in `tests/commands.test.ts` — the happy path, and the rejection: assert the `warn` log line and
+   that the state the command would have changed is untouched.
 
 Handlers mutate `state.run` / `state.profile`. Anything the renderer or HUD should react to must be pushed to
 `state.out.fx` or `state.out.log` — that outbox is the only channel out of the sim:
@@ -44,7 +45,8 @@ Handlers mutate `state.run` / `state.profile`. Anything the renderer or HUD shou
 - Numbers that should be tunable in one place go in **`src/data/tuning.ts`**, each with a one-line comment.
 - New game content goes in the matching data table (`components.ts`, `hulls.ts`, `perks.ts`, `refining.ts`,
   `contracts.ts`). Tables are pure data and drive both the sim and the HUD text, so keep labels user-facing.
-- `src/data` is a leaf: a data module may import `resources.ts` for shared types and helpers, and nothing else.
+- `src/data` is a leaf: a data module may import other `data/` modules (most use `resources.ts`; `hulls.ts` uses
+  `components.ts`), never `core`, `sim` or anything above.
 - If you add a key to a table the sim indexes by string (like `MODIFIERS`), remember `fromData` in `save.ts`
   checks every persisted key is known — update that validation.
 
@@ -64,12 +66,3 @@ A save is `{ version, profile, run }`. Two files, one rule: **an old save must a
 
 Note the two shapes in play: `GameState` includes the transient `out`; the persisted and exported shape is
 `Pick<GameState, 'version' | 'profile' | 'run'>`.
-
-## Style
-
-- One short header comment per module stating what it is and any non-obvious rule. The existing headers are the
-  model — declarative, present tense, no marketing.
-- `/** */` on exported functions and on non-obvious fields. Skip comments that restate the code.
-- `oxfmt` enforces printWidth 120, single quotes, trailing commas. Run `npm run format`.
-- `oxlint` denies warnings: `import/no-cycle` is an error, `typescript/no-explicit-any` is an error, and unused
-  args/vars must be `_`-prefixed. `eqeqeq` is "smart".

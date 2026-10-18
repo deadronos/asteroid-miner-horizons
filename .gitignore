@@ -37,3 +37,6 @@ Thumbs.db
 
 # Local screenshots / captures
 screenshots/
+
+# Local agent working space (plan pointers, review diffs, screenshots)
+.superpowers/
