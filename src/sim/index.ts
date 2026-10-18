@@ -16,6 +16,10 @@ export class SimIndex {
    * `rebuild`; only `clear` empties it.
    */
   readonly stats = new Map<number, ShipStats>();
+  /** Scratch written by `pilot.avoidance`; never read without writing first. */
+  readonly avoid = { x: 0, z: 0 };
+  /** Scratch written by `pilot.droneThink`; never read without writing first. */
+  readonly home = { x: 0, z: 0 };
   /** Ids seen in the last `rebuild`, so the next one can prune the departed. */
   private readonly liveShipIds = new Set<number>();
 
