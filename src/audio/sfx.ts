@@ -1,12 +1,14 @@
-// Sound presets and the pure rules for turning sim fx into sounds: which
-// preset, how loud, where in the stereo field and at what pitch, plus a rate
-// limiter so a fleet of drones can't turn the mix into noise.
+// Sound presets and the pure rules for turning sim state into sound: which
+// preset, how loud, where in the stereo field and at what pitch. Also the rules
+// for the continuous layer (beam hums, danger alarm) and a rate limiter so a
+// fleet of drones can't turn the mix into noise.
 
 import type { Vec2 } from '../core/vec';
-import type { Fx } from '../sim/types';
+import { isAlive, shipStats } from '../sim/ships';
+import type { Fx, Profile, Run } from '../sim/types';
 import type { ZzfxParams } from './zzfx';
 
-export type SoundId = 'crack' | 'collect' | 'dock' | 'impact' | 'explode' | 'warp' | 'uiClick' | 'uiDeny';
+export type SoundId = 'crack' | 'collect' | 'dock' | 'impact' | 'explode' | 'warp' | 'uiClick' | 'uiDeny' | 'alarm';
 
 /** ZzFX presets. Randomness is 0 so each renders once and is cached; variety comes from `rate`. */
 export const PRESETS: Record<SoundId, ZzfxParams> = {
@@ -26,6 +28,8 @@ export const PRESETS: Record<SoundId, ZzfxParams> = {
   uiClick: [0.22, 0, 1500, 0, 0, 0.025, 1, 2],
   // Low falling buzz for rejected commands.
   uiDeny: [0.35, 0, 220, 0, 0.05, 0.1, 2, 1, -4, 0, -60, 0.05, 0, 0, 0, 0, 0, 0.7, 0, 0, 1800],
+  // Gentle two-tone chime, low enough to sit under the mix and repeat without grating.
+  alarm: [0.5, 0, 320, 0.01, 0.07, 0.26, 0, 1.3, 0, 0, 150, 0.07, 0, 0, 0, 0, 0.1, 0.9],
 };
 
 /** Minimum seconds between two plays of the same sound. */
@@ -38,6 +42,8 @@ const MIN_GAP: Record<SoundId, number> = {
   warp: 0.5,
   uiClick: 0.03,
   uiDeny: 0.2,
+  // Short, because the alarm itself paces its ~1.1 s repeats.
+  alarm: 0.3,
 };
 
 export const MAX_VOICES = 12;
@@ -126,4 +132,57 @@ export function voiceFor(fx: Fx, view: View, streak: Streak, now: number): Voice
     case 'explode':
       return { id: 'explode', gain: g, pan, rate: jitter };
   }
+}
+
+/** Hard cap on simultaneous beam hums: past this the mix turns to mush anyway. */
+export const MAX_HUMS = 4;
+
+/** A continuous laser hum for one ship's active mining beam. */
+export interface BeamHum {
+  shipId: number;
+  /** Linear gain into the SFX bus (spatial falloff already applied). */
+  gain: number;
+  /** Stereo position -1..1. */
+  pan: number;
+  /** Oscillator pitch in Hz, derived from the beam's DPS. */
+  freq: number;
+}
+
+/**
+ * One hum per alive ship with an active beam, loudest first, capped at `max`.
+ * Deterministic (no randomness) so it is unit-testable.
+ */
+export function beamHums(run: Run, profile: Profile, view: View, max = MAX_HUMS): BeamHum[] {
+  const hums: BeamHum[] = [];
+  for (const ship of run.ships) {
+    if (!isAlive(ship) || !ship.beamOn || ship.beamTargetId == null) continue;
+    const [gain, pan] = spatial(ship.pos, view);
+    if (gain <= 0.02) continue;
+    // Mine harder, hum higher: the pitch lets a mixed fleet be told apart by ear.
+    const dps = shipStats(ship, profile).dps;
+    hums.push({ shipId: ship.id, gain, pan, freq: Math.min(320, Math.max(60, 70 + 2.2 * dps)) });
+  }
+  // Loudest first; ties by id so a fleet keeps a stable voice assignment frame to frame.
+  hums.sort((a, b) => b.gain - a.gain || a.shipId - b.shipId);
+  return hums.slice(0, max);
+}
+
+/**
+ * Urgency 0..1 of the selected ship's danger state for the repeating alarm.
+ * 0 when quiet.
+ */
+export function alarmLevel(run: Run, profile: Profile): number {
+  const ship = run.ships.find((s) => s.id === run.selectedId);
+  if (!ship || !isAlive(ship)) return 0;
+  const st = shipStats(ship, profile);
+  const hullFrac = st.maxHull > 0 ? ship.hull / st.maxHull : 0;
+  const hullSev = hullFrac < 0.25 ? (0.25 - hullFrac) / 0.25 : 0;
+  const dStar = Math.hypot(ship.pos.x, ship.pos.z);
+  let heatSev = 0;
+  // Mirrors the star-heat ramp in sim/update so the alarm follows the damage being taken.
+  if (dStar < run.system.heatRadius) {
+    const k = 1 - (dStar - run.system.starRadius) / (run.system.heatRadius - run.system.starRadius);
+    heatSev = Math.min(1, Math.max(0.2, k));
+  }
+  return Math.max(hullSev, heatSev);
 }
