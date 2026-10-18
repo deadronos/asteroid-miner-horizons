@@ -20,7 +20,7 @@ const BUDGET_MS = Number(process.env.BENCH_BUDGET_MS ?? 0.1);
 const state = newGame(SEED);
 state.profile.perks.bay = PERKS.bay.max;
 // Enough of everything that the bot fills the fleet and upgrades freely.
-state.run.bank = { ore: 1e7, ice: 1e7, crystal: 1e5 };
+state.run.bank = { ore: 1e7, ice: 1e7, crystal: 1e5, alloy: 0, fuel: 0 };
 
 runBot(state, { seconds: WARMUP_SEC, warp: false });
 

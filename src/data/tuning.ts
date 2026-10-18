@@ -29,10 +29,17 @@ export const TUNING = {
   droneLeash: 700,
 
   // Prestige.
-  warpBaseIce: 250,
+  /** Bank fuel the first warp costs; grows per warp, cut by the warp perk. */
+  warpBaseFuel: 50,
   warpCostGrowth: 1.35,
   /** Horizon Data = floor(sqrt(runValue / dataDivisor)). */
   dataDivisor: 60,
+
+  // Refinery.
+  /** Jobs the station refinery queue can hold. */
+  refineQueueMax: 5,
+  /** Batches a single refine job can hold. */
+  refineMaxBatch: 500,
 
   // Contracts.
   /** Offers kept on the station board per system. */

@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { TUNING } from '../src/data/tuning';
 import { applyCommand, type Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
+import { warpCost } from '../src/sim/economy';
 import { handlers } from '../src/sim/handlers';
 import { flagship, makeShip } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
@@ -59,7 +60,7 @@ describe('command handlers', () => {
   });
   it('upgrade', () => {
     const { s, fs } = fs1();
-    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0 };
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0, alloy: 0, fuel: 0 };
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
     send(s, { t: 'upgrade', shipId: fs.id, slot: 2 });
     expect(fs.slots[2]!.tier).toBe(2);
@@ -80,7 +81,7 @@ describe('command handlers', () => {
   });
   it('buyHull', () => {
     const s = newGame(1);
-    s.run.bank = { ore: 1000, ice: 1000, crystal: 0 };
+    s.run.bank = { ore: 1000, ice: 1000, crystal: 0, alloy: 0, fuel: 0 };
     const n = s.run.ships.length;
     send(s, { t: 'buyHull', hullId: 'drone' });
     expect(s.run.ships.length).toBe(n + 1);
@@ -101,20 +102,100 @@ describe('command handlers', () => {
   });
   it('warp', () => {
     const s = newGame(1);
-    s.run.bank.ice = 1000;
+    s.run.bank.fuel = 1000;
     send(s, { t: 'warp' });
     expect(s.profile.warps).toBe(1);
     expect(s.run.system.number).toBe(2);
   });
 
-  it('warp logs an active contract it leaves behind', () => {
+  it('rejects a warp funded with ice only', () => {
     const s = newGame(1);
     s.run.bank.ice = 1000;
+    send(s, { t: 'warp' });
+    expect(s.profile.warps).toBe(0);
+    expect(s.out.log.at(-1)).toMatchObject({
+      level: 'warn',
+      text: `Warp needs ${warpCost(s)} fuel in the station bank.`,
+    });
+  });
+
+  it('warp logs an active contract it leaves behind', () => {
+    const s = newGame(1);
+    s.run.bank.fuel = 1000;
     send(s, { t: 'acceptContract', contractId: s.run.contracts.offers[0]!.id });
     s.out.log.length = 0;
     send(s, { t: 'warp' });
     expect(s.run.contracts.active).toBeNull();
     expect(s.out.log.some((l) => l.level === 'warn' && l.text.startsWith('Contract left behind'))).toBe(true);
+  });
+
+  it('refine queues the clamped batch count and debits exactly its cost', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 5000, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'refine', recipe: 'alloy', count: 600 });
+
+    expect(s.run.bank.ore).toBe(5000 - 4 * 500);
+    expect(s.run.refinery.queue).toEqual([{ id: 1, recipe: 'alloy', count: 500, total: 500, progress: 0 }]);
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'info', text: 'Refinery: queued 500 × smelt alloy.' });
+  });
+
+  it('refine warns and leaves the bank and queue untouched when unaffordable', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    const bankBefore = JSON.stringify(s.run.bank);
+    const queueBefore = JSON.stringify(s.run.refinery.queue);
+
+    send(s, { t: 'refine', recipe: 'alloy', count: 5 });
+
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn', text: 'Not enough ore to refine 5 alloy.' });
+    expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
+    expect(JSON.stringify(s.run.refinery.queue)).toBe(queueBefore);
+  });
+
+  it('cancelRefine refunds the unfinished batches', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 100, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'refine', recipe: 'alloy', count: 5 });
+
+    send(s, { t: 'cancelRefine', jobId: s.run.refinery.queue[0]!.id });
+
+    expect(s.run.bank.ore).toBe(100);
+    expect(s.run.refinery.queue).toHaveLength(0);
+    expect(s.out.log.at(-1)).toMatchObject({
+      level: 'info',
+      text: 'Refinery: cancelled 5 × smelt alloy, refunded 20⬢.',
+    });
+  });
+
+  it('cancelRefine is a silent no-op for an id that is not queued', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 100, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'refine', recipe: 'alloy', count: 5 });
+    const bankBefore = JSON.stringify(s.run.bank);
+    const queueBefore = JSON.stringify(s.run.refinery.queue);
+    const n = s.out.log.length;
+
+    send(s, { t: 'cancelRefine', jobId: -1 });
+    send(s, { t: 'cancelRefine', jobId: 5 });
+
+    expect(s.out.log.length).toBe(n);
+    expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
+    expect(JSON.stringify(s.run.refinery.queue)).toBe(queueBefore);
+  });
+
+  it('warp leaves a queued refinery job behind', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 100, ice: 0, crystal: 0, alloy: 0, fuel: 1000 };
+    send(s, { t: 'refine', recipe: 'alloy', count: 5 });
+    s.out.log.length = 0;
+
+    send(s, { t: 'warp' });
+
+    expect(s.run.refinery.queue).toHaveLength(0);
+    const complete = s.out.log.findIndex((l) => l.text.startsWith('Warp complete'));
+    const left = s.out.log.findIndex((l) => l.text === 'Refinery queue left behind: 5 × smelt alloy.');
+    expect(left).toBeGreaterThan(complete);
+    expect(s.out.log[left]).toMatchObject({ level: 'warn' });
   });
 
   it('acceptContract moves an offer to active and refills the board', () => {
@@ -206,7 +287,7 @@ describe('command handlers', () => {
     s.run.selectedId = 0;
     handlers.select(s, { t: 'select', shipId: fs.id });
     expect(s.run.selectedId).toBe(fs.id);
-    expect(Object.keys(handlers)).toHaveLength(16);
+    expect(Object.keys(handlers)).toHaveLength(18);
   });
 
   it('a command for a missing ship is a silent no-op', () => {
@@ -232,14 +313,14 @@ describe('command handlers', () => {
   });
   it('install is rejected when under-funded', () => {
     const { s, fs } = fs1();
-    s.run.bank = { ore: 0, ice: 0, crystal: 0 };
+    s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
     expect(fs.slots[2]).toBeNull();
     expect(s.out.log.at(-1)).toMatchObject({ level: 'warn' });
   });
   it('remove re-clamps hull to the new max', () => {
     const { s, fs } = fs1();
-    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0 };
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0, alloy: 0, fuel: 0 };
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'armor' });
     fs.hull = 1e9;
     send(s, { t: 'remove', shipId: fs.id, slot: 2 });

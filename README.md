@@ -47,7 +47,7 @@ Requires Node 20+. Built with TypeScript 7, Vite 8 and three r186.
 All keys can be rebound in ⚙ → Controls.
 
 **The loop:** mine → collect debris (fly close; the tractor pulls it in) → dock to unload
-→ spend the bank on components and ships → automate with drones → stockpile ice → warp.
+→ spend the bank on components and ships → automate with drones → refine ice into fuel → warp.
 
 ## Game systems
 
@@ -71,7 +71,7 @@ All keys can be rebound in ⚙ → Controls.
 - **Damage**: collisions above a speed threshold and star heat hit shields first, then
   hull. Armor reduces damage. A lost flagship is rebuilt at the station (its cargo is
   lost); lost drones are gone.
-- **Warp / prestige**: warping costs ice from the bank, and the cost rises 35% per warp.
+- **Warp / prestige**: warping costs fuel from the bank, and the cost rises 35% per warp.
   It resets the bank, ships and components and generates the next system. It grants
   **Horizon Data** = ⌊√(value delivered this run / 60)⌋. Research spends it on permanent
   perks: yield, laser damage, speed, fleet capacity, a starter kit, and cheaper warps.

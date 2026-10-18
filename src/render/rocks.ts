@@ -5,13 +5,13 @@
 
 import * as THREE from 'three';
 import { hash01 } from '../core/rng';
-import { RESOURCE_INFO, type Resource } from '../data/resources';
+import { RESOURCE_INFO, type RawResource } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { Pickup, Rock } from '../sim/types';
 import { rockGeometry } from './util';
 
 const VARIANTS = 6;
-export const ROCK_TINT: Record<Resource, THREE.Color> = {
+export const ROCK_TINT: Record<RawResource, THREE.Color> = {
   ore: new THREE.Color(0x9c7b5e),
   ice: new THREE.Color(0xc4ecf8),
   crystal: new THREE.Color(0xc48cff),

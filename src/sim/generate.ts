@@ -3,7 +3,7 @@
 
 import { chance, int, makeRng, next, pick, range, type Rng } from '../core/rng';
 import { fromAngle, type Vec2 } from '../core/vec';
-import type { Resource, Wallet } from '../data/resources';
+import type { RawResource } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { Belt, Planet, Rock, RockSize, Run, StarClass, StarSystem } from './types';
 
@@ -90,7 +90,7 @@ export function generateSystem(seed: number, number: number): StarSystem {
   };
 }
 
-function rollKind(r: Rng, mix: Wallet): Resource {
+function rollKind(r: Rng, mix: Record<RawResource, number>): RawResource {
   const total = mix.ore + mix.ice + mix.crystal;
   let x = next(r) * total;
   if ((x -= mix.ore) < 0) return 'ore';
@@ -98,13 +98,13 @@ function rollKind(r: Rng, mix: Wallet): Resource {
   return 'crystal';
 }
 
-export function rockHp(radius: number, kind: Resource): number {
+export function rockHp(radius: number, kind: RawResource): number {
   return TUNING.rockHpK * radius ** 1.5 * (kind === 'crystal' ? 2.2 : 1);
 }
 
 export function makeRock(
   run: Run,
-  kind: Resource,
+  kind: RawResource,
   size: RockSize,
   pos: Vec2,
   units: number | null,

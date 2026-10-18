@@ -24,8 +24,12 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
       const res = RESOURCES.map((r) => {
         const e = h('span', { class: `res ${r}`, title: RESOURCE_INFO[r].name });
         bind(() => {
-          const b = st().run.bank;
-          e.style.display = r === 'crystal' && b.crystal <= 0 && st().run.system.number < 2 ? 'none' : '';
+          const s = st();
+          const b = s.run.bank;
+          const late = r === 'crystal' || r === 'alloy';
+          // Keep crystal/alloy on screen while a job of that recipe is queued; fuel is always shown.
+          const queued = s.run.refinery.queue.some((j) => j.recipe === r);
+          e.style.display = late && b[r] <= 0 && !queued && s.run.system.number < 2 ? 'none' : '';
           setText(e, `${RESOURCE_INFO[r].icon} ${fmt(b[r])}`);
         });
         return e;
@@ -49,11 +53,11 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
         setText(data, `✦ ${s.profile.data} HD`);
         const cost = warpCost(s);
         const gain = dataGain(s);
-        setText(warp, `WARP ▸ ${cost}❄  (+${gain} HD)`);
+        setText(warp, `WARP ▸ ${cost}◉  (+${gain} HD)`);
         setDisabled(
           warp,
-          s.run.bank.ice < cost,
-          `Need ${cost} ice in the station bank (have ${Math.floor(s.run.bank.ice)}). Would earn +${gain} HD.`,
+          s.run.bank.fuel < cost,
+          `Need ${cost} fuel in the station bank (have ${Math.floor(s.run.bank.fuel)}). Would earn +${gain} HD.`,
         );
         researchBtn.classList.toggle(
           'glow',

@@ -5,6 +5,7 @@
 
 import { newBoard } from './contracts';
 import { SAVE_VERSION } from './create';
+import { newRefinery } from './refining';
 import type { GameState } from './types';
 
 /** The persisted shape: all of GameState except the transient outbox. */
@@ -22,6 +23,18 @@ export const migrations: Record<number, Migration> = {
   // v3 added `run.contracts`: an empty station board that the first tick refills.
   2: (d) => {
     d.run.contracts = newBoard(d.profile.seed, d.run.system.number);
+    return d;
+  },
+  // v4 added `alloy` and `fuel`: bank and cargo columns start empty, and an
+  // empty station refinery is created.
+  3: (d) => {
+    d.run.bank.alloy = 0;
+    d.run.bank.fuel = 0;
+    for (const ship of d.run.ships) {
+      ship.cargo.alloy = 0;
+      ship.cargo.fuel = 0;
+    }
+    d.run.refinery = newRefinery();
     return d;
   },
 };
