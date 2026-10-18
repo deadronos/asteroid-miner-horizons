@@ -139,6 +139,8 @@ export interface ContractBoard {
 }
 
 export interface RefineJob {
+  /** Stable per-run id, so a cancel names the job rather than its queue position. */
+  id: number;
   recipe: RecipeId;
   /** Batches still to finish, including the one in progress. */
   count: number;
@@ -150,6 +152,8 @@ export interface RefineJob {
 
 export interface Refinery {
   queue: RefineJob[];
+  /** Id for the next queued job. */
+  nextId: number;
   /** Units produced this run per recipe (balance metric). */
   produced: Record<RecipeId, number>;
 }

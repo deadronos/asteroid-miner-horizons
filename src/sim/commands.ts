@@ -29,7 +29,7 @@ export type Command =
   | { t: 'buyPerk'; perk: PerkId }
   | { t: 'warp' }
   | { t: 'refine'; recipe: RecipeId; count: number }
-  | { t: 'cancelRefine'; index: number }
+  | { t: 'cancelRefine'; jobId: number }
   | { t: 'acceptContract'; contractId: number }
   | { t: 'abandonContract' };
 

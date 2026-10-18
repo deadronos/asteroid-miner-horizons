@@ -54,10 +54,12 @@ function isWallet(w: unknown): boolean {
 /** True when every entry is a refine job the tick can process: a known recipe and sane numeric counters. */
 function isQueue(queue: unknown[]): boolean {
   return queue.every((j) => {
-    const job = j as { recipe?: unknown; count?: unknown; total?: unknown; progress?: unknown };
+    const job = j as { id?: unknown; recipe?: unknown; count?: unknown; total?: unknown; progress?: unknown };
     return (
       !!job &&
       typeof job === 'object' &&
+      typeof job.id === 'number' &&
+      Number.isFinite(job.id) &&
       typeof job.recipe === 'string' &&
       Object.hasOwn(RECIPES, job.recipe) &&
       typeof job.count === 'number' &&
@@ -101,13 +103,17 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
   // The tick will process the queue, and the HUD and balance report read
   // `produced`, so both must be well-formed before the run is accepted.
-  const refinery = run.refinery as { queue?: unknown; produced?: unknown };
+  const refinery = run.refinery as { queue?: unknown; nextId?: unknown; produced?: unknown };
   if (!refinery || typeof refinery !== 'object' || Array.isArray(refinery) || !Array.isArray(refinery.queue))
     return null;
   const produced = refinery.produced as Record<string, unknown> | null;
   if (!produced || typeof produced !== 'object' || Array.isArray(produced)) return null;
   if (RECIPE_IDS.some((r) => typeof produced[r] !== 'number')) return null;
   if (!isQueue(refinery.queue)) return null;
+  // New jobs must not reuse a queued job's id, or a cancel could hit the wrong one.
+  const { nextId } = refinery;
+  if (typeof nextId !== 'number' || !Number.isFinite(nextId)) return null;
+  if ((refinery.queue as { id: number }[]).some((j) => j.id >= nextId)) return null;
   return { version: migrated.version, profile, run, out: { fx: [], log: [] } };
 }
 

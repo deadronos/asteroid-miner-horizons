@@ -38,7 +38,8 @@ function stateWith(bank: Partial<Wallet>): GameState {
 
 /** Appends `n` hand-built jobs, bypassing the cost so tests can fill the queue. */
 function pushJobs(run: Run, recipe: RecipeId, count: number, n = 1): void {
-  for (let i = 0; i < n; i++) run.refinery.queue.push({ recipe, count, total: count, progress: 0 });
+  for (let i = 0; i < n; i++)
+    run.refinery.queue.push({ id: run.refinery.nextId++, recipe, count, total: count, progress: 0 });
 }
 
 const INPUT = { thrust: { x: 0, z: 0 }, commands: [] as Command[] };
@@ -164,7 +165,7 @@ describe('queueRefine', () => {
     const { run } = stateWith({ ore: 40 });
     expect(queueRefine(run, 'alloy', 3)).toEqual({ queued: 3 });
     expect(run.bank.ore).toBe(40 - 3 * 4);
-    expect(run.refinery.queue).toEqual([{ recipe: 'alloy', count: 3, total: 3, progress: 0 }]);
+    expect(run.refinery.queue).toEqual([{ id: 1, recipe: 'alloy', count: 3, total: 3, progress: 0 }]);
   });
 
   it('merges into the last job of the same recipe, paying once per call', () => {
@@ -172,7 +173,7 @@ describe('queueRefine', () => {
     queueRefine(run, 'alloy', 2);
     queueRefine(run, 'alloy', 3);
     expect(run.bank.ore).toBe(100 - 5 * 4);
-    expect(run.refinery.queue).toEqual([{ recipe: 'alloy', count: 5, total: 5, progress: 0 }]);
+    expect(run.refinery.queue).toEqual([{ id: 1, recipe: 'alloy', count: 5, total: 5, progress: 0 }]);
   });
 
   it('appends a different recipe as a new job', () => {
@@ -220,18 +221,32 @@ describe('cancelRefine', () => {
     updateRefinery(state, 4); // alloy takes 2 s per batch: 2 of 5 done.
     expect(run.refinery.queue[0]!.count).toBe(3);
 
-    const job = cancelRefine(run, 0);
+    const job = cancelRefine(run, run.refinery.queue[0]!.id);
 
-    expect(job).toEqual({ recipe: 'alloy', count: 3, total: 5, progress: 0 });
+    expect(job).toEqual({ id: 1, recipe: 'alloy', count: 3, total: 5, progress: 0 });
     expect(run.refinery.queue).toHaveLength(0);
     expect(run.bank.ore).toBe(40 - 5 * 4 + 3 * 4);
     expect(run.bank.alloy).toBe(2);
   });
 
-  it('returns null for an out-of-range index', () => {
+  it('returns null for an id that is not queued', () => {
     const { run } = stateWith({ ore: 40 });
-    expect(cancelRefine(run, 0)).toBeNull();
+    expect(cancelRefine(run, 1)).toBeNull();
     expect(cancelRefine(run, -1)).toBeNull();
+  });
+
+  it('cancels by id even after the queue has shifted', () => {
+    // The HUD sends the id it last rendered; the front job may finish first.
+    const state = stateWith({ ore: 100, ice: 100 });
+    const { run } = state;
+    queueRefine(run, 'alloy', 1);
+    queueRefine(run, 'fuel', 2);
+    queueRefine(run, 'alloy', 3);
+    const fuelId = run.refinery.queue[1]!.id;
+    updateRefinery(state, 2); // the single alloy batch finishes and leaves the queue
+
+    expect(cancelRefine(run, fuelId)?.recipe).toBe('fuel');
+    expect(run.refinery.queue.map((j) => j.recipe)).toEqual(['alloy']);
   });
 });
 
@@ -293,8 +308,9 @@ describe('updateRefinery', () => {
   it('drops a front job with a non-positive count without producing', () => {
     const state = stateWith({ ice: 100 });
     const { run } = state;
-    run.refinery.queue.push({ recipe: 'fuel', count: 0, total: 2, progress: 0 });
-    run.refinery.queue.push({ recipe: 'fuel', count: 2, total: 2, progress: 0 });
+    run.refinery.queue.push({ id: 1, recipe: 'fuel', count: 0, total: 2, progress: 0 });
+    run.refinery.queue.push({ id: 2, recipe: 'fuel', count: 2, total: 2, progress: 0 });
+    run.refinery.nextId = 3;
 
     updateRefinery(state, 0.25);
 
@@ -338,9 +354,9 @@ describe('refinery HUD helpers', () => {
   });
 
   it('reports batch progress clamped to [0, 1]', () => {
-    expect(jobProgress({ recipe: 'alloy', count: 1, total: 1, progress: 0 })).toBe(0);
-    expect(jobProgress({ recipe: 'alloy', count: 1, total: 1, progress: 1 })).toBe(0.5);
-    expect(jobProgress({ recipe: 'alloy', count: 1, total: 1, progress: 5 })).toBe(1);
+    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 0 })).toBe(0);
+    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 1 })).toBe(0.5);
+    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 5 })).toBe(1);
   });
 
   it('sums the queued output of one recipe', () => {

@@ -97,7 +97,13 @@ function projectedState(state: GameState, refine: Command): GameState {
   if (last && last.recipe === refine.recipe) {
     queue[queue.length - 1] = { ...last, count: last.count + refine.count, total: last.total + refine.count };
   } else {
-    queue.push({ recipe: refine.recipe, count: refine.count, total: refine.count, progress: 0 });
+    queue.push({
+      id: run.refinery.nextId,
+      recipe: refine.recipe,
+      count: refine.count,
+      total: refine.count,
+      progress: 0,
+    });
   }
   return { ...state, run: { ...run, bank, refinery: { ...run.refinery, queue } } };
 }

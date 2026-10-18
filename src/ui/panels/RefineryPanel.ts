@@ -10,12 +10,12 @@ import type { PanelCtx } from './context';
 
 /**
  * Structure key for the panel: seed, system number and the queue's
- * `recipe:total` list. Seed+system tell runs apart because queue positions
- * restart per run, like contract board ids.
+ * `id:recipe:total` list. Seed+system tell runs apart because job ids restart per
+ * run, like contract board ids.
  */
 export function refineryKey(state: GameState): string {
   const { profile, run } = state;
-  return `${profile.seed}:${run.system.number}|${run.refinery.queue.map((j) => `${j.recipe}:${j.total}`).join(',')}`;
+  return `${profile.seed}:${run.system.number}|${run.refinery.queue.map((j) => `${j.id}:${j.recipe}:${j.total}`).join(',')}`;
 }
 
 export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
@@ -61,16 +61,16 @@ export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         nodes.push(h('div', { class: 'dim small', text: 'Queue empty.' }));
       } else {
         for (let i = 0; i < queue0.length; i++) {
-          const id = queue0[i]!.recipe;
+          const { id: jobId, recipe: id } = queue0[i]!;
           const done = h('small');
           const cancel = h('button', {
             class: 'danger',
             text: '✕',
             title: 'Cancel and refund',
-            onclick: () => ctx.send({ t: 'cancelRefine', index: i }),
+            onclick: () => ctx.send({ t: 'cancelRefine', jobId }),
           });
           bind(() => {
-            const job = st().run.refinery.queue[i];
+            const job = st().run.refinery.queue.find((j) => j.id === jobId);
             if (job) setText(done, `${job.total - job.count}/${job.total}`);
           });
           nodes.push(

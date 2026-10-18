@@ -197,27 +197,35 @@ describe('load through the production registry', () => {
   });
 
   it('rejects a v4 save whose refinery job names an unknown recipe', () => {
-    const job = { recipe: 'gold', count: 2, total: 2, progress: 0 };
-    const refinery = { queue: [job], produced: { alloy: 0, fuel: 0 } };
+    const job = { id: 1, recipe: 'gold', count: 2, total: 2, progress: 0 };
+    const refinery = { queue: [job], nextId: 2, produced: { alloy: 0, fuel: 0 } };
     expect(deserialize(JSON.stringify(saveV4({ refinery })))).toBeNull();
   });
 
   it('accepts a v4 save with a well-formed refinery job', () => {
-    const job = { recipe: 'fuel', count: 2, total: 2, progress: 0 };
-    const refinery = { queue: [job], produced: { alloy: 0, fuel: 0 } };
+    const job = { id: 1, recipe: 'fuel', count: 2, total: 2, progress: 0 };
+    const refinery = { queue: [job], nextId: 2, produced: { alloy: 0, fuel: 0 } };
     const state = deserialize(JSON.stringify(saveV4({ refinery })));
     expect(state?.run.refinery.queue).toEqual([job]);
   });
 
   it('rejects a v4 save whose refinery job counters are out of range', () => {
     const bad = [
-      { recipe: 'fuel', count: 0, total: 0, progress: 0 },
-      { recipe: 'fuel', count: -1, total: 2, progress: 0 },
-      { recipe: 'fuel', count: 3, total: 2, progress: 0 },
-      { recipe: 'fuel', count: 2, total: 2, progress: -1 },
+      { id: 1, recipe: 'fuel', count: 0, total: 0, progress: 0 },
+      { id: 1, recipe: 'fuel', count: -1, total: 2, progress: 0 },
+      { id: 1, recipe: 'fuel', count: 3, total: 2, progress: 0 },
+      { id: 1, recipe: 'fuel', count: 2, total: 2, progress: -1 },
     ];
     for (const job of bad) {
-      const refinery = { queue: [job], produced: { alloy: 0, fuel: 0 } };
+      const refinery = { queue: [job], nextId: 2, produced: { alloy: 0, fuel: 0 } };
+      expect(deserialize(JSON.stringify(saveV4({ refinery })))).toBeNull();
+    }
+  });
+
+  it('rejects a v4 save whose refinery ids could collide', () => {
+    const job = { id: 4, recipe: 'fuel', count: 2, total: 2, progress: 0 };
+    for (const nextId of [undefined, 4, 2]) {
+      const refinery = { queue: [job], nextId, produced: { alloy: 0, fuel: 0 } };
       expect(deserialize(JSON.stringify(saveV4({ refinery })))).toBeNull();
     }
   });
@@ -225,8 +233,8 @@ describe('load through the production registry', () => {
   it('rejects a v4 save whose refinery job counters are not finite', () => {
     // JSON.parse turns an overflowing literal into Infinity, so isQueue's finite
     // checks are load-bearing rather than merely defensive.
-    const job = { recipe: 'fuel', count: 2, total: 2, progress: 0 };
-    const json = JSON.stringify(saveV4({ refinery: { queue: [job], produced: { alloy: 0, fuel: 0 } } }));
+    const job = { id: 1, recipe: 'fuel', count: 2, total: 2, progress: 0 };
+    const json = JSON.stringify(saveV4({ refinery: { queue: [job], nextId: 2, produced: { alloy: 0, fuel: 0 } } }));
     expect(deserialize(json)?.run.refinery.queue).toEqual([job]);
     const jobJson = '"recipe":"fuel","count":2,"total":2,"progress":0';
     for (const field of ['"count":2', '"total":2', '"progress":0']) {

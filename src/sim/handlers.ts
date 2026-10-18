@@ -119,7 +119,7 @@ export const handlers: Handlers = {
   },
 
   cancelRefine: (state, cmd) => {
-    const job = cancelRefine(state.run, cmd.index);
+    const job = cancelRefine(state.run, cmd.jobId);
     if (!job) return;
     const refundCost = batchCost(job.recipe, job.count);
     state.out.log.push({

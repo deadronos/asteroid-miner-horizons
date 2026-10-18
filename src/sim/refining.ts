@@ -9,7 +9,7 @@ import type { GameState, RefineJob, Refinery, Run } from './types';
 
 /** Fresh refinery: empty queue, no lifetime output. */
 export function newRefinery(): Refinery {
-  return { queue: [], produced: { alloy: 0, fuel: 0 } };
+  return { queue: [], nextId: 1, produced: { alloy: 0, fuel: 0 } };
 }
 
 /** Bank cost of `n` batches of `recipe`, omitting empty entries. */
@@ -69,7 +69,7 @@ export function queueRefine(run: Run, recipe: RecipeId, count: number): { queued
     last.count += n;
     last.total += n;
   } else {
-    queue.push({ recipe, count: n, total: n, progress: 0 });
+    queue.push({ id: run.refinery.nextId++, recipe, count: n, total: n, progress: 0 });
   }
   return { queued: n };
 }
@@ -89,11 +89,12 @@ export function maxBatches(run: Run, recipe: RecipeId): number {
   return Math.max(0, cap);
 }
 
-/** Removes the job at `index` and refunds every unfinished batch; null when out of range. */
-export function cancelRefine(run: Run, index: number): RefineJob | null {
+/** Removes the job with `id` and refunds every unfinished batch; null when it is no longer queued. */
+export function cancelRefine(run: Run, id: number): RefineJob | null {
   const queue = run.refinery.queue;
-  const job = queue[index];
-  if (!job) return null;
+  const index = queue.findIndex((j) => j.id === id);
+  if (index < 0) return null;
+  const job = queue[index]!;
   queue.splice(index, 1);
   const cost = batchCost(job.recipe, job.count);
   for (const r of RESOURCES) run.bank[r] += cost[r] ?? 0;

@@ -135,7 +135,7 @@ describe('command handlers', () => {
     send(s, { t: 'refine', recipe: 'alloy', count: 600 });
 
     expect(s.run.bank.ore).toBe(5000 - 4 * 500);
-    expect(s.run.refinery.queue).toEqual([{ recipe: 'alloy', count: 500, total: 500, progress: 0 }]);
+    expect(s.run.refinery.queue).toEqual([{ id: 1, recipe: 'alloy', count: 500, total: 500, progress: 0 }]);
     expect(s.out.log.at(-1)).toMatchObject({ level: 'info', text: 'Refinery: queued 500 × smelt alloy.' });
   });
 
@@ -157,7 +157,7 @@ describe('command handlers', () => {
     s.run.bank = { ore: 100, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
     send(s, { t: 'refine', recipe: 'alloy', count: 5 });
 
-    send(s, { t: 'cancelRefine', index: 0 });
+    send(s, { t: 'cancelRefine', jobId: s.run.refinery.queue[0]!.id });
 
     expect(s.run.bank.ore).toBe(100);
     expect(s.run.refinery.queue).toHaveLength(0);
@@ -167,7 +167,7 @@ describe('command handlers', () => {
     });
   });
 
-  it('cancelRefine is a silent no-op for an out-of-range index', () => {
+  it('cancelRefine is a silent no-op for an id that is not queued', () => {
     const s = newGame(1);
     s.run.bank = { ore: 100, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
     send(s, { t: 'refine', recipe: 'alloy', count: 5 });
@@ -175,8 +175,8 @@ describe('command handlers', () => {
     const queueBefore = JSON.stringify(s.run.refinery.queue);
     const n = s.out.log.length;
 
-    send(s, { t: 'cancelRefine', index: -1 });
-    send(s, { t: 'cancelRefine', index: 5 });
+    send(s, { t: 'cancelRefine', jobId: -1 });
+    send(s, { t: 'cancelRefine', jobId: 5 });
 
     expect(s.out.log.length).toBe(n);
     expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
