@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FLARES, HAZARD_LEVELS, type HazardLevel } from '../src/data/hazards';
 import { TUNING } from '../src/data/tuning';
 import { newProfile, newRun, SAVE_VERSION } from '../src/sim/create';
-import { newHazards, updateHazards } from '../src/sim/hazards';
+import { cometPathEscape, flareShelter, inFlareZone, newHazards, updateHazards } from '../src/sim/hazards';
 import { SimIndex } from '../src/sim/index';
 import { destroyRock } from '../src/sim/mining';
 import { serialize } from '../src/sim/save';
@@ -532,5 +532,67 @@ describe('solar flares', () => {
     ticks(state, 60, 'off');
     expect(state.run.hazards.flare).toBeNull();
     expect(ship.shield).toBe(st.maxShield);
+  });
+});
+
+describe('hazard predicates for the AI', () => {
+  it('inFlareZone holds only while a flare is pending or burning, within reach plus the pad', () => {
+    const s = game(1, 2, 'M');
+    const edge = FLARES.M!.reach + TUNING.flareShelterPad;
+    const inside = { x: edge - 10, z: 0 };
+    const outside = { x: edge + 10, z: 0 };
+    expect(inFlareZone(s.run, inside)).toBe(false);
+    s.run.hazards.flare = { phase: 'warning', timeLeft: 5 };
+    expect(inFlareZone(s.run, inside)).toBe(true);
+    expect(inFlareZone(s.run, outside)).toBe(false);
+    s.run.hazards.flare.phase = 'active';
+    expect(inFlareZone(s.run, inside)).toBe(true);
+    s.run.system.starClass = 'G';
+    expect(inFlareZone(s.run, inside)).toBe(false);
+  });
+
+  it('cometPathEscape flags points on the path ahead and points straight out of it', () => {
+    const s = game(1);
+    const out = { x: 0, z: 0 };
+    expect(cometPathEscape(s.run, [], { x: 0, z: 10 }, 40, out)).toBe(false);
+    s.run.hazards.comet = { from: { x: -3000, z: 0 }, vel: { x: 130, z: 0 }, belt: 0, timeLeft: 5 };
+    expect(cometPathEscape(s.run, [], { x: 0, z: 10 }, 40, out)).toBe(true);
+    expect(out.z).toBeCloseTo(1);
+    expect(cometPathEscape(s.run, [], { x: 0, z: -10 }, 40, out)).toBe(true);
+    expect(out.z).toBeCloseTo(-1);
+    expect(cometPathEscape(s.run, [], { x: 0, z: 200 }, 40, out)).toBe(false); // beside
+    expect(cometPathEscape(s.run, [], { x: -3300, z: 0 }, 40, out)).toBe(false); // behind
+
+    s.run.hazards.comet = null;
+    const comet: Rock = {
+      id: 1,
+      kind: 'ice',
+      size: 0,
+      pos: { x: 0, z: 0 },
+      vel: { x: 0, z: 130 },
+      radius: 40,
+      hp: 1,
+      maxHp: 1,
+      units: 1,
+      belt: 0,
+      comet: true,
+    };
+    expect(cometPathEscape(s.run, [comet], { x: 5, z: 300 }, 40, out)).toBe(true);
+    expect(out.x).toBeCloseTo(1);
+    expect(cometPathEscape(s.run, [comet], { x: 0, z: 0 }, 40, out)).toBe(true); // its own body
+    expect(cometPathEscape(s.run, [comet], { x: 0, z: -200 }, 40, out)).toBe(false);
+  });
+
+  it('flareShelter docks near the station and otherwise flees to just outside the zone', () => {
+    const s = game(1, 2, 'M');
+    s.run.hazards.flare = { phase: 'warning', timeLeft: 5 };
+    const st = s.run.system.station.pos;
+    const out = { x: 0, z: 0 };
+    expect(flareShelter(s.run, { x: st.x * 1.05, z: st.z * 1.05 }, false, out)).toBe('dock');
+    const far = { x: -st.x * 1.2, z: -st.z * 1.2 }; // opposite the station, inside the zone
+    expect(inFlareZone(s.run, far)).toBe(true);
+    expect(flareShelter(s.run, far, false, out)).toBe('flee');
+    expect(inFlareZone(s.run, out)).toBe(false);
+    expect(flareShelter(s.run, far, true, out)).toBe('dock');
   });
 });

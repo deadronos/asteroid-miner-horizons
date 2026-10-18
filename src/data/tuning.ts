@@ -80,6 +80,10 @@ export const TUNING = {
   flareWarning: 10,
   /** Seconds a flare stays active. */
   flareDuration: 6,
+  /** AI: distance past a flare's reach that still counts as unsafe while a flare is pending or burning. */
+  flareShelterPad: 120,
+  /** AI: clearance either side of a comet's body that counts as its path (plus the ship's own size). */
+  cometDodgePad: 40,
 
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;
