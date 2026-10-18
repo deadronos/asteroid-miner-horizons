@@ -53,5 +53,11 @@ export const TUNING = {
   /** Value of the units in one large rock (≈42 units at radius 30–44, ore/ice mix), used to price breakLarge rewards. */
   contractRockValue: 45,
 
+  // System modifiers.
+  /** First system number that rolls modifiers. */
+  modifierMinSystem: 3,
+  /** Chance a system rolls a second modifier. */
+  modifierTwoChance: 0.5,
+
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;

@@ -5,6 +5,7 @@ import { chance, int, makeRng, next, pick, range, type Rng } from '../core/rng';
 import { fromAngle, type Vec2 } from '../core/vec';
 import type { RawResource } from '../data/resources';
 import { TUNING } from '../data/tuning';
+import { applyBeltModifiers, rollModifiers } from './modifiers';
 import type { Belt, Planet, Rock, RockSize, Run, StarClass, StarSystem } from './types';
 
 const SYL = ['ka', 've', 'lor', 'tha', 'zen', 'mi', 'dra', 'os', 'qu', 'rel', 'syn', 'tar', 'ul', 'ix', 'no', 'pha'];
@@ -75,6 +76,9 @@ export function generateSystem(seed: number, number: number): StarSystem {
     belts.push({ inner: 1950, outer: 2150, mix: { ore: 0.35, ice: 0.35, crystal: 0.3 }, initialCount: 90 });
   }
 
+  const modifiers = rollModifiers(seed, number);
+  applyBeltModifiers(belts, modifiers);
+
   const stationAngle = range(r, 0, Math.PI * 2);
   return {
     name: sysName,
@@ -87,6 +91,7 @@ export function generateSystem(seed: number, number: number): StarSystem {
     belts,
     station: { pos: fromAngle(stationAngle, 1010), angle: stationAngle },
     richness,
+    modifiers,
   };
 }
 
