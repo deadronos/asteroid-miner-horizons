@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Stop beam hums and the danger alarm while the game is paused in an explicit pause or menu, while keeping the alarm audible during an unfocused-window pause, so #67's "no indefinite beeping in a pause menu" holds without losing the away-from-keyboard warning.
+**Goal:** Stop beam hums and the danger alarm while the game is paused in an explicit pause or menu, while keeping the alarm audible during an unfocused-window pause, so #67's "no indefinite beeping in a pause menu" holds without losing the warning for a player whose attention is on another window.
 
 **Architecture:** A new pure `src/pause.ts` classifies why the sim is frozen (`manual` / `menu` / `unfocused`) and maps that to a `ContinuousPolicy` (`hums`, `alarm`). `AudioEngine.updateContinuous` takes that policy and fades hums / skips the alarm accordingly. `src/main.ts` computes the pause kind once and hands the same value to both the pause banner and the audio layer.
 
@@ -23,12 +23,14 @@ Copied from the issue and the spec's rulings:
   | `menu` | off | off |
   | `unfocused` | off | **on** |
 
-- **Banner strings do not change.** `manual` → `PAUSED: press P to resume`; `menu` → `PAUSED: menu open`; `unfocused` → `PAUSED: window not focused`.
+- **Banner strings do not change, and tests pin them with `toBe`.** `manual` → `PAUSED: press P to resume`; `menu` → `PAUSED: menu open`; `unfocused` → `PAUSED: window not focused`. Keyword-only `toContain` assertions are not acceptable.
 - **Pause precedence does not change:** manual > menu > unfocused, each gated by its existing setting (`pauseInMenus`, `pauseUnfocused`).
 - **`nextAlarm` is not reset when the alarm is suppressed.** A pause that opens while the alarm is due must sound on the first frame after resume.
+- **The unfocused case means "visible but not focused".** A hidden tab suspends the `AudioContext` and stops rAF; keeping a timer-driven alarm alive for a hidden tab is out of scope for #67 and must be documented as a caveat, not promised.
 - **No `src/sim/**`, save-format, or settings-shape change.** No new user-facing setting.
-- **Pure rules stay pure and unit-tested.** `src/pause.ts` must not import DOM, three.js, or the AudioEngine.
-- **Default parameter, not a breaking signature change:** `updateContinuous(state, view, policy = LIVE_CONTINUOUS)`.
+- **Pure rules stay pure and unit-tested.** `src/pause.ts` must not import DOM, three.js, or the AudioEngine; it may import the `ContinuousPolicy` type from `src/audio/sfx.ts` (one-directional, no cycle).
+- **The policy parameter is required, not defaulted:** `updateContinuous(state, view, policy)`. There is one call site, and a forgotten argument would silently restore the #67 bug with green CI.
+- **Policies are frozen module constants,** so the frame loop does not allocate a policy per frame and a shared `LIVE_CONTINUOUS` cannot be mutated.
 - **Keep the full CI gate green:** `npm run format:check`, `npm run lint` (warnings fail), `npm run typecheck`, `npm test`, `npx vite build`.
 - **Browser smoke test is mandatory** for final verification: the hum fade and the alarm suppression only exist in Web Audio, which no unit test observes.
 
@@ -58,10 +60,10 @@ Failure modes the obvious assertions do **not** directly exercise, most-likely-f
   ```ts
   /** Which continuous layers may sound this frame. */
   export interface ContinuousPolicy {
-    hums: boolean;
-    alarm: boolean;
+    readonly hums: boolean;
+    readonly alarm: boolean;
   }
-  export const LIVE_CONTINUOUS: ContinuousPolicy = { hums: true, alarm: true };
+  export const LIVE_CONTINUOUS: ContinuousPolicy = Object.freeze({ hums: true, alarm: true });
   ```
 - Produces (in `src/pause.ts`):
   ```ts
@@ -81,7 +83,8 @@ Failure modes the obvious assertions do **not** directly exercise, most-likely-f
   `pauseKind` returns the highest-priority reason: `manual` if `manual`; else `menu` if
   `pauseInMenus && (menuOpen || researchOpen)`; else `unfocused` if
   `pauseUnfocused && !focused`; else null. `pauseBanner(null)` is null.
-  `pauseAudio(null)` returns `LIVE_CONTINUOUS`.
+  `pauseAudio(null)` returns `LIVE_CONTINUOUS`. Hoist the three per-kind policies and the
+  banner table as frozen module constants.
 
 - [ ] **Step 1: Write the failing test** in `tests/pause.test.ts`.
 
@@ -125,11 +128,11 @@ describe('pauseKind', () => {
 });
 
 describe('pauseBanner', () => {
-  it('is null while running and names each pause kind', () => {
+  it('is null while running and names each pause kind exactly', () => {
     expect(pauseBanner(null)).toBeNull();
-    expect(pauseBanner('manual')).toContain('press P');
-    expect(pauseBanner('menu')).toContain('menu open');
-    expect(pauseBanner('unfocused')).toContain('not focused');
+    expect(pauseBanner('manual')).toBe('PAUSED: press P to resume');
+    expect(pauseBanner('menu')).toBe('PAUSED: menu open');
+    expect(pauseBanner('unfocused')).toBe('PAUSED: window not focused');
   });
 });
 
@@ -183,7 +186,7 @@ imports nothing from `three`, `./audio/AudioEngine`, or the DOM.
 
 **Interfaces:**
 - Consumes: `ContinuousPolicy`, `LIVE_CONTINUOUS` from Task 1.
-- Produces: `AudioEngine.updateContinuous(state: GameState, view: View, policy?: ContinuousPolicy): void`.
+- Produces: `AudioEngine.updateContinuous(state: GameState, view: View, policy: ContinuousPolicy): void` (required parameter).
 
 - [ ] **Step 1: Update `AudioEngine.updateContinuous`.**
 
@@ -193,7 +196,7 @@ imports nothing from `three`, `./audio/AudioEngine`, or the DOM.
    * while the selected ship is in danger. `policy` selects which layers may sound
    * this frame (see `pauseAudio`). Called every frame; read-only on `state`.
    */
-  updateContinuous(state: GameState, view: View, policy: ContinuousPolicy = LIVE_CONTINUOUS): void {
+  updateContinuous(state: GameState, view: View, policy: ContinuousPolicy): void {
     const { ctx, sfx } = this;
     // Locked or suspended: never start a voice, just fade out whatever is left.
     if (!ctx || !sfx || ctx.state !== 'running') {
@@ -215,9 +218,9 @@ imports nothing from `three`, `./audio/AudioEngine`, or the DOM.
 ```
 
   The hum block body is the current code exactly (release dropped voices, create up to
-  `MAX_HUMS`, ramp gain/freq/filter/pan). Import `type ContinuousPolicy`,
-  `LIVE_CONTINUOUS` from `./sfx`. Update the file-header comment that says the method "is
-  called every frame" to mention the policy.
+  `MAX_HUMS`, ramp gain/freq/filter/pan). Import `type ContinuousPolicy` from `./sfx`.
+  Update the file-header comment that says the method "is called every frame" to mention
+  the policy.
 
 - [ ] **Step 2: Rewire `src/main.ts`.**
   - Import `{ pauseAudio, pauseBanner, pauseKind }` from `./pause`.
@@ -249,6 +252,13 @@ imports nothing from `three`, `./audio/AudioEngine`, or the DOM.
 **Done when:** `src/main.ts` no longer contains `pauseReason`, `grep -rn "pauseReason" src`
 is empty, the banner still shows the same three strings, and every existing test passes.
 
+### Verification gap (recorded honestly)
+
+No unit test observes the audio path: vitest runs in the default node environment and
+`tests/audio.test.ts` only exercises pure functions. A wiring regression in `main.ts` is
+CI-invisible, which is why Task 3's browser smoke test is mandatory and its evidence is
+recorded in the run log.
+
 ---
 
 ## Task 3: Documentation and browser verification (controller)
@@ -264,15 +274,34 @@ is empty, the banner still shows the same three strings, and every existing test
   unfocused. Keep it to two lines.
 
 - [ ] **Step 2: Browser smoke test (mandatory).** Start `npm run dev`, open the page,
-  click once to unlock the AudioContext (check `__amh.audio.state === 'running'`).
-  Force a danger state through the debug hook (selected ship `hull = 1`) and an active
-  beam (set a ship's `beamOn = true` / `beamTargetId` to a live rock). Then:
-  1. Running: `__amh.audio.hums.size > 0` and `nextAlarm` advances within ~2 s.
-  2. Open the ⚙ menu: hums fall to 0 and `nextAlarm` stops advancing.
-  3. Close it: hums return and a due alarm fires promptly.
-  4. Simulate unfocus with `document.hasFocus = () => false`: hums stay 0 while
-     `nextAlarm` advances (alarm alive).
-  Confirm no console errors. Record the observations for the run log.
+  click once to unlock the AudioContext (check `__amh.audio.state === 'running'`). The
+  automation harness (CDP/DevTools) often leaves `document.hasFocus()` **false**, so
+  **force and assert focus explicitly in both directions** rather than trusting it:
+  `Object.defineProperty(document, 'hasFocus', { value: () => true, configurable: true })`
+  for steps 1-3, and `() => false` for step 4. Confirm the override took effect by reading
+  the pause banner (`#paused` text) after each change.
+
+  Build a repeatable danger state: pick the selected ship, set `hull = 1`, and set a ship's
+  `beamOn = true` with `beamTargetId` pointing at a live rock. Re-assert the danger state
+  before each observation (a destroyed selected ship respawns and `alarmLevel` drops to 0,
+  silently invalidating the probe).
+
+  **Probe the alarm by when it actually starts, not by `nextAlarm`:** read
+  `__amh.audio.limiter.last.get('alarm')` (last alarm start in ctx seconds; reachable at
+  runtime).
+  1. Running (forced focus): `__amh.audio.hums.size > 0`; the alarm start advances within
+     ~1.5 s.
+  2. Open the ⚙ menu: `hums.size` becomes 0 (immediately; the mix fades over ~0.5 s) and
+     the alarm start does **not** change across a ≥ 1.5 s wait — this is the direct
+     evidence for "no indefinite beeping".
+  3. Close the menu: `hums.size > 0` again and the alarm start advances within ~1.2 s
+     (a pause that opened while due fires promptly on resume).
+  4. Force `hasFocus = () => false`: `hums.size === 0` while the alarm start still
+     advances within ~1.5 s (alarm alive for a visible but unfocused window). The banner
+     reads `PAUSED: window not focused`.
+
+  Confirm no console errors. Record each observation and the `hasFocus` overrides in the
+  run log, including the hidden-tab caveat from the spec.
 
 - [ ] **Step 3: Full gate.** Run `npm run check` and `npx vite build`. Commit the README
   and the run log: `Document pause-aware continuous audio and verify in the browser (#67)`.

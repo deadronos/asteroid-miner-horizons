@@ -35,12 +35,21 @@ Rationale:
   issue's acceptance criterion is "no indefinite beeping while the player is in a pause
   menu".
 - **Unfocused keeps only the alarm.** A hum is feedback for something you are watching;
-  the alarm is a warning for someone who tabbed away. This is the case #67 calls out as
-  "exactly when a low-hull alarm is most useful".
-- **No new setting.** The distinction is derivable from existing state; a toggle would
-  add a fourth combination with no clear player story. (Ruling; cost if wrong: a small
-  settings + tests addition.)
+  the alarm is a warning for someone whose attention is elsewhere. This is the case #67
+  calls out as "exactly when a low-hull alarm is most useful".
 
+**Scope caveat (from plan review):** "unfocused" here means the game window is still
+visible (side by side with another app, or blurred) but `document.hasFocus()` is false.
+A **hidden tab** is a different path: `visibilitychange` suspends the `AudioContext`,
+`requestAnimationFrame` stops, and `updateContinuous`'s locked/suspended branch clears
+`nextAlarm`. So a hidden tab is silent and the alarm is deferred to the moment the player
+returns (the first resumed frame is immediately due). Keeping a timer-driven alarm alive
+for a hidden tab is explicitly **out of scope for #67** and is recorded as a caveat rather
+than promised.
+
+**No new setting.** The distinction is derivable from existing state; a toggle would add a
+fourth combination with no clear player story. (Ruling; cost if wrong: a small settings +
+tests addition.)
 The chosen option when the controller asked the author was "Menu silent, alarm-only when
 unfocused".
 
@@ -82,12 +91,15 @@ export function pauseAudio(kind: PauseKind | null): ContinuousPolicy;
 ```ts
 /** Which continuous layers may sound this frame. */
 export interface ContinuousPolicy {
-  hums: boolean;
-  alarm: boolean;
+  readonly hums: boolean;
+  readonly alarm: boolean;
 }
 
-export const LIVE_CONTINUOUS: ContinuousPolicy = { hums: true, alarm: true };
+export const LIVE_CONTINUOUS: ContinuousPolicy = Object.freeze({ hums: true, alarm: true });
 ```
+
+`pause.ts` hoists the per-kind policies as frozen module constants, so the frame loop does
+not allocate a policy object per frame.
 
 `pause.ts` imports the type from `./audio/sfx` (type-only use of a leaf module, no cycle);
 `AudioEngine` imports the type and the constant. `main.ts` is the only place that joins
@@ -96,8 +108,13 @@ export const LIVE_CONTINUOUS: ContinuousPolicy = { hums: true, alarm: true };
 ### `AudioEngine.updateContinuous` takes the policy
 
 ```ts
-updateContinuous(state: GameState, view: View, policy: ContinuousPolicy = LIVE_CONTINUOUS): void
+updateContinuous(state: GameState, view: View, policy: ContinuousPolicy): void
 ```
+
+The policy parameter is **required** (not defaulted). There is exactly one caller
+(`src/main.ts`), and the bug behind #67 was precisely a continuous audio call that did not
+know about pause; a required parameter turns a forgotten argument into a compile error
+rather than a silent regression.
 
 - `policy.hums === false` → `silenceHums()` (the existing fade-out path) and skip
   `beamHums`.
@@ -106,8 +123,7 @@ updateContinuous(state: GameState, view: View, policy: ContinuousPolicy = LIVE_C
   instead of being pushed a further 1.1 s into the future. That is the desirable
   "welcome back, you are still on fire" behavior.
 - The locked/suspended-context path is unchanged: it silences hums and clears `nextAlarm`.
-- The default parameter keeps the method source-compatible; only `main.ts` passes a
-  policy.
+- Only `main.ts` calls the method, so the required parameter has one call site.
 
 ### `main.ts`
 
@@ -137,9 +153,11 @@ Not touched: `src/sim/**`, save format, settings shape, DSP/presets, `beamHums` 
 2. **The unfocused case silences the alarm too**, which is the whole point of the issue.
    A dedicated `pauseAudio('unfocused')` assertion pins `alarm: true`. Owning task:
    Task 1.
-3. **Resume leaves a stuck hum or a stuck silence.** `silenceHums()` only clears the map
-   after fading; the next unpaused frame rebuilds voices through the normal path. Smoke
-   test closes the menu and re-checks `hums.size > 0`. Owning task: Task 2 + Task 3.
+3. **Resume leaves a stuck hum or a stuck silence.** `silenceHums()` clears the map
+   immediately and lets `releaseHum` schedule the fade-out (`HUM_RELEASE * 4` ≈ 0.5 s), so
+   a gated layer can have an audible tail after the pause; the next unpaused frame rebuilds
+   voices through the normal path. Smoke test closes the menu and re-checks
+   `hums.size > 0`. Owning task: Task 2 + Task 3.
 4. **The banner and the audio disagree** because one path still recomputes the reason.
    Task 2 rewires both call sites to the same `kind` value.
 5. **`pauseUnfocused` is off, so losing focus keeps the sim running.** `pauseKind`
