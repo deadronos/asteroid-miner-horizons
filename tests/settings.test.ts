@@ -91,7 +91,9 @@ describe('assists', () => {
       // Park the flagship away from the station so "escorting" it doesn't dock the drone by accident.
       flagship(s.run).pos = { x: st.x + 600, z: st.z };
       runFor(s, 15, { ...ON, autoDock });
-      expect(drone.cargo.ore === 0).toBe(autoDock);
+      // Assert the unload itself rather than an empty hold: a faster drone
+      // starts re-mining within the window, so its hold is non-empty again.
+      expect(s.run.runValue > 0).toBe(autoDock);
     }
   });
 });

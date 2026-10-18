@@ -123,7 +123,7 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
-    "dps": 18,
+    "dps": 26,
     "magnet": 70,
     "maxHull": 100,
     "maxShield": 0,

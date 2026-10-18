@@ -48,7 +48,10 @@ export interface ComponentDef {
 }
 
 // Numbers per tier (index tier-1). Kept here so the sim and the UI agree.
-export const LASER_DPS = [18, 32, 55] as const;
+// Tier 1 is the starter laser and every drone's first (often only) laser, so it
+// sets the whole opening pace: raised from 18 to 26 so the first large rock
+// breaks in ~6 s and the first drone lands under 4 min (#45).
+export const LASER_DPS = [26, 32, 55] as const;
 export const LASER_RANGE = [170, 205, 250] as const;
 export const ENGINE_SPEED = [30, 60, 95] as const;
 export const SHIELD_CAP = [35, 75, 130] as const;
