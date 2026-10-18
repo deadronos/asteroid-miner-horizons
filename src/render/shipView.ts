@@ -7,7 +7,7 @@ import type { Vec2 } from '../core/vec';
 import { HULLS, type HullId } from '../data/hulls';
 import { walletTotal } from '../data/resources';
 import { isAlive, shipStats } from '../sim/ships';
-import type { GameState, Ship } from '../sim/types';
+import type { GameState, Rock, Ship } from '../sim/types';
 import { additive, flat, glowTexture } from './util';
 
 const HULL_SHAPES: Record<HullId, [number, number][]> = {
@@ -87,6 +87,9 @@ export class ShipView {
   private geos = new Map<HullId, THREE.BufferGeometry>();
   /** HDR boost for flames and beams while bloom is on (1 = as authored). */
   glow = 1;
+  /** Per-frame scratch, reused so `update` allocates no collections. */
+  private seen = new Set<number>();
+  private rockById = new Map<number, Rock>();
 
   private geo(id: HullId): THREE.BufferGeometry {
     let g = this.geos.get(id);
@@ -194,9 +197,14 @@ export class ShipView {
     alwaysBars: boolean,
   ): { x: number; z: number; ship: Ship }[] {
     const { run, profile } = state;
-    const seen = new Set<number>();
+    const seen = this.seen;
+    seen.clear();
     const hits: { x: number; z: number; ship: Ship }[] = [];
-    const rockById = new Map(run.rocks.map((r) => [r.id, r]));
+    // Beam targets are looked up through a reused map, filled only on frames
+    // where some ship is actually firing.
+    const rockById = this.rockById;
+    rockById.clear();
+    if (run.ships.some((s) => s.beamOn && s.beamTargetId != null)) for (const r of run.rocks) rockById.set(r.id, r);
 
     for (const ship of run.ships) {
       seen.add(ship.id);

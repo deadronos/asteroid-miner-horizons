@@ -8,6 +8,7 @@ import { hash01 } from '../core/rng';
 import { RESOURCE_INFO, type RawResource } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { Pickup, Rock } from '../sim/types';
+import { inView, type ViewRect } from './cull';
 import { rockGeometry } from './util';
 
 const VARIANTS = 6;
@@ -17,6 +18,12 @@ export const ROCK_TINT: Record<RawResource, THREE.Color> = {
   crystal: new THREE.Color(0xc48cff),
 };
 const HOT = new THREE.Color(0xff5a2a);
+/**
+ * Cull radii. Rock shapes reach 1.22× their radius (see `rockGeometry`) and
+ * shudder adds 3.5%; a pickup's octahedron tops out near 8 units.
+ */
+const ROCK_BOUND = 1.3;
+const PICKUP_BOUND = 10;
 
 const m = new THREE.Matrix4();
 const q = new THREE.Quaternion();
@@ -163,10 +170,22 @@ export class RockView {
     );
   }
 
-  update(rocks: readonly Rock[], pickups: readonly Pickup[], time: number): void {
+  /**
+   * Writes instances for the rocks and pickups inside `view` only; everything
+   * else is skipped, so a zoomed-in camera composes and uploads a handful of
+   * matrices instead of the whole belt.
+   */
+  update(rocks: readonly Rock[], pickups: readonly Pickup[], time: number, view: ViewRect): void {
     crackTime.value = time;
     for (const b of this.buckets) b.length = 0;
-    for (const r of rocks) this.buckets[r.id % VARIANTS]!.push(r);
+    for (const r of rocks) {
+      // Hit tracking runs for every rock, so one that drifts into view after
+      // being mined off-screen doesn't shudder as if it had just been hit.
+      const prev = this.lastHp.get(r.id);
+      if (prev != null && r.hp < prev - 1e-6) this.hitAt.set(r.id, time);
+      this.lastHp.set(r.id, r.hp);
+      if (inView(view, r.pos.x, r.pos.z, r.radius * ROCK_BOUND)) this.buckets[r.id % VARIANTS]!.push(r);
+    }
     // Forget rocks that no longer exist (cracked or despawned).
     if (this.lastHp.size > rocks.length + 64) {
       const live = new Set(rocks.map((r) => r.id));
@@ -182,9 +201,6 @@ export class RockView {
         e.set(h * 6.28, time * (h - 0.5) * 0.9 + h * 10, hash01(r.id + 7) * 6.28);
         q.setFromEuler(e);
         const dmg = 1 - Math.max(0, r.hp) / r.maxHp;
-        const prev = this.lastHp.get(r.id);
-        if (prev != null && r.hp < prev - 1e-6) this.hitAt.set(r.id, time);
-        this.lastHp.set(r.id, r.hp);
         const since = time - (this.hitAt.get(r.id) ?? -1);
         const shudder = since < 0.15 ? Math.sin(time * 70 + r.id) * 0.035 : 0;
         const k = r.radius * (1 - 0.12 * dmg) * (1 + shudder);
@@ -202,15 +218,18 @@ export class RockView {
 
     const pp = this.pickups;
     pp.reserve(pickups.length);
-    pickups.forEach((pk, i) => {
+    let n = 0;
+    for (const pk of pickups) {
+      if (!inView(view, pk.pos.x, pk.pos.z, PICKUP_BOUND)) continue;
       const fade = Math.min(1, (TUNING.pickupLifetime - pk.age) / 5);
       const size = (3 + Math.min(4, Math.sqrt(pk.amount) * 1.4)) * (1 + Math.sin(time * 6 + pk.id) * 0.12) * fade;
       q.setFromEuler(e.set(0.6, time * 2.5 + pk.id, 0.4));
       p.set(pk.pos.x, 4, pk.pos.z);
       s.setScalar(Math.max(0.01, size));
-      pp.mesh.setMatrixAt(i, m.compose(p, q, s));
-      pp.mesh.setColorAt(i, c.setHex(RESOURCE_INFO[pk.kind].color).multiplyScalar(this.glowK));
-    });
-    pp.commit(pickups.length);
+      pp.mesh.setMatrixAt(n, m.compose(p, q, s));
+      pp.mesh.setColorAt(n, c.setHex(RESOURCE_INFO[pk.kind].color).multiplyScalar(this.glowK));
+      n++;
+    }
+    pp.commit(n);
   }
 }
