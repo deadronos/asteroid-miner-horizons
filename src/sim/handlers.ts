@@ -6,7 +6,8 @@ import { v } from '../core/vec';
 import { COMPONENTS, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
-import { RESOURCES, pay, type Cost } from '../data/resources';
+import { RECIPES } from '../data/refining';
+import { RESOURCES, formatCost, pay, type Cost } from '../data/resources';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
 import { describeContract, fillBoard } from './contracts';
 import { newRun } from './create';
@@ -21,6 +22,7 @@ import {
   upgradeCost,
   warpCost,
 } from './economy';
+import { batchCost, cancelRefine, queueRefine } from './refining';
 import { droneCount, findShip, flagship, isAlive, isFlagship, makeShip, shipStats } from './ships';
 import type { Fitted, GameState, Ship } from './types';
 
@@ -93,6 +95,7 @@ export const handlers: Handlers = {
     profile.dataEarned += gain;
     profile.warps += 1;
     const dropped = run.contracts.active;
+    const left = run.refinery.queue;
     state.run = newRun(profile);
     out.fx.push({ t: 'warp' });
     out.log.push({
@@ -100,6 +103,29 @@ export const handlers: Handlers = {
       text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.`,
     });
     if (dropped) out.log.push({ level: 'warn', text: `Contract left behind: ${describeContract(dropped)}.` });
+    if (left.length > 0) {
+      const jobs = left.map((j) => `${j.count} × ${RECIPES[j.recipe].name.toLowerCase()}`).join(', ');
+      out.log.push({ level: 'warn', text: `Refinery queue left behind: ${jobs}.` });
+    }
+  },
+
+  refine: (state, cmd) => {
+    const result = queueRefine(state.run, cmd.recipe, cmd.count);
+    if ('error' in result) return fail(state, result.error);
+    state.out.log.push({
+      level: 'info',
+      text: `Refinery: queued ${result.queued} × ${RECIPES[cmd.recipe].name.toLowerCase()}.`,
+    });
+  },
+
+  cancelRefine: (state, cmd) => {
+    const job = cancelRefine(state.run, cmd.index);
+    if (!job) return;
+    const refundCost = batchCost(job.recipe, job.count);
+    state.out.log.push({
+      level: 'info',
+      text: `Refinery: cancelled ${job.count} × ${RECIPES[job.recipe].name.toLowerCase()}, refunded ${formatCost(refundCost)}.`,
+    });
   },
 
   buyHull: (state, cmd) => {

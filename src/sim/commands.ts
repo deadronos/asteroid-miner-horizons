@@ -9,6 +9,7 @@ import type { Vec2 } from '../core/vec';
 import type { ComponentId } from '../data/components';
 import type { HullId } from '../data/hulls';
 import type { PerkId } from '../data/perks';
+import type { RecipeId } from '../data/refining';
 import { handlers } from './handlers';
 import type { AiMode, GameState } from './types';
 
@@ -27,6 +28,8 @@ export type Command =
   | { t: 'scrap'; shipId: number }
   | { t: 'buyPerk'; perk: PerkId }
   | { t: 'warp' }
+  | { t: 'refine'; recipe: RecipeId; count: number }
+  | { t: 'cancelRefine'; index: number }
   | { t: 'acceptContract'; contractId: number }
   | { t: 'abandonContract' };
 

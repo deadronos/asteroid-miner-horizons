@@ -117,6 +117,75 @@ describe('command handlers', () => {
     expect(s.out.log.some((l) => l.level === 'warn' && l.text.startsWith('Contract left behind'))).toBe(true);
   });
 
+  it('refine queues the clamped batch count and debits exactly its cost', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 5000, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'refine', recipe: 'alloy', count: 600 });
+
+    expect(s.run.bank.ore).toBe(5000 - 4 * 500);
+    expect(s.run.refinery.queue).toEqual([{ recipe: 'alloy', count: 500, total: 500, progress: 0 }]);
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'info', text: 'Refinery: queued 500 × smelt alloy.' });
+  });
+
+  it('refine warns and leaves the bank and queue untouched when unaffordable', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    const bankBefore = JSON.stringify(s.run.bank);
+    const queueBefore = JSON.stringify(s.run.refinery.queue);
+
+    send(s, { t: 'refine', recipe: 'alloy', count: 5 });
+
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn', text: 'Not enough ore to refine 5 alloy.' });
+    expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
+    expect(JSON.stringify(s.run.refinery.queue)).toBe(queueBefore);
+  });
+
+  it('cancelRefine refunds the unfinished batches', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 100, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'refine', recipe: 'alloy', count: 5 });
+
+    send(s, { t: 'cancelRefine', index: 0 });
+
+    expect(s.run.bank.ore).toBe(100);
+    expect(s.run.refinery.queue).toHaveLength(0);
+    expect(s.out.log.at(-1)).toMatchObject({
+      level: 'info',
+      text: 'Refinery: cancelled 5 × smelt alloy, refunded 20⬢.',
+    });
+  });
+
+  it('cancelRefine is a silent no-op for an out-of-range index', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 100, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'refine', recipe: 'alloy', count: 5 });
+    const bankBefore = JSON.stringify(s.run.bank);
+    const queueBefore = JSON.stringify(s.run.refinery.queue);
+    const n = s.out.log.length;
+
+    send(s, { t: 'cancelRefine', index: -1 });
+    send(s, { t: 'cancelRefine', index: 5 });
+
+    expect(s.out.log.length).toBe(n);
+    expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
+    expect(JSON.stringify(s.run.refinery.queue)).toBe(queueBefore);
+  });
+
+  it('warp leaves a queued refinery job behind', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 100, ice: 1000, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'refine', recipe: 'alloy', count: 5 });
+    s.out.log.length = 0;
+
+    send(s, { t: 'warp' });
+
+    expect(s.run.refinery.queue).toHaveLength(0);
+    const complete = s.out.log.findIndex((l) => l.text.startsWith('Warp complete'));
+    const left = s.out.log.findIndex((l) => l.text === 'Refinery queue left behind: 5 × smelt alloy.');
+    expect(left).toBeGreaterThan(complete);
+    expect(s.out.log[left]).toMatchObject({ level: 'warn' });
+  });
+
   it('acceptContract moves an offer to active and refills the board', () => {
     const s = newGame(1);
     const board = s.run.contracts;
@@ -206,7 +275,7 @@ describe('command handlers', () => {
     s.run.selectedId = 0;
     handlers.select(s, { t: 'select', shipId: fs.id });
     expect(s.run.selectedId).toBe(fs.id);
-    expect(Object.keys(handlers)).toHaveLength(16);
+    expect(Object.keys(handlers)).toHaveLength(18);
   });
 
   it('a command for a missing ship is a silent no-op', () => {

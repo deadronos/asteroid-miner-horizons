@@ -13,7 +13,7 @@ export function newRefinery(): Refinery {
 }
 
 /** Bank cost of `n` batches of `recipe`, omitting empty entries. */
-function batchCost(recipe: RecipeId, n: number): Cost {
+export function batchCost(recipe: RecipeId, n: number): Cost {
   const input = RECIPES[recipe].input;
   const cost: Cost = {};
   for (const r of RESOURCES) {
