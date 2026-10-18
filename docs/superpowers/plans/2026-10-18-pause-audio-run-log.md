@@ -89,13 +89,15 @@ The alarm probe is `limiter.last.get('alarm')` (ctx seconds); hums probe is `hum
 | --- | --- | --- | --- | --- |
 | 1 | running | 1 | 64.79 → 65.91 over 1.6 s | hidden |
 | 2 | ⚙ menu open | **0** | **72.58 → 72.58** over 2.1 s | `PAUSED: menu open` |
-| 3 | resumed (Esc) | **1** | 89.97 → 91.08 | hidden |
+| 3 | resumed (Esc) at ctx ≈ 89.9 | **1** | 89.97 → 91.08 | hidden |
 | 4 | `hasFocus = false` (visible) | **0** (beam still on) | 103.33 → 105.56 | `PAUSED: window not focused` |
 
 - Step 2 is the direct evidence for the "no indefinite beeping in a pause menu" criterion:
   the alarm did not restart across a 2.1 s pause window.
-- Step 3 shows a pause that opened while the alarm was due fires ~0.1 s after resume, not
-  1.1 s later — the `nextAlarm`-untouched ruling works.
+- Step 3 shows the overdue alarm firing on the first resumed frame: the menu was open from
+  ctx ≈ 76.5 to ctx ≈ 89.9 (each agent-browser command has CLI startup latency, so the
+  pause itself lasted longer than the 2.1 s probe window), and the alarm started at ctx
+  89.97 — within one frame of resume — then kept its normal 1.1 s cadence (91.08).
 - Step 4 is the issue's key case: with `beamOn` still true, hums were silenced while the
   alarm kept its cadence.
 - Console held only the two Vite `[debug]` lines; no errors.

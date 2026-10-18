@@ -86,7 +86,7 @@ Failure modes the obvious assertions do **not** directly exercise, most-likely-f
   `pauseAudio(null)` returns `LIVE_CONTINUOUS`. Hoist the three per-kind policies and the
   banner table as frozen module constants.
 
-- [ ] **Step 1: Write the failing test** in `tests/pause.test.ts`.
+- [x] **Step 1: Write the failing test** in `tests/pause.test.ts`.
 
 ```ts
 import { describe, expect, it } from 'vitest';
@@ -152,10 +152,10 @@ describe('pauseAudio', () => {
 });
 ```
 
-- [ ] **Step 2: Run the test and see it fail.** Run `npx vitest run tests/pause.test.ts`.
+- [x] **Step 2: Run the test and see it fail.** Run `npx vitest run tests/pause.test.ts`.
   Expected: FAIL — cannot resolve `../src/pause`, and `LIVE_CONTINUOUS` is not exported.
 
-- [ ] **Step 3: Implement.** Add the two exports to `src/audio/sfx.ts` near the other
+- [x] **Step 3: Implement.** Add the two exports to `src/audio/sfx.ts` near the other
   continuous-layer declarations. Create `src/pause.ts` with a file-header comment
   explaining that it is the single source of truth for "why frozen" and "what may sound",
   plus the types/functions above. Keep the banner strings byte-identical to the strings
@@ -164,10 +164,10 @@ describe('pauseAudio', () => {
   Import `ContinuousPolicy` (and `LIVE_CONTINUOUS`) from `./audio/sfx` using `import type`
   for the type where possible.
 
-- [ ] **Step 4: Run the test and see it pass.** Run `npx vitest run tests/pause.test.ts`.
+- [x] **Step 4: Run the test and see it pass.** Run `npx vitest run tests/pause.test.ts`.
   Expected: PASS.
 
-- [ ] **Step 5: Gate and commit.** Run `npm run format`, `npm run lint`,
+- [x] **Step 5: Gate and commit.** Run `npm run format`, `npm run lint`,
   `npm run typecheck`, `npx vitest run tests/pause.test.ts`. Commit:
   `Add a pure pause-kind and continuous-audio policy rule (#67)`.
 
@@ -188,7 +188,7 @@ imports nothing from `three`, `./audio/AudioEngine`, or the DOM.
 - Consumes: `ContinuousPolicy`, `LIVE_CONTINUOUS` from Task 1.
 - Produces: `AudioEngine.updateContinuous(state: GameState, view: View, policy: ContinuousPolicy): void` (required parameter).
 
-- [ ] **Step 1: Update `AudioEngine.updateContinuous`.**
+- [x] **Step 1: Update `AudioEngine.updateContinuous`.**
 
 ```ts
   /**
@@ -222,7 +222,7 @@ imports nothing from `three`, `./audio/AudioEngine`, or the DOM.
   Update the file-header comment that says the method "is called every frame" to mention
   the policy.
 
-- [ ] **Step 2: Rewire `src/main.ts`.**
+- [x] **Step 2: Rewire `src/main.ts`.**
   - Import `{ pauseAudio, pauseBanner, pauseKind }` from `./pause`.
   - Delete the private `pauseReason()` function.
   - In `frame()`, replace `const paused = pauseReason();` with:
@@ -245,7 +245,7 @@ imports nothing from `three`, `./audio/AudioEngine`, or the DOM.
   - `paused` stays the same truthy/null value the `if (paused)` branch already uses, so
     the sim-freeze branch is unchanged.
 
-- [ ] **Step 3: Typecheck and gate.** Run `npm run typecheck`, then `npm run format`,
+- [x] **Step 3: Typecheck and gate.** Run `npm run typecheck`, then `npm run format`,
   `npm run lint`, `npm test`. All green and still 321+ tests. Commit:
   `Gate continuous audio on the pause kind (#67)`.
 
@@ -267,13 +267,13 @@ recorded in the run log.
 - Modify: `README.md` (audio bullet)
 - Create: `docs/superpowers/plans/2026-10-18-pause-audio-run-log.md`
 
-- [ ] **Step 1: README audio bullet.** Replace
+- [x] **Step 1: README audio bullet.** Replace
   `_Audio_: volume sliders reserved for when sound arrives.`
   with a bullet that states the sliders apply live and that beam hums go quiet while
   paused while the low-hull/overheat alarm keeps sounding only while the window is
   unfocused. Keep it to two lines.
 
-- [ ] **Step 2: Browser smoke test (mandatory).** Start `npm run dev`, open the page,
+- [x] **Step 2: Browser smoke test (mandatory).** Start `npm run dev`, open the page,
   click once to unlock the AudioContext (check `__amh.audio.state === 'running'`). The
   automation harness (CDP/DevTools) often leaves `document.hasFocus()` **false**, so
   **force and assert focus explicitly in both directions** rather than trusting it:
@@ -303,7 +303,7 @@ recorded in the run log.
   Confirm no console errors. Record each observation and the `hasFocus` overrides in the
   run log, including the hidden-tab caveat from the spec.
 
-- [ ] **Step 3: Full gate.** Run `npm run check` and `npx vite build`. Commit the README
+- [x] **Step 3: Full gate.** Run `npm run check` and `npx vite build`. Commit the README
   and the run log: `Document pause-aware continuous audio and verify in the browser (#67)`.
 
 **Done when:** the README describes the behavior, the smoke test observations are in the
