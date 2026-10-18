@@ -126,6 +126,7 @@ export class Streak {
 /** Maps one sim fx to a sound, or null if it's inaudible from here. */
 export function voiceFor(fx: Fx, view: View, streak: Streak, now: number): Voice | null {
   if (fx.t === 'warp') return { id: 'warp', gain: 1, pan: 0, rate: 1 };
+  if (fx.t === 'hazard') return null; // sounds arrive with the hazard presentation
   const [g, pan] = spatial(fx.pos, view);
   if (g <= 0.02) return null;
   const jitter = 0.94 + Math.random() * 0.12;

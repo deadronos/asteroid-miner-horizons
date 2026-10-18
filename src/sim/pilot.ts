@@ -1,6 +1,7 @@
 // Ship piloting: steering with obstacle avoidance, order execution and the
 // drone AI. Everything here operates on one ship per call.
 
+import type { HazardLevel } from '../data/hazards';
 import { damp, dist, distSq, len, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import type { Assists } from './assists';
@@ -15,6 +16,8 @@ export interface TickCtx {
   index: SimIndex;
   dt: number;
   assists: Assists;
+  /** Hazard level for this tick; scales flare damage. */
+  hazards: HazardLevel;
 }
 
 /**

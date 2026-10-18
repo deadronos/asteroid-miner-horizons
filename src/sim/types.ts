@@ -226,7 +226,8 @@ export type Fx =
   | { t: 'dock'; pos: Vec2; shipId: number; value: number }
   | { t: 'impact'; pos: Vec2 }
   | { t: 'explode'; pos: Vec2 }
-  | { t: 'warp' };
+  | { t: 'warp' }
+  | { t: 'hazard'; kind: 'comet' | 'flare'; phase: 'warn' | 'start'; pos?: Vec2 };
 
 export interface LogEntry {
   /** info: routine · warn: rejected command / danger · major: milestones and losses */

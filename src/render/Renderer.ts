@@ -345,6 +345,8 @@ export class Renderer {
           this.warpFlash = 1;
           this.follow = true;
           break;
+        case 'hazard':
+          break;
       }
     }
     state.out.fx.length = 0;

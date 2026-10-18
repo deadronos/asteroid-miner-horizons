@@ -1,8 +1,9 @@
 // The fixed-step simulation tick. Order of operations:
-// commands → orbits → rocks → ships (pilot, collide, heat, dock) → pickups → belt regrowth → contracts → refinery.
+// commands → orbits → rocks → hazards → ships (pilot, collide, heat, dock) → pickups → belt regrowth → contracts → refinery.
 
 import { range } from '../core/rng';
 import { damp, dist, type Vec2 } from '../core/vec';
+import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
 import { walletValue, RESOURCES, RESOURCE_INFO, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { DEFAULT_ASSISTS, type Assists } from './assists';
@@ -10,6 +11,7 @@ import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
 import { spawnBeltRock } from './generate';
+import { updateHazards } from './hazards';
 import type { SimIndex } from './index';
 import { systemEffects } from './modifiers';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
@@ -22,6 +24,8 @@ export interface TickInput {
   thrust: Vec2;
   commands: Command[];
   assists?: Assists;
+  /** Hazard difficulty; absent means 'off'. */
+  hazards?: HazardLevel;
 }
 
 /** Applies and clears queued commands. Also used while paused so menus still work. */
@@ -44,6 +48,11 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   // Rocks drift on slow circular orbits; fragments settle back into them.
   const settle = 1 - damp(0.25, dt);
   for (const r of run.rocks) {
+    if (r.comet) {
+      r.pos.x += r.vel.x * dt;
+      r.pos.z += r.vel.z * dt;
+      continue;
+    }
     const d = Math.hypot(r.pos.x, r.pos.z) || 1;
     const tx = (-r.pos.z / d) * TUNING.rockOrbitSpeed;
     const tz = (r.pos.x / d) * TUNING.rockOrbitSpeed;
@@ -52,6 +61,8 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     r.pos.x += r.vel.x * dt;
     r.pos.z += r.vel.z * dt;
   }
+  const level = input.hazards ?? 'off';
+  updateHazards(state, dt, level);
   index.rebuild(state);
 
   const ctx: TickCtx = {
@@ -59,6 +70,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     index,
     dt,
     assists: input.assists ?? DEFAULT_ASSISTS,
+    hazards: level,
   };
 
   // Index-based so a ship removed in `updateShip` (an in-place `removeItem`)
@@ -118,6 +130,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
   }
 
   collideRocks(ctx, ship, st);
+  if (!isAlive(ship) || !run.ships.includes(ship)) return;
 
   // Star heat ramps up toward the photosphere.
   const sys = run.system;
@@ -133,6 +146,16 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
       state.out.log.push({ level: 'warn', text: `${ship.name} is overheating near the star!` });
     }
     if (!isAlive(ship) || !run.ships.includes(ship)) return;
+  }
+
+  const flare = run.hazards.flare;
+  const flareProfile = FLARES[sys.starClass];
+  if (flare?.phase === 'active' && flareProfile && !isDocked(run, ship)) {
+    const k = Math.min(1, Math.max(0, 1 - (dStar - sys.starRadius) / (flareProfile.reach - sys.starRadius)));
+    if (k > 0) {
+      damageShip(state, ship, flareProfile.dps * HAZARD_LEVELS[ctx.hazards].damage * k * dt);
+      if (!isAlive(ship) || !run.ships.includes(ship)) return;
+    }
   }
 
   ship.shield = Math.min(st.maxShield, ship.shield + st.shieldRegen * dt);
@@ -158,9 +181,11 @@ function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
       ship.vel.x -= rel * nx * 1.5;
       ship.vel.z -= rel * nz * 1.5;
       // Small rocks get shoved around by the hit.
-      const push = (-rel * 8) / (r.radius * r.radius);
-      r.vel.x -= nx * push * 10;
-      r.vel.z -= nz * push * 10;
+      if (!r.comet) {
+        const push = (-rel * 8) / (r.radius * r.radius);
+        r.vel.x -= nx * push * 10;
+        r.vel.z -= nz * push * 10;
+      }
       if (-rel > TUNING.collisionMinSpeed && ship.collisionCd <= 0) {
         ship.collisionCd = TUNING.collisionCooldown;
         state.out.fx.push({ t: 'impact', pos: { x: ship.pos.x - nx * st.size, z: ship.pos.z - nz * st.size } });
