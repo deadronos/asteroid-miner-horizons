@@ -1,26 +1,47 @@
 import { describe, expect, it } from 'vitest';
+import { RESOURCES } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { SAVE_VERSION } from '../src/sim/create';
 import { SimIndex } from '../src/sim/index';
 import { migrate, migrations, type Migration, type SaveData } from '../src/sim/migrations';
+import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
-import type { ContractBoard } from '../src/sim/types';
 import { tick } from '../src/sim/update';
-// A real save frozen at version 2 (belt trimmed to a few rocks), committed so
-// future bumps stay loadable.
+// Real saves frozen at versions 2 and 3 (belt trimmed to a few rocks), committed
+// so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
+import V3_FIXTURE from './fixtures/save-v3.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
+
+const v3FixtureState = (): SaveData => JSON.parse(V3_FIXTURE).state as SaveData;
 
 /** A minimal save-shaped object at the given version; contents are arbitrary. */
 function saveAt(version: number): SaveData {
   return { version, profile: { marker: 'original' }, run: { ships: [] } } as unknown as SaveData;
 }
 
-/** JSON for a v3 save whose run carries the given (unvalidated) contract board. */
-const saveWithBoard = (contracts: unknown): string =>
-  JSON.stringify({ ...fixtureState(), version: SAVE_VERSION, run: { ...fixtureState().run, contracts } });
+/** The v3 fixture's run reshaped as v4: refined columns added to bank and cargo. */
+const v4Run = () => {
+  const run = v3FixtureState().run;
+  const ships = run.ships.map((s) => ({ ...s, cargo: { ...s.cargo, alloy: 0, fuel: 0 } }));
+  return { ...run, bank: { ...run.bank, alloy: 0, fuel: 0 }, ships, refinery: newRefinery() };
+};
+
+/** A valid v4 save, with the given run overrides applied on top. */
+const saveV4 = (run: Record<string, unknown> = {}): SaveData =>
+  ({ ...v3FixtureState(), version: SAVE_VERSION, run: { ...v4Run(), ...run } }) as unknown as SaveData;
+
+/** JSON for a v4 save whose run carries the given (unvalidated) contract board. */
+const saveWithBoard = (contracts: unknown): string => JSON.stringify(saveV4({ contracts }));
+
+/** Parses a frozen fixture through the production registry, failing loudly if it will not load. */
+const loadFrozen = (raw: string) => {
+  const r = parseImport(raw);
+  if (!r.ok) throw new Error('expected the frozen fixture to load');
+  return r.record.state;
+};
 
 const merge =
   (extra: Record<string, unknown>) =>
@@ -89,7 +110,7 @@ describe('migrate', () => {
 });
 
 describe('load through the production registry', () => {
-  it('accepts the frozen fixture at the current version', () => {
+  it('accepts the frozen v2 fixture by migrating it up to the current version', () => {
     const state = deserialize(JSON.stringify(fixtureState()));
     expect(state?.version).toBe(SAVE_VERSION);
   });
@@ -100,7 +121,7 @@ describe('load through the production registry', () => {
   });
 
   it('migrates an older save up to the current version', () => {
-    const old = JSON.stringify({ ...fixtureState(), version: SAVE_VERSION - 1 });
+    const old = JSON.stringify({ ...fixtureState(), version: 2 });
 
     const state = deserialize(old, { table: migrations });
 
@@ -109,12 +130,13 @@ describe('load through the production registry', () => {
     expect(state?.run.contracts.offers).toEqual([]);
   });
 
-  it('migrates the v2 fixture to a v3 save with an empty contract board', () => {
+  it('migrates the v2 fixture to a v4 save with an empty board and refinery', () => {
     const state = deserialize(JSON.stringify(fixtureState()));
 
     expect(state?.version).toBe(SAVE_VERSION);
     expect(state?.run.contracts.offers).toEqual([]);
     expect(state?.run.contracts.active).toBeNull();
+    expect(state?.run.refinery.queue).toEqual([]);
   });
 
   it('refills the migrated board on the first tick', () => {
@@ -126,22 +148,65 @@ describe('load through the production registry', () => {
     expect(state.run.contracts.offers).toHaveLength(TUNING.contractOffers);
   });
 
-  it('rejects a v3 save whose run has no contract board', () => {
-    const data = { ...fixtureState(), version: SAVE_VERSION };
-    expect(deserialize(JSON.stringify(data))).toBeNull();
+  it('rejects a v4 save whose run has no contract board', () => {
+    expect(deserialize(JSON.stringify(saveV4({ contracts: undefined })))).toBeNull();
   });
 
-  it('rejects a v3 save whose contract board has no offers array', () => {
-    const base = fixtureState();
-    base.run.contracts = {} as ContractBoard;
-    const data = { ...base, version: SAVE_VERSION };
-    expect(deserialize(JSON.stringify(data))).toBeNull();
+  it('rejects a v4 save whose contract board has no offers array', () => {
+    expect(deserialize(JSON.stringify(saveV4({ contracts: {} })))).toBeNull();
   });
 
-  it('rejects a v3 save whose contract board cannot be walked by the tick', () => {
+  it('rejects a v4 save whose contract board cannot be walked by the tick', () => {
     expect(deserialize(saveWithBoard({ offers: [], nextId: 1, rng: {} }))).toBeNull(); // no rng.s
     expect(deserialize(saveWithBoard({ offers: [], nextId: 1, rng: null }))).toBeNull(); // no rng at all
     expect(deserialize(saveWithBoard({ offers: [], nextId: 'x', rng: { s: 1 } }))).toBeNull(); // bad counter
+  });
+
+  it('rejects a v4 save whose run has no refinery', () => {
+    expect(deserialize(JSON.stringify(saveV4({ refinery: undefined })))).toBeNull();
+  });
+
+  it('rejects a v4 save whose bank is missing a resource key', () => {
+    const run = v4Run();
+    expect(deserialize(JSON.stringify(saveV4({ bank: { ...run.bank, fuel: undefined } })))).toBeNull();
+  });
+
+  it('rejects a v4 save whose ship cargo is missing a resource key', () => {
+    const ship = v4Run().ships[0];
+    const cargo = { ...ship.cargo } as Record<string, unknown>;
+    delete cargo.alloy;
+    expect(deserialize(JSON.stringify(saveV4({ ships: [{ ...ship, cargo }] })))).toBeNull();
+  });
+
+  it('rejects a v4 save whose refinery queue is not an array', () => {
+    expect(
+      deserialize(JSON.stringify(saveV4({ refinery: { queue: 'nope', produced: { alloy: 0, fuel: 0 } } }))),
+    ).toBeNull();
+  });
+
+  it('rejects a v4 save whose refinery has no produced map', () => {
+    expect(deserialize(JSON.stringify(saveV4({ refinery: { queue: [], produced: null } })))).toBeNull();
+  });
+
+  it('rejects a v4 save whose refinery produced is an array', () => {
+    expect(deserialize(JSON.stringify(saveV4({ refinery: { queue: [], produced: [] } })))).toBeNull();
+  });
+
+  it('rejects a v4 save whose refinery produced lacks a recipe key', () => {
+    expect(deserialize(JSON.stringify(saveV4({ refinery: { queue: [], produced: { alloy: 0 } } })))).toBeNull();
+  });
+
+  it('rejects a v4 save whose refinery job names an unknown recipe', () => {
+    const job = { recipe: 'gold', count: 2, total: 2, progress: 0 };
+    const refinery = { queue: [job], produced: { alloy: 0, fuel: 0 } };
+    expect(deserialize(JSON.stringify(saveV4({ refinery })))).toBeNull();
+  });
+
+  it('accepts a v4 save with a well-formed refinery job', () => {
+    const job = { recipe: 'fuel', count: 2, total: 2, progress: 0 };
+    const refinery = { queue: [job], produced: { alloy: 0, fuel: 0 } };
+    const state = deserialize(JSON.stringify(saveV4({ refinery })));
+    expect(state?.run.refinery.queue).toEqual([job]);
   });
 
   it('refuses a save whose migration chain has a gap', () => {
@@ -164,7 +229,7 @@ describe('load through the production registry', () => {
   });
 
   it('loads a malformed upgradable save as unusable instead of throwing', () => {
-    // Through the production table, migrations[2] reads fields this payload lacks.
+    // Through the production table, migrations[3] reads fields this payload lacks.
     const broken = JSON.stringify({ version: SAVE_VERSION - 1, profile: {}, run: {} });
     expect(migrate(JSON.parse(broken))).toBeNull();
     expect(parseImport(broken)).toEqual({
@@ -178,5 +243,47 @@ describe('load through the production registry', () => {
     const r = parseImport(JSON.stringify(rec));
     if (r.ok) throw new Error('expected a newer-version save to be rejected');
     expect(r.error).toMatch(/newer version/i);
+  });
+});
+
+describe('refining migration to v4', () => {
+  const frozen: Array<[string, string]> = [
+    ['v2', FIXTURE],
+    ['v3', V3_FIXTURE],
+  ];
+
+  it.each(frozen)('migrates the %s fixture to v4 with zeroed refined columns', (_label, raw) => {
+    const state = loadFrozen(raw);
+
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.run.bank.alloy).toBe(0);
+    expect(state.run.bank.fuel).toBe(0);
+    for (const ship of state.run.ships) {
+      expect(ship.cargo.alloy).toBe(0);
+      expect(ship.cargo.fuel).toBe(0);
+    }
+    expect(state.run.refinery.queue).toEqual([]);
+    expect(state.run.refinery.produced).toEqual({ alloy: 0, fuel: 0 });
+    expect(state.run.contracts).toBeDefined();
+  });
+
+  it.each(frozen)('runs a tick on the migrated %s save with a finite bank', (_label, raw) => {
+    const state = loadFrozen(raw);
+
+    tick(state, 1 / 60, { thrust: { x: 0, z: 0 }, commands: [] as Command[] }, new SimIndex());
+
+    for (const r of RESOURCES) expect(Number.isFinite(state.run.bank[r])).toBe(true);
+  });
+
+  it("keeps the v3 fixture's three contract offers", () => {
+    expect(loadFrozen(V3_FIXTURE).run.contracts.offers).toHaveLength(3);
+  });
+
+  it('loads a malformed v3 payload as unusable instead of throwing', () => {
+    const run = { ...v3FixtureState().run, ships: undefined };
+    expect(parseImport(JSON.stringify({ ...v3FixtureState(), version: 3, run }))).toEqual({
+      ok: false,
+      error: 'This is not an Asteroid Miner Horizons save.',
+    });
   });
 });

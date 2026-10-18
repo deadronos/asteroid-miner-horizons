@@ -5,6 +5,8 @@
 // object is accepted too). Older versions are upgraded through sim/migrations;
 // saves from a newer version are rejected rather than half-loaded.
 
+import { RECIPES, RECIPE_IDS } from '../data/refining';
+import { RESOURCES } from '../data/resources';
 import { SAVE_VERSION } from './create';
 import { chainCovers, type MigrateOptions, migrate } from './migrations';
 import type { GameState, Profile, Run } from './types';
@@ -44,6 +46,27 @@ export function deserialize(json: string, opts?: MigrateOptions): GameState | nu
   }
 }
 
+/** True when `w` is an object with a number under every `RESOURCES` key. */
+function isWallet(w: unknown): boolean {
+  return !!w && typeof w === 'object' && RESOURCES.every((r) => typeof (w as Record<string, unknown>)[r] === 'number');
+}
+
+/** True when every entry is a refine job the tick can process: a known recipe and numeric counters. */
+function isQueue(queue: unknown[]): boolean {
+  return queue.every((j) => {
+    const job = j as { recipe?: unknown; count?: unknown; total?: unknown; progress?: unknown };
+    return (
+      !!job &&
+      typeof job === 'object' &&
+      typeof job.recipe === 'string' &&
+      Object.hasOwn(RECIPES, job.recipe) &&
+      typeof job.count === 'number' &&
+      typeof job.total === 'number' &&
+      typeof job.progress === 'number'
+    );
+  });
+}
+
 /** Validates the shape of parsed JSON well enough that the game can run on it. */
 function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   const migrated = migrate(data, opts);
@@ -53,6 +76,9 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!profile || typeof profile.seed !== 'number' || typeof profile.perks !== 'object') return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
+  // A wallet missing a resource column (e.g. alloy) would poison every later
+  // read with NaN, so the bank and each ship's cargo must be complete.
+  if (!isWallet(run.bank) || !run.ships.every((s) => isWallet(s.cargo))) return null;
   // The tick walks the board, so reject anything it cannot handle: offers, the
   // id counter and the RNG state must all be present.
   const board = run.contracts as { offers?: unknown; nextId?: unknown; rng?: { s?: unknown } | null };
@@ -67,6 +93,15 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   )
     return null;
   if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
+  // The tick will process the queue, and the HUD and balance report read
+  // `produced`, so both must be well-formed before the run is accepted.
+  const refinery = run.refinery as { queue?: unknown; produced?: unknown };
+  if (!refinery || typeof refinery !== 'object' || Array.isArray(refinery) || !Array.isArray(refinery.queue))
+    return null;
+  const produced = refinery.produced as Record<string, unknown> | null;
+  if (!produced || typeof produced !== 'object' || Array.isArray(produced)) return null;
+  if (RECIPE_IDS.some((r) => typeof produced[r] !== 'number')) return null;
+  if (!isQueue(refinery.queue)) return null;
   return { version: migrated.version, profile, run, out: { fx: [], log: [] } };
 }
 
