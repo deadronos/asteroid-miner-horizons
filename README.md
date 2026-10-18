@@ -91,7 +91,10 @@ All keys can be rebound in ⚙ → Controls.
     follow, zoom speed, edge panning.
   - _Controls_: rebind every action (primary + secondary key). A key bound to another
     action is moved, and the help box follows your bindings.
-  - _Audio_: volume sliders reserved for when sound arrives.
+  - _Audio_: master/effects/music volume (the music level is reserved for when tracks
+    arrive). Beam hums go quiet while the game is paused. The low-hull / overheat alarm
+    also goes quiet whenever you pause (`P`, or while a menu is open), but keeps sounding
+    while the window stays visible and loses focus (a hidden tab suspends all audio).
 
 ## Architecture
 
@@ -99,6 +102,7 @@ All keys can be rebound in ⚙ → Controls.
 src/
   core/      rng (seeded mulberry32), vec helpers, spatial hash
   data/      pure data: resources, components, hulls, perks, tuning knobs
+  audio/     Web Audio mixer: ZzFX sfx presets, looping beam hums, danger alarm
   sim/       deterministic simulation — no DOM, no three.js
     types.ts     JSON-serialisable GameState (profile + run + transient outbox)
     create.ts    new game / new run (per system)
@@ -115,11 +119,12 @@ src/
   ui/        DOM HUD built once per structure change, refreshed in place;
              Menu.ts is the ⚙ modal (Saves, Gameplay, Graphics, Interface, Controls, Audio)
   input.ts   keyboard/pointer → Commands via rebindable actions; world-space picking
+  pause.ts   pause kind (manual / menu / unfocused) → banner + continuous-audio policy
   settings.ts  preferences store (defaults, validation, key bindings)
   main.ts    bootstrap + 60 Hz fixed-step loop
 tests/       vitest: determinism, mass conservation, mining loop, progression,
              warp, save round-trip + import validation, save slots, settings + key
-             rebinding, assist toggles, autopilot
+             rebinding, assist toggles, autopilot, pause/audio policy
 ```
 
 Design rules:
@@ -143,4 +148,4 @@ Design rules:
 ## Ideas for later
 
 Pirates and combat modules, trade contracts at the station, idle/offline progress,
-more hull classes and specialised drones (haulers, escorts), sound, touch/pinch controls.
+more hull classes and specialised drones (haulers, escorts), music tracks, touch/pinch controls.

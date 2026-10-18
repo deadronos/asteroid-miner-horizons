@@ -3,13 +3,15 @@
 // browser never blocks autoplay) and suspended while the tab is hidden.
 // One-shots are ZzFX buffers rendered once per preset and replayed at any
 // pitch; continuous states (beam hums, the danger alarm) come from
-// `updateContinuous`, which is called every frame.
+// `updateContinuous`, which is called every frame with a `ContinuousPolicy`
+// selecting which layers may sound that frame (see `pauseAudio`).
 
 import type { SettingsStore } from '../settings';
 import type { Fx, GameState, LogEntry } from '../sim/types';
 import {
   alarmLevel,
   beamHums,
+  type ContinuousPolicy,
   MAX_HUMS,
   PRESETS,
   RateLimiter,
@@ -158,9 +160,10 @@ export class AudioEngine {
 
   /**
    * Continuous layer: a looping hum per active mining beam and a repeating alarm
-   * while the selected ship is in danger. Called every frame; read-only on `state`.
+   * while the selected ship is in danger. `policy` selects which layers may sound
+   * this frame (see `pauseAudio`). Called every frame; read-only on `state`.
    */
-  updateContinuous(state: GameState, view: View): void {
+  updateContinuous(state: GameState, view: View, policy: ContinuousPolicy): void {
     const { ctx, sfx } = this;
     // Locked or suspended: never start a voice, just fade out whatever is left.
     if (!ctx || !sfx || ctx.state !== 'running') {
@@ -169,28 +172,33 @@ export class AudioEngine {
       return;
     }
     const now = ctx.currentTime;
-    const hums = beamHums(state.run, state.profile, view);
-    const live = new Set(hums.map((h) => h.shipId));
-    // Release dropped voices first: a beam that newly fits the cap isn't left silent for a frame.
-    for (const [shipId, voice] of this.hums) {
-      if (live.has(shipId)) continue;
-      this.hums.delete(shipId);
-      this.releaseHum(voice, now);
-    }
-    for (const hum of hums) {
-      let voice = this.hums.get(hum.shipId);
-      if (!voice) {
-        // Hard cap: a beam beyond MAX_HUMS simply stays silent (beamHums already trims to it).
-        if (this.hums.size >= MAX_HUMS) continue;
-        voice = this.makeHumVoice(ctx, sfx, hum.freq, hum.pan);
-        this.hums.set(hum.shipId, voice);
+    if (policy.hums) {
+      const hums = beamHums(state.run, state.profile, view);
+      const live = new Set(hums.map((h) => h.shipId));
+      // Release dropped voices first: a beam that newly fits the cap isn't left silent for a frame.
+      for (const [shipId, voice] of this.hums) {
+        if (live.has(shipId)) continue;
+        this.hums.delete(shipId);
+        this.releaseHum(voice, now);
       }
-      voice.gain.gain.setTargetAtTime(hum.gain * HUM_TRIM, now, HUM_ATTACK);
-      voice.osc.frequency.setTargetAtTime(hum.freq, now, HUM_ATTACK);
-      voice.filter.frequency.setTargetAtTime(hum.freq * 6, now, HUM_ATTACK);
-      voice.pan.pan.value = hum.pan;
+      for (const hum of hums) {
+        let voice = this.hums.get(hum.shipId);
+        if (!voice) {
+          // Hard cap: a beam beyond MAX_HUMS simply stays silent (beamHums already trims to it).
+          if (this.hums.size >= MAX_HUMS) continue;
+          voice = this.makeHumVoice(ctx, sfx, hum.freq, hum.pan);
+          this.hums.set(hum.shipId, voice);
+        }
+        voice.gain.gain.setTargetAtTime(hum.gain * HUM_TRIM, now, HUM_ATTACK);
+        voice.osc.frequency.setTargetAtTime(hum.freq, now, HUM_ATTACK);
+        voice.filter.frequency.setTargetAtTime(hum.freq * 6, now, HUM_ATTACK);
+        voice.pan.pan.value = hum.pan;
+      }
+    } else {
+      this.silenceHums();
     }
-    this.updateAlarm(state, now);
+    // Suppressed alarm: leave nextAlarm alone so a due alarm fires right after resume.
+    if (policy.alarm) this.updateAlarm(state, now);
   }
 
   /** Builds a silent osc → lowpass → gain → panner chain and starts the oscillator. */

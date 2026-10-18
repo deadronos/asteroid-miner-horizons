@@ -5,6 +5,7 @@ import './style.css';
 import { AudioEngine } from './audio/AudioEngine';
 import { TUNING } from './data/tuning';
 import { Input } from './input';
+import { pauseAudio, pauseBanner, pauseKind } from './pause';
 import { Renderer } from './render/Renderer';
 import { GameSession } from './session';
 import type { Assists } from './sim/assists';
@@ -62,15 +63,6 @@ applySettings();
 // tab hide / close.
 session.start();
 
-/** Why the sim is paused right now, or null if it's running. */
-function pauseReason(): string | null {
-  const s = settings.value;
-  if (manualPause) return 'PAUSED: press P to resume';
-  if (s.pauseInMenus && (hud.menu.open || hud.researchOpen)) return 'PAUSED: menu open';
-  if (s.pauseUnfocused && !document.hasFocus()) return 'PAUSED: window not focused';
-  return null;
-}
-
 const STEP = 1 / TUNING.simHz;
 let last = performance.now();
 let acc = 0;
@@ -80,8 +72,16 @@ function frame(now: number): void {
   const state = session.state;
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
-  const paused = pauseReason();
-  hud.setPaused(paused);
+  const s = settings.value;
+  const paused = pauseKind({
+    manual: manualPause,
+    pauseInMenus: s.pauseInMenus,
+    pauseUnfocused: s.pauseUnfocused,
+    menuOpen: hud.menu.open,
+    researchOpen: hud.researchOpen,
+    focused: document.hasFocus(),
+  });
+  hud.setPaused(pauseBanner(paused));
   if (paused) {
     // Menus still work while paused: purchases and refits apply immediately.
     acc = 0;
@@ -100,7 +100,7 @@ function frame(now: number): void {
   input.edgePan(dt);
   input.updateHover();
   audio.consumeFx(state.out.fx, renderer.view);
-  audio.updateContinuous(state, renderer.view);
+  audio.updateContinuous(state, renderer.view, pauseAudio(paused));
   renderer.render(state, dt, input.moveMark);
   hud.frame(dt);
   hudAcc += dt;
