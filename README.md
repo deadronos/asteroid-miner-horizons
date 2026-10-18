@@ -98,52 +98,22 @@ All keys can be rebound in ⚙ → Controls.
 
 ## Architecture
 
+`src/sim` is the deterministic game — pure TypeScript, with no DOM and no three.js. `src/render` draws it with
+three.js, and `src/ui` is the DOM HUD; both read sim state and send `Command`s but never mutate it. `src/core`
+holds primitives (seeded RNG, vectors, spatial hash) and `src/data` holds the tunable tables.
+
 ```
-src/
-  core/      rng (seeded mulberry32), vec helpers, spatial hash
-  data/      pure data: resources, components, hulls, perks, tuning knobs
-  audio/     Web Audio mixer: ZzFX sfx presets, looping beam hums, danger alarm
-  sim/       deterministic simulation — no DOM, no three.js
-    types.ts     JSON-serialisable GameState (profile + run + transient outbox)
-    create.ts    new game / new run (per system)
-    generate.ts  star systems, belts, rock spawning
-    commands.ts  Command union + validation; the only way input changes state
-    economy.ts   read-only queries (costs, "why is this disabled")
-    pilot.ts     steering, obstacle avoidance, orders, drone AI
-    mining.ts    laser damage, cracking, debris drops
-    ships.ts     derived stats, damage, ship construction
-    update.ts    fixed-step tick
-    save.ts      save slots, import/export format + validation
-  render/    three.js: Renderer (camera/zoom/fx), instanced rocks & pickups,
-             ships + beams, particles, system scenery, parallax backdrop
-  ui/        DOM HUD built once per structure change, refreshed in place;
-             Menu.ts is the ⚙ modal (Saves, Gameplay, Graphics, Interface, Controls, Audio)
-  input.ts   keyboard/pointer → Commands via rebindable actions; world-space picking
-  pause.ts   pause kind (manual / menu / unfocused) → banner + continuous-audio policy
-  settings.ts  preferences store (defaults, validation, key bindings)
-  main.ts    bootstrap + 60 Hz fixed-step loop
-tests/       vitest: determinism, mass conservation, mining loop, progression,
-             warp, save round-trip + import validation, save slots, settings + key
-             rebinding, assist toggles, autopilot, pause/audio policy
+src/core ──┐
+src/data ──┼──▶ src/sim ──┬──▶ src/render   (three.js)
+           │             └──▶ src/ui       (DOM HUD)
 ```
 
-Design rules:
+Where to go next: [`AGENTS.md`](AGENTS.md) is the entry point for coding agents and the fastest orientation for
+anyone; [`docs/agents/architecture.md`](docs/agents/architecture.md) covers the layers, the tick and the design
+rules; [`docs/agents/repo-structure.md`](docs/agents/repo-structure.md) covers what lives where.
 
-- **The sim is pure and deterministic.** All randomness goes through `run.rng`, which is
-  stored in the save, so the same seed and commands replay identically. The renderer's
-  particles may use `Math.random`; they are cosmetic only.
-- **Input and UI never mutate state.** They enqueue `Command`s, which `tick()` applies at
-  the start of the next step. Invalid commands are rejected with a log message.
-- **The sim emits `out.fx` / `out.log`.** The renderer turns fx into particles and screen
-  shake, and the HUD drains the log.
-- **Rendering performance**: asteroids and pickups use `InstancedMesh` (7 draw calls
-  for everything). Collision, AI and avoidance queries go through a spatial hash
-  rebuilt each tick. Overlays (beams, rings, bars) scale with world-units-per-pixel
-  so they stay crisp at any zoom.
-- **Tuning** lives in `src/data/*`. Component, hull and perk tables drive both the sim
-  and the HUD text.
-
-`window.__amh` exposes `{ state(), send(cmd) }` for console poking and automated checks.
+`window.__amh` exposes `{ state(), send(cmd), settings, renderer, audio }` for console poking and automated
+checks.
 
 ## Ideas for later
 

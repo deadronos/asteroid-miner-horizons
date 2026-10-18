@@ -1,0 +1,52 @@
+# AGENTS.md
+
+Instructions for coding agents in this repo. This file is deliberately short: it holds only what you need on
+every task, and links to the deeper docs you read when the task calls for them.
+
+**Asteroid Miner Horizons** is a top-down sci-fi mining sim. A pure, deterministic TypeScript simulation
+(`src/sim`) is driven by a three.js renderer (`src/render`) and a DOM HUD (`src/ui`). Built with Vite, tested
+with Vitest, linted and formatted with the Oxc toolchain.
+
+## Commands
+
+| Command           | What it does                                                                    |
+| ----------------- | ------------------------------------------------------------------------------- |
+| `npm run check`   | format:check + lint + typecheck + tests. Run this before calling anything done. |
+| `npm test`        | Vitest once. One file: `npx vitest run tests/sim.test.ts`                       |
+| `npm run dev`     | Vite dev server on http://localhost:5173                                        |
+| `npm run build`   | `tsc --noEmit` then a production build into `dist/`                             |
+| `npm run bench`   | Headless tick benchmark: mean/p95 ms per tick                                   |
+| `npm run balance` | Bot plays 10 seeds × 5 warps, rewrites `docs/balance.md`                        |
+
+`npm run check` is exactly what CI runs (plus a build). Green means done.
+
+## Rules that bite
+
+- **Keep `src/core`, `src/data` and `src/sim` pure.** No DOM, no three.js, and no `Math.random` or `Date`
+  inside a tick. Randomness goes through `run.rng`, so a seed replays identically.
+- **Never mutate `GameState` from input or UI.** Enqueue a `Command`; the tick applies it. Invalid commands are
+  rejected with a log line, not an exception.
+- **A new command touches three files:** the union in `src/sim/commands.ts`, the handler in
+  `src/sim/handlers.ts` and a test. The handler map is typed, so a missing variant fails the typecheck.
+- **Changing the save shape means bumping `SAVE_VERSION`** (`src/sim/create.ts`) and adding one entry to
+  `src/sim/migrations.ts`. Old saves must keep loading.
+- **Do not add dependencies** without asking. Node 20+ is required.
+- **Do not touch `scratch.md`** — it is the maintainer's notebook of suggested next issues.
+- Match local style: one short header comment per module, `/** */` on exported functions and non-obvious
+  fields, no comment noise. `oxfmt` runs at printWidth 120, single quotes, trailing commas.
+
+## Read next
+
+Read only the row that matches the task.
+
+| When you are...                                        | Read                                                               |
+| ------------------------------------------------------ | ------------------------------------------------------------------ |
+| orienting yourself in the codebase                     | [`docs/agents/architecture.md`](docs/agents/architecture.md)       |
+| looking for where something lives                      | [`docs/agents/repo-structure.md`](docs/agents/repo-structure.md)   |
+| changing sim behaviour, data tables or the save schema | [`docs/agents/sim-conventions.md`](docs/agents/sim-conventions.md) |
+| writing or fixing tests                                | [`docs/agents/testing.md`](docs/agents/testing.md)                 |
+| turning an issue into a spec, plan and PR              | [`docs/agents/workflow.md`](docs/agents/workflow.md)               |
+| wanting the full index of agent docs                   | [`docs/agents/README.md`](docs/agents/README.md)                   |
+
+Player and feature docs are in [`README.md`](README.md); generated balance numbers in
+[`docs/balance.md`](docs/balance.md); per-feature designs and plans in [`docs/superpowers/`](docs/superpowers/).
