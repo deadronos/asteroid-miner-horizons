@@ -2,6 +2,7 @@
 // every BOT_EVERY ticks, the sim steps at its fixed 60 Hz, and the transient
 // outbox (fx, log) is drained so long runs don't grow memory.
 
+import type { HazardLevel } from '../src/data/hazards';
 import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
 import { SimIndex } from '../src/sim/index';
@@ -19,6 +20,8 @@ export interface RunOptions extends BotOptions {
   /** Called around every tick; return true from `after` to stop early. */
   before?: (state: GameState) => void;
   after?: (state: GameState) => boolean | void;
+  /** Hazard level passed to every tick; defaults to 'off' (the sim's own default). */
+  hazards?: HazardLevel;
   /** Wraps the tick call itself (the bench times it). */
   step?: (run: () => void) => void;
 }
@@ -26,7 +29,7 @@ export interface RunOptions extends BotOptions {
 /** Runs the bot for up to `seconds` of sim time. Returns the sim seconds actually run. */
 export function runBot(state: GameState, opts: RunOptions): number {
   const commands: Command[] = [];
-  const input: TickInput = { thrust: { x: 0, z: 0 }, commands };
+  const input: TickInput = { thrust: { x: 0, z: 0 }, commands, hazards: opts.hazards };
   const ticks = Math.round(opts.seconds * TUNING.simHz);
   const index = new SimIndex();
   const doTick = (): void => tick(state, DT, input, index);
