@@ -24,6 +24,8 @@ describe('pauseKind', () => {
     expect(pauseKind({ ...running, menuOpen: true })).toBe('menu');
     expect(pauseKind({ ...running, researchOpen: true })).toBe('menu');
     expect(pauseKind({ ...running, menuOpen: true, pauseInMenus: false })).toBeNull();
+    // Pins the parens: an open Research panel alone must not bypass the gate.
+    expect(pauseKind({ ...running, researchOpen: true, pauseInMenus: false })).toBeNull();
   });
 
   it('reports unfocused only when pauseUnfocused is on', () => {
@@ -47,7 +49,8 @@ describe('pauseBanner', () => {
 
 describe('pauseAudio', () => {
   it('leaves both layers live while running', () => {
-    expect(pauseAudio(null)).toEqual(LIVE_CONTINUOUS);
+    expect(pauseAudio(null)).toBe(LIVE_CONTINUOUS);
+    expect(Object.isFrozen(LIVE_CONTINUOUS)).toBe(true);
   });
 
   it('silences hums and the alarm for explicit pauses', () => {

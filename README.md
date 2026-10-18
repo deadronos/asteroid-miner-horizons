@@ -91,7 +91,10 @@ All keys can be rebound in ⚙ → Controls.
     follow, zoom speed, edge panning.
   - _Controls_: rebind every action (primary + secondary key). A key bound to another
     action is moved, and the help box follows your bindings.
-  - _Audio_: volume sliders reserved for when sound arrives.
+  - _Audio_: master/effects/music volume (the music level is reserved for when tracks
+    arrive). Beam hums go quiet while the game is paused. The low-hull / overheat alarm
+    also goes quiet in a pause menu, but keeps sounding while the window stays visible and
+    loses focus (a hidden tab suspends all audio).
 
 ## Architecture
 

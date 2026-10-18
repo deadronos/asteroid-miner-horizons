@@ -53,6 +53,11 @@ tests addition.)
 The chosen option when the controller asked the author was "Menu silent, alarm-only when
 unfocused".
 
+**Precedence ruling (from review):** an explicit pause dominates an unfocused window. If a
+menu is open and the window then loses focus, `pauseKind` returns `menu` (manual >
+menu > unfocused), so the mix stays silent — the player deliberately opened the menu.
+This is pinned by the `prefers menu over unfocused` test rather than by a new smoke case.
+
 ## Design
 
 ### One pure rule module for pause
