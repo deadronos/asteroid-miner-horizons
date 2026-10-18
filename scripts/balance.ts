@@ -5,6 +5,9 @@
 //   npm run balance
 //   npm run balance -- --seeds 10 --warps 5 --out docs/balance.md
 //
+// The per-warp table counts seeds whose time more than doubles (> 2× prev), and
+// a modifiers table compares each modifier's time to its system median.
+//
 // Seeds run in parallel worker threads (each has its own sim module state),
 // so results are identical to a sequential run.
 
@@ -12,6 +15,7 @@ import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { MODIFIER_IDS, MODIFIERS } from '../src/data/modifiers';
 import { walletValue } from '../src/data/resources';
 import { newGame } from '../src/sim/create';
 import { isDocked } from '../src/sim/economy';
@@ -36,6 +40,8 @@ interface WarpStats {
   alloy: number;
   /** Refinery fuel produced this warp. */
   fuel: number;
+  /** The system's modifier ids joined with '+'; empty when it has none. */
+  mods: string;
 }
 
 interface SeedResult {
@@ -86,6 +92,7 @@ export function playSeed(seed: number, warps: number): SeedResult {
       contracts: 0,
       alloy: 0,
       fuel: 0,
+      mods: state.run.system.modifiers.join('+'),
     };
     const ran = runBot(state, {
       seconds: WARP_CAP_SEC,
@@ -176,8 +183,8 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     '',
     '## Per warp',
     '',
-    '| System | Time in system | vs previous | Value delivered | Value / min | HD earned | Drone share of income | Contract share of income | Contracts done | Refined ▣ / ◉ | Walls |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| System | Time in system | vs previous | > 2× prev | Value delivered | Value / min | HD earned | Drone share of income | Contract share of income | Contracts done | Refined ▣ / ◉ | Walls |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   );
   for (let w = 0; w < warps; w++) {
     const rows = results.map((r) => r.warps[w]).filter((x): x is WarpStats => !!x);
@@ -186,12 +193,13 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     const ratios = done
       .map((r) => (w > 0 && r.warps[w - 1] ? r.warps[w]!.sec / r.warps[w - 1]!.sec : NaN))
       .filter((x) => !Number.isNaN(x));
+    const spikes = ratios.filter((x) => x > 2).length;
     const walls = results.filter((r) => r.wall === w).length;
     lines.push(
       `| ${w + 1} | ${stat(
         rows.map((x) => x.sec),
         mmss,
-      )} | ${w > 0 ? stat(ratios, (n) => `${n.toFixed(2)}×`) : '—'} | ${stat(
+      )} | ${w > 0 ? stat(ratios, (n) => `${n.toFixed(2)}×`) : '—'} | ${w > 0 ? spikes : '—'} | ${stat(
         rows.map((x) => x.value),
         (n) => `${Math.round(n)}`,
       )} | ${stat(
@@ -220,14 +228,40 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
   }
   lines.push(
     '',
+    '## Modifiers',
+    '',
+    'Time in system relative to the median of all non-wall seeds at that system.',
+    '',
+    '| Modifier | Seed-warps | Time vs system median |',
+    '| --- | --- | --- |',
+  );
+  const sysMedian = new Map<number, number>();
+  for (let w = 0; w < warps; w++) {
+    const secs = results.filter((r) => r.warps[w] && r.wall !== w).map((r) => r.warps[w]!.sec);
+    if (secs.length) sysMedian.set(w, median(secs));
+  }
+  const modRow = (label: string, pick: (x: WarpStats) => boolean): string => {
+    const rel: number[] = [];
+    let n = 0;
+    for (const r of results)
+      r.warps.forEach((x, w) => {
+        if (!pick(x)) return;
+        n++;
+        if (r.wall !== w) rel.push(x.sec / sysMedian.get(w)!);
+      });
+    return `| ${label} | ${n} | ${stat(rel, (v) => `${v.toFixed(2)}×`)} |`;
+  };
+  for (const id of MODIFIER_IDS) lines.push(modRow(MODIFIERS[id].name, (x) => x.mods.split('+').includes(id)));
+  lines.push(
+    '',
     '## Raw data',
     '',
     '```csv',
-    'seed,system,sec,value,hd,flagship_value,drone_value,contract_value,contracts,alloy,fuel,wall',
+    'seed,system,sec,value,hd,flagship_value,drone_value,contract_value,contracts,alloy,fuel,wall,mods',
     ...results.flatMap((r) =>
       r.warps.map(
         (x, w) =>
-          `${r.seed},${w + 1},${x.sec.toFixed(1)},${Math.round(x.value)},${x.hd},${Math.round(x.flagshipValue)},${Math.round(x.droneValue)},${Math.round(x.contractValue)},${x.contracts},${x.alloy},${x.fuel},${r.wall === w ? 1 : 0}`,
+          `${r.seed},${w + 1},${x.sec.toFixed(1)},${Math.round(x.value)},${x.hd},${Math.round(x.flagshipValue)},${Math.round(x.droneValue)},${Math.round(x.contractValue)},${x.contracts},${x.alloy},${x.fuel},${r.wall === w ? 1 : 0},${x.mods}`,
       ),
     ),
     '```',
