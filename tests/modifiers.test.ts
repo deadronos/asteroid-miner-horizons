@@ -121,8 +121,8 @@ describe('systemEffects', () => {
   });
 
   it('multiplies across modifiers', () => {
-    expect(systemEffects(['dense', 'nebula'])).toMatchObject({ beltCount: 1.4, magnet: 0.7, regrowInterval: 0.5 });
-    expect(systemEffects(['metalRich', 'icePoor']).mix).toEqual({ ore: 1.6, ice: 0.55, crystal: 1 });
+    expect(systemEffects(['dense', 'nebula'])).toMatchObject({ beltCount: 1.4, magnet: 0.85, regrowInterval: 0.3 });
+    expect(systemEffects(['metalRich', 'icePoor']).mix).toEqual({ ore: 1.3, ice: 0.7, crystal: 1 });
   });
 });
 
@@ -136,9 +136,9 @@ describe('applyBeltModifiers', () => {
     const b = belts();
     applyBeltModifiers(b, ['dense', 'metalRich']);
     expect(b.map((x) => x.initialCount)).toEqual([141, 70]);
-    expect(b[0]!.mix.ore).toBeCloseTo(0.8);
+    expect(b[0]!.mix.ore).toBeCloseTo(0.65);
     expect(b[0]!.mix.ice).toBeCloseTo(0.5);
-    expect(b[1]!.mix.ore).toBeCloseTo(0.32);
+    expect(b[1]!.mix.ore).toBeCloseTo(0.26);
   });
 
   it('leaves belts alone for no modifiers', () => {
@@ -151,11 +151,11 @@ describe('applyBeltModifiers', () => {
 describe('descriptions', () => {
   it('builds effect text from the numbers', () => {
     expect(describeModifier('dense')).toBe('+40% asteroids');
-    expect(describeModifier('metalRich')).toBe('+60% ore rocks');
-    expect(describeModifier('icePoor')).toBe('−45% ice rocks');
-    expect(describeModifier('nebula')).toBe('−30% pickup radius, belts regrow 2× faster');
+    expect(describeModifier('metalRich')).toBe('+30% ore rocks');
+    expect(describeModifier('icePoor')).toBe('−30% ice rocks');
+    expect(describeModifier('nebula')).toBe('−15% pickup radius, belts regrow 3.3× faster');
     expect(describeModifiers(['dense', 'nebula'])).toBe(
-      'Dense belt (+40% asteroids) · Nebula (−30% pickup radius, belts regrow 2× faster)',
+      'Dense belt (+40% asteroids) · Nebula (−15% pickup radius, belts regrow 3.3× faster)',
     );
     expect(describeModifiers([])).toBe('');
   });
@@ -166,7 +166,7 @@ describe('descriptions', () => {
 
   it('follows a changed number', () => {
     expect(describeDef({ ...MODIFIERS.nebula, regrowInterval: 0.4 })).toBe(
-      '−30% pickup radius, belts regrow 2.5× faster',
+      '−15% pickup radius, belts regrow 2.5× faster',
     );
   });
 });
@@ -176,7 +176,7 @@ describe('applySystemStats', () => {
     const g = newGame(1);
     const base = shipStats(flagship(g.run)!, g.profile);
     const nebula = { ...g.run.system, modifiers: ['nebula' as const] };
-    expect(applySystemStats({ ...base }, nebula)).toEqual({ ...base, magnet: base.magnet * 0.7 });
+    expect(applySystemStats({ ...base }, nebula)).toEqual({ ...base, magnet: base.magnet * 0.85 });
     expect(applySystemStats({ ...base }, g.run.system)).toEqual(base);
   });
 });
@@ -195,12 +195,12 @@ function tickFor(g: ReturnType<typeof newGame>, seconds: number): void {
   for (let t = 0; t < seconds; t += DT) tick(g, DT, idle, index);
 }
 
-/** Velocity of a pickup placed at 0.85× the flagship's base magnet radius after one tick. */
+/** Velocity of a pickup placed at 0.9× the flagship's base magnet radius after one tick. */
 function pickupVelAfterTick(mods: ModifierId[]) {
   const g = withMods(mods);
   const fs = flagship(g.run)!;
   fs.cargo = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
-  const d = shipStats(fs, g.profile).magnet * 0.85;
+  const d = shipStats(fs, g.profile).magnet * 0.9;
   const pos = { x: fs.pos.x + d, z: fs.pos.z };
   g.run.pickups = [{ id: 9999, kind: 'ore', amount: 1, pos, vel: { x: 0, z: 0 }, age: 0 }];
   tickFor(g, DT);
@@ -220,7 +220,7 @@ function rocksAfter(mods: ModifierId[], seconds: number): number {
 describe('per-tick effects', () => {
   it('index stats carry the nebula pickup radius', () => {
     for (const [mods, k] of [
-      [['nebula'], 0.7],
+      [['nebula'], 0.85],
       [[], 1],
     ] as [ModifierId[], number][]) {
       const g = withMods(mods);
@@ -231,15 +231,16 @@ describe('per-tick effects', () => {
     }
   });
 
-  it('a nebula leaves a pickup at 0.85× the base radius alone', () => {
+  it('a nebula leaves a pickup at 0.9× the base radius alone', () => {
     expect(pickupVelAfterTick([]).x).toBeLessThan(0);
     expect(pickupVelAfterTick(['nebula'])).toEqual({ x: 0, z: 0 });
   });
 
-  it('a nebula regrows belts twice as fast', () => {
-    const half = 0.5 * TUNING.beltRegrowInterval + 0.1;
-    expect(rocksAfter([], half)).toBe(0);
+  it('a nebula regrows belts at 0.3× the interval', () => {
+    const due = 0.3 * TUNING.beltRegrowInterval;
+    expect(rocksAfter(['nebula'], due - 0.1)).toBe(0);
+    expect(rocksAfter(['nebula'], due + 0.1)).toBeGreaterThan(0);
+    expect(rocksAfter([], due + 0.1)).toBe(0);
     expect(rocksAfter([], TUNING.beltRegrowInterval + 0.1)).toBeGreaterThan(0);
-    expect(rocksAfter(['nebula'], half)).toBeGreaterThan(0);
   });
 });

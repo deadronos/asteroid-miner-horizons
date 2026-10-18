@@ -31,7 +31,7 @@ export const TUNING = {
   // Prestige.
   /** Bank fuel the first warp costs; grows per warp, cut by the warp perk. */
   warpBaseFuel: 50,
-  warpCostGrowth: 1.35,
+  warpCostGrowth: 1.3,
   /** Horizon Data = floor(sqrt(runValue / dataDivisor)). */
   dataDivisor: 60,
 
@@ -57,7 +57,7 @@ export const TUNING = {
   /** First system number that rolls modifiers. */
   modifierMinSystem: 3,
   /** Chance a system rolls a second modifier. */
-  modifierTwoChance: 0.5,
+  modifierTwoChance: 0.25,
 
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;

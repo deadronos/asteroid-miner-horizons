@@ -23,9 +23,9 @@ export interface ModifierDef {
 
 export const MODIFIERS: Record<ModifierId, ModifierDef> = {
   dense: { id: 'dense', name: 'Dense belt', icon: '⁂', beltCount: 1.4 },
-  metalRich: { id: 'metalRich', name: 'Metal-rich', icon: '⬢↑', mix: { ore: 1.6 } },
-  icePoor: { id: 'icePoor', name: 'Ice-poor', icon: '❄↓', mix: { ice: 0.55 } },
-  nebula: { id: 'nebula', name: 'Nebula', icon: '☁', magnet: 0.7, regrowInterval: 0.5 },
+  metalRich: { id: 'metalRich', name: 'Metal-rich', icon: '⬢↑', mix: { ore: 1.3 } },
+  icePoor: { id: 'icePoor', name: 'Ice-poor', icon: '❄↓', mix: { ice: 0.7 } },
+  nebula: { id: 'nebula', name: 'Nebula', icon: '☁', magnet: 0.85, regrowInterval: 0.3 },
 };
 
 export const MODIFIER_IDS: readonly ModifierId[] = Object.keys(MODIFIERS) as ModifierId[];
