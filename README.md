@@ -71,7 +71,9 @@ All keys can be rebound in ⚙ → Controls.
   undocked ship near the star; a banner counts down the warning, the alarm sounds, and
   a docked ship takes nothing, so dock or fly clear. Both are announced in the banner
   under the top bar and in the log. The ⚙ Gameplay tab sets them to Off, Normal or
-  Harsh (more often, hits harder).
+  Harsh (more often, hits harder). Drones without a manual order look after
+  themselves: they step out of a comet's path, leave comets alone, and dock or fly
+  clear when a flare builds.
 - **Hulls & slots**: every ship has a hull (base stats plus N generic slots). Each slot
   takes one component at tier 1–3: Mining Laser, Ion Engine, Deflector Shield,
   Composite Armor, Cargo Pod, or Sensor & Tractor Array. Effects stack, so two lasers

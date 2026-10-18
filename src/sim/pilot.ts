@@ -6,6 +6,7 @@ import { damp, dist, distSq, len, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import type { Assists } from './assists';
 import { isDocked } from './economy';
+import { cometPathEscape, flareShelter, inFlareZone } from './hazards';
 import type { SimIndex } from './index';
 import { laserRock } from './mining';
 import { cargoFree, flagship, isAlive, type ShipStats } from './ships';
@@ -205,10 +206,35 @@ export function runOrder(ctx: TickCtx, ship: Ship, st: ShipStats): boolean {
   return true;
 }
 
+/** True if `pos` lies in the flare zone or a comet path (see `sim/hazards`). */
+function unsafe(ctx: TickCtx, pos: Vec2): boolean {
+  const { run } = ctx.state;
+  return inFlareZone(run, pos) || cometPathEscape(run, ctx.index.comets, pos, TUNING.cometDodgePad, ctx.index.escape);
+}
+
+/**
+ * Hazard reflexes ahead of the rest of the drone brain: step straight out of a comet path, else shelter from a
+ * flare by docking (and staying docked) or fleeing past its reach. Returns true if it steered the drone.
+ */
+function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: boolean): boolean {
+  const { run } = ctx.state;
+  const esc = ctx.index.escape;
+  if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, esc)) {
+    steer(ctx, ship, st, esc.x, esc.z, ctx.assists.avoid);
+    return true;
+  }
+  if (!inFlareZone(run, ship.pos)) return false;
+  if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, esc) === 'dock')
+    arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.5);
+  else arrive(ctx, ship, st, esc, 20);
+  return true;
+}
+
 /**
  * Drone brain, used when a drone has no manual order:
- * full → return to station · loose pickups nearby → collect · else mine near the anchor
- * (the flagship in "assist" mode, the station in "auto" mode) · else follow the anchor.
+ * comet path or flare → get clear · full → return to station · loose pickups nearby → collect · else mine near the
+ * anchor (the flagship in "assist" mode, the station in "auto" mode) · else follow the anchor. Targets in a comet
+ * path or flare zone are skipped, and an unsafe anchor is waited out in place.
  */
 export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const { run } = ctx.state;
@@ -221,7 +247,13 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   home.x = anchor.x + Math.cos(slot) * 70;
   home.z = anchor.z + Math.sin(slot) * 70;
 
-  if (cargoFree(ship, st) < Math.max(2, st.cargoCap * 0.04)) {
+  const full = cargoFree(ship, st) < Math.max(2, st.cargoCap * 0.04);
+  if (dodgeHazards(ctx, ship, st, full)) {
+    ship.aiTargetId = null;
+    return;
+  }
+
+  if (full) {
     ship.aiTargetId = null;
     // Without auto-dock a full drone waits by its anchor for a manual dock order.
     if (!ctx.assists.autoDock) arrive(ctx, ship, st, home, 20);
@@ -234,7 +266,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   let best = 260 * 260;
   for (const p of run.pickups) {
     const d = distSq(ship.pos, p.pos);
-    if (d < best && dist(p.pos, anchor) < TUNING.droneLeash) {
+    if (d < best && dist(p.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, p.pos)) {
       best = d;
       pickup = p.pos;
     }
@@ -246,12 +278,15 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   if (st.dps > 0) {
     let rock = ship.aiTargetId != null ? ctx.index.rockById.get(ship.aiTargetId) : undefined;
-    if (rock && dist(rock.pos, anchor) > TUNING.droneLeash) rock = undefined;
-    if (!rock && ship.aiMode === 'assist' && fs.order?.kind === 'mine') rock = ctx.index.rockById.get(fs.order.rockId);
+    if (rock && (dist(rock.pos, anchor) > TUNING.droneLeash || unsafe(ctx, rock.pos))) rock = undefined;
+    if (!rock && ship.aiMode === 'assist' && fs.order?.kind === 'mine') {
+      rock = ctx.index.rockById.get(fs.order.rockId);
+      if (rock && unsafe(ctx, rock.pos)) rock = undefined;
+    }
     if (!rock) {
       rock =
-        nearestRock(ctx, ship.pos, 500, (r) => dist(r.pos, anchor) < TUNING.droneLeash) ??
-        nearestRock(ctx, anchor, TUNING.droneLeash, () => true) ??
+        nearestRock(ctx, ship.pos, 500, (r) => dist(r.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, r.pos)) ??
+        nearestRock(ctx, anchor, TUNING.droneLeash, (r) => !unsafe(ctx, r.pos)) ??
         undefined;
     }
     if (rock) {
@@ -262,5 +297,6 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   }
 
   ship.aiTargetId = null;
-  arrive(ctx, ship, st, home, 20);
+  if (unsafe(ctx, home)) steer(ctx, ship, st, 0, 0);
+  else arrive(ctx, ship, st, home, 20);
 }
