@@ -87,14 +87,28 @@ class InstancePool {
   }
 }
 
+/** Fragment `uKind` value per kind; also the order of `RAW_RESOURCES`. */
+const KIND_INDEX: Record<RawResource, number> = { ore: 0, ice: 1, crystal: 2 };
+/** Per-kind highlight: ore is a dull warm sheen, ice a tight pale one. */
+const KIND_SURFACE: Record<RawResource, { shininess: number; specular: number; emissive?: number }> = {
+  ore: { shininess: 8, specular: 0x6b4a2a },
+  ice: { shininess: 70, specular: 0xcfeaff },
+  crystal: { shininess: 45, specular: 0xb98cff, emissive: 0x1a0a33 },
+};
+
 /**
- * Patches a Lambert material with emissive crack lines: thin bands of 3D value
- * noise in object space that widen and spread as `aDamage.x` rises.
+ * Patches a Phong material with the shared rock shader: emissive crack lines
+ * (thin bands of 3D value noise in object space that widen and spread as
+ * `aDamage.x` rises) plus a `uKind` branch that shades ore veins, an icy
+ * fresnel rim, or crystal facets. `uKind` is a uniform rather than a define so
+ * all three kinds share one program.
  */
-function addCracks(mat: THREE.MeshLambertMaterial): void {
+function patchRock(mat: THREE.MeshPhongMaterial, kind: RawResource): void {
+  const kindIndex = KIND_INDEX[kind];
   mat.onBeforeCompile = (shader) => {
     shader.uniforms.uTime = crackTime;
     shader.uniforms.uGlow = selfGlow;
+    shader.uniforms.uKind = { value: kindIndex };
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -115,6 +129,7 @@ vObj = position;`,
         `#include <common>
 uniform float uTime;
 uniform float uGlow;
+uniform float uKind;
 varying vec3 vDamage;
 varying vec3 vObj;
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
@@ -131,6 +146,25 @@ float vnoise(vec3 p) {
       .replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
+if (uKind < 0.5) {
+  // Ore: ridged object-space noise reads as warm metal veins.
+  float r1 = 1.0 - abs(2.0 * vnoise(vObj * 2.4) - 1.0);
+  float r2 = 1.0 - abs(2.0 * vnoise(vObj * 5.1 + 11.0) - 1.0);
+  float vein = smoothstep(0.55, 0.95, r1 * 0.65 + r2 * 0.35);
+  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.66, 0.28), vein * 0.55);
+  totalEmissiveRadiance += vec3(1.0, 0.55, 0.2) * vein * 0.1;
+} else if (uKind < 1.5) {
+  // Ice: a fresnel rim fakes the pale glow of a translucent block.
+  float rim = pow(1.0 - abs(dot(normalize(normal), normalize(vViewPosition))), 3.0);
+  totalEmissiveRadiance += vec3(0.55, 0.88, 1.0) * rim * (0.4 + 0.35 * uGlow);
+} else {
+  // Crystal: hash the flat facet normal so whole facets light as units, gated
+  // by an object-space mask and pulsed slowly.
+  float facet = hash3(floor(normal * 9.0));
+  float mask = smoothstep(0.42, 0.86, vnoise(vObj * 4.2));
+  float pulse = 0.75 + 0.25 * sin(uTime * 1.6 + facet * 6.283185);
+  totalEmissiveRadiance += vec3(0.58, 0.3, 1.0) * facet * mask * pulse * (0.3 + 0.5 * uGlow);
+}
 totalEmissiveRadiance += diffuseColor.rgb * vDamage.z * uGlow * (0.85 + 0.15 * sin(uTime * 2.0 + vDamage.y * 20.0));
 if (vDamage.x > 0.001) {
   vec3 q = vObj * 2.6 + vDamage.y * 17.0;
@@ -148,6 +182,20 @@ if (vDamage.x > 0.001) {
 
 const crackTime = { value: 0 };
 const selfGlow = { value: 0.22 };
+
+/**
+ * One material per raw kind, all three sharing the `patchRock` shader (uniform
+ * `uKind`, not a define, so there is still a single program).
+ */
+export function rockMaterial(kind: RawResource): THREE.MeshPhongMaterial {
+  const surface = KIND_SURFACE[kind];
+  const mat = new THREE.MeshPhongMaterial({ color: 0xffffff, flatShading: true });
+  mat.specular = new THREE.Color(surface.specular);
+  mat.shininess = surface.shininess;
+  if (surface.emissive !== undefined) mat.emissive = new THREE.Color(surface.emissive);
+  patchRock(mat, kind);
+  return mat;
+}
 
 export class RockView {
   readonly group = new THREE.Group();
@@ -168,10 +216,21 @@ export class RockView {
   private hitAt = new Map<number, number>();
 
   constructor() {
-    const mat = new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true });
-    addCracks(mat);
-    for (let i = 0; i < ROCK_POOLS; i++)
-      this.rocks.push(new InstancePool(this.group, rockGeometry(1000 + i * 77), mat, 256, true));
+    // Two shape pools per kind (`ore` 0–1, `ice` 2–3, `crystal` 4–5), each pair
+    // sharing its kind's material. `update` still buckets by `id` for now.
+    const mats = RAW_RESOURCES.map(rockMaterial);
+    for (let i = 0; i < ROCK_POOLS; i++) {
+      const kind = RAW_RESOURCES[Math.floor(i / 2)]!;
+      this.rocks.push(
+        new InstancePool(
+          this.group,
+          rockGeometry(1000 + i * 77, rockStyleOf(kind)),
+          mats[Math.floor(i / 2)]!,
+          256,
+          true,
+        ),
+      );
+    }
     this.pickups = new InstancePool(
       this.group,
       new THREE.OctahedronGeometry(1),
