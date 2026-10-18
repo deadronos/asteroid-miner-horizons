@@ -1,6 +1,8 @@
 // Headless balance report (#43). The bot plays N seeds × M warps; we record
-// pacing milestones, time and value per warp, and drone vs flagship income,
-// then write a markdown report (default docs/balance.md).
+// pacing milestones, time and value per warp, and the income split between
+// active play (flagship unloads + contract rewards) and drones, then write a
+// markdown report (default docs/balance.md). The mid-game active-play share is
+// checked against the ≥40% target from #46.
 //
 //   npm run balance
 //   npm run balance -- --seeds 10 --warps 5 --out docs/balance.md
@@ -25,6 +27,11 @@ import { runBot } from './harness';
 
 /** A warp that takes longer than this is reported as a wall and ends the seed. */
 const WARP_CAP_SEC = 3600;
+/** Systems counted as the mid-game: after the opening, before the late-game drone drift. */
+const MID_GAME_START = 3;
+const MID_GAME_END = 6;
+/** Acceptance target for active play's share of income through the mid-game (#46). */
+const ACTIVE_SHARE_TARGET = 0.4;
 
 interface WarpStats {
   sec: number;
@@ -152,6 +159,17 @@ function mmss(sec: number | null): string {
 const stat = (xs: number[], f: (n: number) => string): string =>
   xs.length ? `${f(median(xs))} (${f(Math.min(...xs))}–${f(Math.max(...xs))})` : '—';
 
+const pct = (n: number): string => `${Math.round(n * 100)}%`;
+/** All income in a warp: what the flagship and drones unloaded plus contract rewards. */
+const warpIncome = (x: WarpStats): number => x.flagshipValue + x.droneValue + x.contractValue;
+const share = (part: number, whole: number): number => part / Math.max(1, whole);
+/**
+ * Active-play share. Contract rewards are earned by the player's mining,
+ * breaking and delivering, so they count as active play alongside the
+ * flagship's own unloads (#46). Drones only earn by unloading.
+ */
+const activeShare = (x: WarpStats): number => share(x.flagshipValue + x.contractValue, warpIncome(x));
+
 function report(results: SeedResult[], seeds: number, warps: number, seedStart: number): string {
   let commit = 'unknown';
   try {
@@ -183,8 +201,8 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     '',
     '## Per warp',
     '',
-    '| System | Time in system | vs previous | > 2× prev | Value delivered | Value / min | HD earned | Drone share of income | Contract share of income | Contracts done | Refined ▣ / ◉ | Walls |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    '| System | Time in system | vs previous | > 2× prev | Value delivered | Value / min | HD earned | Active-play share | Flagship share | Drone share | Contract share | Contracts done | Refined ▣ / ◉ | Walls |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   );
   for (let w = 0; w < warps; w++) {
     const rows = results.map((r) => r.warps[w]).filter((x): x is WarpStats => !!x);
@@ -208,12 +226,15 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
       )} | ${stat(
         rows.map((x) => x.hd),
         (n) => `${Math.round(n)}`,
+      )} | ${stat(rows.map(activeShare), pct)} | ${stat(
+        rows.map((x) => share(x.flagshipValue, warpIncome(x))),
+        pct,
       )} | ${stat(
-        rows.map((x) => x.droneValue / Math.max(1, x.droneValue + x.flagshipValue)),
-        (n) => `${Math.round(n * 100)}%`,
+        rows.map((x) => share(x.droneValue, warpIncome(x))),
+        pct,
       )} | ${stat(
-        rows.map((x) => x.contractValue / Math.max(1, x.value + x.contractValue)),
-        (n) => `${Math.round(n * 100)}%`,
+        rows.map((x) => share(x.contractValue, warpIncome(x))),
+        pct,
       )} | ${stat(
         rows.map((x) => x.contracts),
         (n) => `${Math.round(n)}`,
@@ -226,6 +247,35 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
       )} | ${walls ? `${walls} (cap ${WARP_CAP_SEC / 60} min)` : '—'} |`,
     );
   }
+  // Acceptance check for #46: active play must stay ≥ 40% through the mid-game.
+  const midSystems = (r: SeedResult): WarpStats[] => r.warps.slice(MID_GAME_START - 1, MID_GAME_END);
+  const midRows = results.flatMap((r) => midSystems(r).filter((_, i) => r.wall !== MID_GAME_START - 1 + i));
+  const midShares = midRows.map(activeShare);
+  const midFlagship = midRows.reduce((n, x) => n + x.flagshipValue, 0);
+  const midDrone = midRows.reduce((n, x) => n + x.droneValue, 0);
+  const midContract = midRows.reduce((n, x) => n + x.contractValue, 0);
+  const midIncome = midFlagship + midDrone + midContract;
+  const midPooled = share(midFlagship + midContract, midIncome);
+  const perSystem = results.length
+    ? `- Per system (median, min–max): ${Array.from({ length: MID_GAME_END - MID_GAME_START + 1 }, (_, i) => {
+        const w = MID_GAME_START - 1 + i;
+        const xs = results
+          .map((r) => r.warps[w])
+          .filter((x): x is WarpStats => !!x)
+          .map(activeShare);
+        return `${w + 1}: ${stat(xs, pct)}`;
+      }).join(' · ')}`
+    : '—';
+  lines.push(
+    '',
+    '## Active-play share (#46)',
+    '',
+    `Active-play share is \`(flagship unloads + contract rewards) / all income\`, all income being flagship + drones + contracts. Contract rewards count as active play because the player earns them by mining, breaking and delivering. Target: **≥ ${pct(ACTIVE_SHARE_TARGET)} through the mid-game** (systems ${MID_GAME_START}–${MID_GAME_END}).`,
+    '',
+    `- Mid-game pooled (income-weighted, ${midShares.length} seed-warps): **${pct(midPooled)}** (flagship ${pct(midFlagship / Math.max(1, midIncome))} · drones ${pct(midDrone / Math.max(1, midIncome))} · contracts ${pct(midContract / Math.max(1, midIncome))}) — **${midPooled >= ACTIVE_SHARE_TARGET ? 'PASS' : 'FAIL'}**`,
+    `- Mid-game across seed-warps: median ${pct(median(midShares))}, ${pct(Math.min(...midShares))}–${pct(Math.max(...midShares))}`,
+    perSystem,
+  );
   lines.push(
     '',
     '## Modifiers',
