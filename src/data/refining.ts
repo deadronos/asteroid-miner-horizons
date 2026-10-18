@@ -19,7 +19,7 @@ export interface RecipeDef {
 
 export const RECIPES: Record<RecipeId, RecipeDef> = {
   alloy: { id: 'alloy', name: 'Smelt alloy', input: { ore: 4 }, output: 1, time: 2 },
-  fuel: { id: 'fuel', name: 'Crack fuel', input: { ice: 5 }, output: 1, time: 1 },
+  fuel: { id: 'fuel', name: 'Crack fuel', input: { ice: 5 }, output: 1, time: 0.5 },
 };
 
 export const RECIPE_IDS: readonly RecipeId[] = ['alloy', 'fuel'];

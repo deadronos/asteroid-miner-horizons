@@ -7,8 +7,10 @@
 //   repair / buy one thing → chase nearby debris → mine the nearest rock of
 //   whichever resource the bank (or the active delivery contract) needs. A fuel
 //   refine rides alongside the flagship's order rather than replacing it, so
-//   refining never costs the pilot a decision cycle; a refine cycle skips
-//   purchases so a price is not checked against ice the refine is about to spend.
+//   refining never costs the pilot a decision cycle; while docked the purchase
+//   is priced against the bank the refine leaves behind, so a price is not
+//   checked against ice the refine is about to spend and the ship still buys
+//   before it undocks.
 //
 // Ice reserve: any ice-priced purchase must leave at least ICE_RESERVE × warp
 // cost worth of ice (counting fuel as its ice equivalent), otherwise
@@ -21,10 +23,10 @@ import { CONTRACTS } from '../src/data/contracts';
 import { HULLS } from '../src/data/hulls';
 import type { PerkId } from '../src/data/perks';
 import { RECIPES } from '../src/data/refining';
-import { canAfford, type Cost } from '../src/data/resources';
+import { canAfford, pay, type Cost } from '../src/data/resources';
 import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
-import { queuedOutput, refineBlock } from '../src/sim/refining';
+import { batchCost, queuedOutput, refineBlock } from '../src/sim/refining';
 import { cargoFree, flagship, isAlive, shipStats, type ShipStats } from '../src/sim/ships';
 import type { GameState, Rock, Ship } from '../src/sim/types';
 
@@ -69,14 +71,35 @@ export function botCommands(state: GameState, opts: BotOptions = {}): Command[] 
 
   const st = shipStats(fs, profile);
   if (isDocked(run, fs)) {
-    // A refine cycle skips purchases: the refine is about to spend the ice a
-    // price would have been checked against.
-    const buy = fuel ? null : nextPurchase(state, wc);
-    if (buy) return [buy];
+    // Price the purchase against the bank the refine leaves behind, then issue
+    // both: refining first keeps the fuel schedule, and the purchase still
+    // happens before the ship undocks (a skipped cycle would lose the visit).
+    const buy = nextPurchase(fuel ? projectedState(state, fuel) : state, wc);
+    if (buy) return fuel ? [fuel, buy] : [buy];
   }
 
   const order = flagshipOrder(state, fs, st, wc);
   return fuel ? [fuel, ...order] : order;
+}
+
+/**
+ * A shallow copy of `state` as the sim will see it once `refine` has run: its
+ * inputs are already paid and its output already queued, so a purchase can be
+ * priced against the bank the refine leaves behind without mutating `state`.
+ */
+function projectedState(state: GameState, refine: Command): GameState {
+  if (refine.t !== 'refine') return state;
+  const { run } = state;
+  const bank = { ...run.bank };
+  pay(bank, batchCost(refine.recipe, refine.count));
+  const queue = run.refinery.queue.slice();
+  const last = queue[queue.length - 1];
+  if (last && last.recipe === refine.recipe) {
+    queue[queue.length - 1] = { ...last, count: last.count + refine.count, total: last.total + refine.count };
+  } else {
+    queue.push({ recipe: refine.recipe, count: refine.count, total: refine.count, progress: 0 });
+  }
+  return { ...state, run: { ...run, bank, refinery: { ...run.refinery, queue } } };
 }
 
 /** The flagship's non-purchase order this cycle: dock, chase debris, or mine. */

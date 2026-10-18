@@ -161,4 +161,20 @@ describe('balance bot', () => {
     // Tier-3 cargo costs 80 ore, 64 alloy, 128 ice, 14 crystal; the ore covers the shortfall.
     expect(botCommands(s, { warp: false })).toEqual([{ t: 'refine', recipe: 'alloy', count: 64 }]);
   });
+
+  it('a refine cycle while docked also buys an affordable item', () => {
+    const s = newGame(1000);
+    const fs = flagship(s.run);
+    fs.pos = { ...s.run.system.station.pos };
+    s.run.contracts.active = null;
+    s.run.contracts.offers = [];
+    // 200 ice cracks down to the 25-fuel reserve (125 ice) and still leaves 75
+    // ice, so the drone is affordable in the same cycle the refine fires.
+    s.run.bank = { ore: 200, ice: 200, crystal: 0, alloy: 0, fuel: 0 };
+
+    expect(botCommands(s, { warp: false })).toEqual([
+      { t: 'refine', recipe: 'fuel', count: 25 },
+      { t: 'buyHull', hullId: 'drone' },
+    ]);
+  });
 });

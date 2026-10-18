@@ -255,18 +255,18 @@ describe('updateRefinery', () => {
   it('carries leftover time across batches', () => {
     const state = stateWith({ ice: 100 });
     queueRefine(state.run, 'fuel', 3);
-    updateRefinery(state, 2.5);
+    updateRefinery(state, 1.25);
     expect(state.run.bank.fuel).toBe(2);
     expect(state.run.refinery.produced.fuel).toBe(2);
     expect(state.run.refinery.queue[0]!.count).toBe(1);
-    expect(state.run.refinery.queue[0]!.progress).toBeCloseTo(0.5, 9);
+    expect(state.run.refinery.queue[0]!.progress).toBeCloseTo(0.25, 9);
   });
 
   it('carries leftover time across jobs', () => {
     const state = stateWith({ ice: 100, ore: 100 });
     queueRefine(state.run, 'fuel', 1);
     queueRefine(state.run, 'alloy', 1);
-    updateRefinery(state, 2);
+    updateRefinery(state, 1.5);
     expect(state.run.bank.fuel).toBe(1);
     expect(state.run.refinery.queue).toHaveLength(1);
     expect(state.run.refinery.queue[0]!.recipe).toBe('alloy');
@@ -285,7 +285,7 @@ describe('updateRefinery', () => {
     // 30 s finishes the fuel and part of the alloy, so a partial job must match too.
     expect(big.run.refinery.queue).toHaveLength(1);
     expect(small.run.refinery.queue).toHaveLength(1);
-    expect(big.run.refinery.queue[0]!.count).toBe(9);
+    expect(big.run.refinery.queue[0]!.count).toBe(7);
     expect(big.run.refinery.queue[0]!.count).toBe(small.run.refinery.queue[0]!.count);
     expect(big.run.refinery.queue[0]!.progress).toBeCloseTo(small.run.refinery.queue[0]!.progress, 9);
   });
@@ -296,10 +296,10 @@ describe('updateRefinery', () => {
     run.refinery.queue.push({ recipe: 'fuel', count: 0, total: 2, progress: 0 });
     run.refinery.queue.push({ recipe: 'fuel', count: 2, total: 2, progress: 0 });
 
-    updateRefinery(state, 0.5);
+    updateRefinery(state, 0.25);
 
     expect(run.refinery.queue.map((j) => j.count)).toEqual([2]);
-    expect(run.refinery.queue[0]!.progress).toBeCloseTo(0.5, 9);
+    expect(run.refinery.queue[0]!.progress).toBeCloseTo(0.25, 9);
     expect(run.bank.fuel).toBe(0);
     expect(run.refinery.produced.fuel).toBe(0);
   });
@@ -334,7 +334,7 @@ describe('updateRefinery', () => {
 describe('refinery HUD helpers', () => {
   it('describes a recipe', () => {
     expect(describeRecipe('alloy')).toBe('4⬢ → 1▣ · 2s');
-    expect(describeRecipe('fuel')).toBe('5❄ → 1◉ · 1s');
+    expect(describeRecipe('fuel')).toBe('5❄ → 1◉ · 0.5s');
   });
 
   it('reports batch progress clamped to [0, 1]', () => {
@@ -359,7 +359,7 @@ describe('refinery in the tick', () => {
     const state = stateWith({ ice: 100 });
     queueRefine(state.run, 'fuel', 3);
     const index = new SimIndex();
-    for (let t = 0; t < 2 * 60; t++) tick(state, 1 / 60, INPUT, index);
+    for (let t = 0; t < 72; t++) tick(state, 1 / 60, INPUT, index);
 
     expect(state.run.bank.fuel).toBe(2);
     expect(state.run.refinery.produced.fuel).toBe(2);
