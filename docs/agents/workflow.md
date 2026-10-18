@@ -66,6 +66,31 @@ After every task, before committing:
 - A pull request merges to `main` once CI is green. Keep the diff to what the plan describes; unrelated
   refactoring belongs in its own change.
 
+## Releasing
+
+Publishing is tag-driven and deliberately narrow: a `v*` tag is the only thing that reaches the public URL, and
+`main` is never deployed.
+
+1. Bump `version` in `package.json` on `main` and commit it.
+2. Tag that commit and push the tag:
+
+   ```bash
+   git tag v0.2.0
+   git push origin v0.2.0
+   ```
+
+`.github/workflows/release.yml` then repeats the CI gates, builds once, publishes that build to
+<https://deadronos.github.io/asteroid-miner-horizons/> and cuts a GitHub Release with the build attached.
+
+- **The tag must match `package.json`.** A suffix is allowed for a rehearsal — `v0.2.0-rc.1` passes and marks the
+  release as a prerelease. Anything else (`v0.3.0` while `version` is `0.2.0`) fails before anything is built.
+- **Tag pushes do not run `ci.yml`** — its push trigger is `branches: [main]` — which is why `release.yml`
+  repeats format, lint, typecheck and test itself.
+- **One-time setup:** **Settings → Pages → Source = "GitHub Actions"**. The workflow cannot do this itself:
+  `actions/configure-pages` has an `enablement` input, but it needs a token other than `GITHUB_TOKEN`.
+- **To redo a failed run,** re-run the failed job on the run page, or `gh run rerun <run-id> --failed`. Do not
+  re-tag to retry; the tag is the source of truth.
+
 ## Local-only scratch
 
 `.superpowers/` is git-ignored working space (plan pointers, review diffs, screenshots). `scratch.md` is tracked

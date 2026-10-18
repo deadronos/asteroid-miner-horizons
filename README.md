@@ -5,6 +5,8 @@ procedurally generated star system, crack asteroids with a mining laser, haul or
 ice back to the station, fit your hulls with components, build a drone fleet, then
 warp to a fresh system and spend Horizon Data on permanent research.
 
+**Play it online:** <https://deadronos.github.io/asteroid-miner-horizons/>
+
 ## Quick start
 
 ```bash
@@ -23,8 +25,11 @@ npm run balance    # bot plays 10 seeds × 5 warps → docs/balance.md
 Linting and formatting use the [Oxc](https://oxc.rs) toolchain: `oxlint` (config in
 `.oxlintrc.json`) and `oxfmt` (config in `.oxfmtrc.json`, Prettier-compatible options).
 GitHub Actions (`.github/workflows/ci.yml`) runs format check, lint, typecheck, tests and the
-build on every push to `main` and on every pull request. For editor integration, install
-the Oxc extension (VS Code / Cursor). It picks up both config files.
+build on every push to `main` and on every pull request. Releases are tag-driven: pushing a `v*`
+tag runs `.github/workflows/release.yml`, which repeats those checks, builds once, publishes that
+build to GitHub Pages and cuts a GitHub Release with the build attached. Nothing else publishes —
+`main` is never live. For editor integration, install the Oxc extension (VS Code / Cursor). It
+picks up both config files.
 
 Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 
