@@ -107,7 +107,7 @@ export const RECIPE_IDS: readonly RecipeId[];
 ```
 
 Starting values (tuned in Task 7): **alloy** `{ ore: 4 }` → 1 in 2 s;
-**fuel** `{ ice: 5 }` → 1 in 1 s. `RESOURCE_INFO[r].value` must equal
+**fuel** `{ ice: 5 }` → 1 in 1 s (tuned to 0.5 s in Task 7). `RESOURCE_INFO[r].value` must equal
 `walletValue(input) / output` — a test pins this so tuning cannot make refining
 create or destroy value.
 
@@ -136,7 +136,9 @@ Plain JSON. No RNG: refining is fully deterministic and never touches
 
 ### 4. Sim: `src/sim/refining.ts` (new, pure)
 
-- `newRefinery(): Refinery` — empty queue, `produced` zeros.
+- `newRefinery(): Refinery` — empty queue, `nextId: 1`, `produced` zeros.
+  Each queued job gets a stable `id` from `nextId` (added after review, so a
+  cancel cannot hit the wrong job when the queue shifts).
 - `refineBlock(run, recipe, count)` validates (shared by the sim and the HUD
   buttons) and `queueRefine(run, recipe, count)` validates + mutates; both
   return `{ error }` or the clamped batch count. `maxBatches` feeds the Max button.
@@ -146,7 +148,7 @@ Plain JSON. No RNG: refining is fully deterministic and never touches
   `queue.length >= refineQueueMax`) → `'Refinery queue is full.'`. Cost =
   `input × count`; not affordable → `` `Not enough ${resource} to refine ${count} ${name}.` ``.
   Otherwise `pay`, append/merge.
-- `cancelRefine(run, index): RefineJob | null` — removes the job, refunds
+- `cancelRefine(run, id): RefineJob | null` — removes the job, refunds
   `input × count` (the batch in progress is refunded in full; its progress is
   lost), returns the removed job.
 - `updateRefinery(state, dt)` — called once per tick at the end of `tick()`,
@@ -169,8 +171,8 @@ the log and the UI's `done/total` label).
 - `{ t: 'refine'; recipe: RecipeId; count: number }` → `queueRefine`; on error
   `fail(state, msg)`; on success log `info`
   `` `Refinery: queued ${count} × ${name}.` ``.
-- `{ t: 'cancelRefine'; index: number }` → out-of-range index is a silent
-  no-op; otherwise `cancelRefine`, log `info` `Refinery: cancelled …, refunded <formatCost>.`
+- `{ t: 'cancelRefine'; jobId: number }` → an id that is no longer queued is a
+  silent no-op; otherwise `cancelRefine`, log `info` `Refinery: cancelled …, refunded <formatCost>.`
 
 No docking needed: like the contract board, the refinery is station-side and
 works on the station bank.
