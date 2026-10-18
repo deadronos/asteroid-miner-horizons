@@ -1,0 +1,121 @@
+name: Release
+
+# Publishing is tag-driven and deliberately narrow: a `v*` tag is the only thing
+# that reaches the public URL, and `main` is never deployed. See
+# docs/agents/workflow.md → Releasing.
+on:
+  push:
+    tags: ['v*']
+
+# Least privilege by default; each job asks for what it needs.
+permissions:
+  contents: read
+
+jobs:
+  # Tag pushes do not run ci.yml (its push trigger is `branches: [main]`), so
+  # the gates have to be repeated here or a tag would publish unverified code.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Tag matches package.json
+        run: |
+          pkg="$(jq -r .version package.json)"
+          tag="${GITHUB_REF_NAME#v}"
+          # An optional -rc.N / +suffix rehearsal tag passes; anything else has
+          # to match exactly, so v0.3.0 can never ship a 0.2.0 build.
+          case "$tag" in
+            "$pkg" | "$pkg"[-+]*)
+              echo "Tag $GITHUB_REF_NAME matches package.json version $pkg." ;;
+            *)
+              echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $pkg."
+              exit 1 ;;
+          esac
+      - name: Format
+        run: npm run format:check
+      - name: Lint
+        run: npm run lint
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+
+  build:
+    needs: verify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Build
+        run: npm run build
+      # Built once and shared with both publishing jobs, so the Pages site and
+      # the release zip are always the same bytes.
+      - uses: actions/upload-artifact@v7
+        with:
+          name: pages-dist
+          path: dist
+          retention-days: 7
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    # Never cancel a deploy in flight; queue the next tag behind it instead.
+    concurrency:
+      group: pages
+      cancel-in-progress: false
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: pages-dist
+          path: dist
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist
+      - id: deploy
+        uses: actions/deploy-pages@v5
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # `gh release create --generate-notes` walks the tag history.
+          fetch-depth: 0
+      - uses: actions/download-artifact@v8
+        with:
+          name: pages-dist
+          path: dist
+      - name: Package the build
+        run: |
+          version="$(jq -r .version package.json)"
+          zip -qr "asteroid-miner-horizons-${version}.zip" dist
+          echo "ASSET=asteroid-miner-horizons-${version}.zip" >> "$GITHUB_ENV"
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          args=(--title "$GITHUB_REF_NAME" --generate-notes)
+          case "$GITHUB_REF_NAME" in
+            *-*) args+=(--prerelease) ;;
+          esac
+          gh release create "$GITHUB_REF_NAME" "$ASSET" "${args[@]}"
