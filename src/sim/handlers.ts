@@ -26,6 +26,7 @@ import {
 import { describeModifiers } from './modifiers';
 import { batchCost, cancelRefine, queueRefine } from './refining';
 import { droneCount, findShip, flagship, isAlive, isFlagship, makeShip, shipStats } from './ships';
+import { canMine } from './traits';
 import type { Fitted, GameState, Ship } from './types';
 
 export type Handler<K extends Command['t']> = (state: GameState, cmd: Extract<Command, { t: K }>) => void;
@@ -177,8 +178,12 @@ export const handlers: Handlers = {
 
   mine: withShip((state, ship, cmd) => {
     if (!isAlive(ship)) return;
-    if (shipStats(ship, state.profile).dps <= 0) return fail(state, `${ship.name} has no mining laser fitted.`);
-    if (state.run.rocks.some((r) => r.id === cmd.rockId)) ship.order = { kind: 'mine', rockId: cmd.rockId };
+    const st = shipStats(ship, state.profile);
+    if (st.dps <= 0) return fail(state, `${ship.name} has no mining laser fitted.`);
+    const rock = state.run.rocks.find((r) => r.id === cmd.rockId);
+    if (!rock) return;
+    if (!canMine(st, rock)) return fail(state, 'Dense rock — needs a tier-2 laser.');
+    ship.order = { kind: 'mine', rockId: cmd.rockId };
   }),
 
   dock: withShip((state, ship) => {

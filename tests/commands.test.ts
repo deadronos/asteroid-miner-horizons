@@ -3,6 +3,7 @@ import { TUNING } from '../src/data/tuning';
 import { applyCommand, type Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { warpCost } from '../src/sim/economy';
+import { makeRock } from '../src/sim/generate';
 import { describeModifiers, rollModifiers } from '../src/sim/modifiers';
 import { handlers } from '../src/sim/handlers';
 import { flagship, makeShip } from '../src/sim/ships';
@@ -30,6 +31,16 @@ describe('command handlers', () => {
     const { s, fs } = fs1();
     send(s, { t: 'mine', shipId: fs.id, rockId: s.run.rocks[0]!.id });
     expect(fs.order).toEqual({ kind: 'mine', rockId: s.run.rocks[0]!.id });
+  });
+  it('mine rejects a dense rock below a tier-2 laser and keeps the order', () => {
+    const { s, fs } = fs1();
+    fs.pos = { ...s.run.system.station.pos };
+    fs.order = { kind: 'dock' };
+    const dense = makeRock(s.run, 'ore', 1, { x: fs.pos.x + 50, z: fs.pos.z }, 10, 0, 'dense');
+    s.run.rocks.push(dense);
+    send(s, { t: 'mine', shipId: fs.id, rockId: dense.id });
+    expect(s.out.log.some((l) => l.level === 'warn' && l.text.includes('Dense'))).toBe(true);
+    expect(fs.order).toEqual({ kind: 'dock' });
   });
   it('dock', () => {
     const { s, fs } = fs1();

@@ -33,6 +33,7 @@ import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, war
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, queuedOutput, refineBlock } from '../src/sim/refining';
 import { cargoFree, flagship, isAlive, shipStats, type ShipStats } from '../src/sim/ships';
+import { canMine } from '../src/sim/traits';
 import type { GameState, Rock, Run, Ship } from '../src/sim/types';
 
 export const ICE_RESERVE = 0.5;
@@ -287,6 +288,7 @@ function pickRock(state: GameState, fs: Ship, wc: number, hz: Hazard): Rock | nu
   let bestScore = Infinity;
   for (const r of state.run.rocks) {
     if (unsafe(state.run, hz, r.pos)) continue;
+    if (!canMine(shipStats(fs, state.profile), r)) continue;
     let score = dist(fs.pos, r.pos) * (r.kind === want || (bonusCrystal && r.kind === 'crystal') ? 0.5 : 1);
     if (breakLarge && r.size === 0) score *= 0.5;
     if (score < bestScore) {

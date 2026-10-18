@@ -68,8 +68,9 @@ export function destroyRock(state: GameState, rock: Rock): Rock[] {
   return spawned;
 }
 
-/** Applies laser damage; returns fragments if the rock broke this tick. */
-export function laserRock(state: GameState, rock: Rock, dmg: number): Rock[] | null {
+/** Applies laser damage; returns fragments if the rock broke this tick. A dense rock takes nothing below its laser tier. */
+export function laserRock(state: GameState, rock: Rock, dmg: number, laserTier: number): Rock[] | null {
+  if (rock.trait === 'dense' && laserTier < TUNING.denseMinLaserTier) return null;
   rock.hp -= dmg;
   return rock.hp <= 0 ? destroyRock(state, rock) : null;
 }

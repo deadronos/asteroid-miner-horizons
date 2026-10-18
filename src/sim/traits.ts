@@ -4,6 +4,8 @@
 import { hash01 } from '../core/rng';
 import { TRAIT_IDS, type RockTrait } from '../data/traits';
 import { TUNING } from '../data/tuning';
+import type { ShipStats } from './ships';
+import type { Rock } from './types';
 
 /** Seeded trait for a belt rock, or null. Pure hash: never draws from an Rng. */
 export function rollTrait(seed: number, number: number, id: number): RockTrait | null {
@@ -24,4 +26,9 @@ export function traitYield(trait: RockTrait | undefined): number {
     default:
       return 1;
   }
+}
+
+/** False only for a dense rock the ship's best laser tier cannot cut. */
+export function canMine(stats: ShipStats, rock: Rock): boolean {
+  return !(rock.trait === 'dense' && stats.laserTier < TUNING.denseMinLaserTier);
 }

@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { TRAITS, TRAIT_IDS } from '../src/data/traits';
-import { newProfile, newRun } from '../src/sim/create';
-import { rollTrait } from '../src/sim/traits';
-import type { Rock } from '../src/sim/types';
+import { newGame, newProfile, newRun } from '../src/sim/create';
+import { makeRock } from '../src/sim/generate';
+import { laserRock } from '../src/sim/mining';
+import { emptyStats, shipStats, type ShipStats } from '../src/sim/ships';
+import { canMine, rollTrait } from '../src/sim/traits';
+import type { GameState, Rock, Ship } from '../src/sim/types';
 
 const layout = (rocks: Rock[]) => rocks.map((r) => [r.id, r.kind, r.pos.x, r.pos.z, r.radius, r.hp] as const);
 
@@ -52,5 +55,50 @@ describe('trait rolling leaves the run untouched', () => {
 
   it('is deterministic across two runs of one profile', () => {
     expect(layout(newRun(newProfile(99)).rocks)).toEqual(layout(newRun(newProfile(99)).rocks));
+  });
+});
+
+const withLaserTier = (laserTier: number): ShipStats => ({ ...emptyStats(), laserTier });
+
+/** A dense rock at the origin, for the gate tests. */
+const denseRock = (state: GameState): Rock => makeRock(state.run, 'ore', 1, { x: 0, z: 0 }, 10, 0, 'dense');
+
+/** The best fitted laser tier for a ship with exactly `slots` fitted. */
+const tierOf = (...slots: Ship['slots']): number => {
+  const state = newGame(7);
+  const ship = state.run.ships[0]!;
+  ship.slots = slots;
+  return shipStats(ship, state.profile).laserTier;
+};
+
+describe('laserTier', () => {
+  it('reports the best fitted laser tier', () => {
+    expect(tierOf({ type: 'laser', tier: 1 })).toBe(1);
+    expect(tierOf({ type: 'laser', tier: 1 }, { type: 'laser', tier: 1 })).toBe(1);
+    expect(tierOf({ type: 'laser', tier: 2 })).toBe(2);
+    expect(tierOf({ type: 'laser', tier: 1 }, { type: 'laser', tier: 3 })).toBe(3);
+    expect(tierOf()).toBe(0);
+  });
+});
+
+describe('the dense laser gate', () => {
+  it('canMine blocks a dense rock below the laser gate and allows it at tier 2', () => {
+    const state = newGame(7);
+    const dense = denseRock(state);
+    const plain: Rock = { ...dense, trait: undefined };
+    expect(canMine(withLaserTier(1), dense)).toBe(false);
+    expect(canMine(withLaserTier(1), plain)).toBe(true);
+    expect(canMine(withLaserTier(2), dense)).toBe(true);
+  });
+
+  it('laserRock leaves a dense rock untouched below the gate', () => {
+    const state = newGame(7);
+    const dense = denseRock(state);
+    state.run.rocks.push(dense);
+    const hp = dense.hp;
+    expect(laserRock(state, dense, 5, 1)).toBeNull();
+    expect(dense.hp).toBe(hp);
+    expect(laserRock(state, dense, 5, 2)).toBeNull();
+    expect(dense.hp).toBe(hp - 5);
   });
 });
