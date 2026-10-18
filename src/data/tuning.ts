@@ -34,6 +34,12 @@ export const TUNING = {
   /** Horizon Data = floor(sqrt(runValue / dataDivisor)). */
   dataDivisor: 60,
 
+  // Refinery.
+  /** Jobs the station refinery queue can hold. */
+  refineQueueMax: 5,
+  /** Batches a single refine job can hold. */
+  refineMaxBatch: 500,
+
   // Contracts.
   /** Offers kept on the station board per system. */
   contractOffers: 3,

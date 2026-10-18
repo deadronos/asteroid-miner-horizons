@@ -59,7 +59,7 @@ describe('command handlers', () => {
   });
   it('upgrade', () => {
     const { s, fs } = fs1();
-    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0 };
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0, alloy: 0, fuel: 0 };
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
     send(s, { t: 'upgrade', shipId: fs.id, slot: 2 });
     expect(fs.slots[2]!.tier).toBe(2);
@@ -80,7 +80,7 @@ describe('command handlers', () => {
   });
   it('buyHull', () => {
     const s = newGame(1);
-    s.run.bank = { ore: 1000, ice: 1000, crystal: 0 };
+    s.run.bank = { ore: 1000, ice: 1000, crystal: 0, alloy: 0, fuel: 0 };
     const n = s.run.ships.length;
     send(s, { t: 'buyHull', hullId: 'drone' });
     expect(s.run.ships.length).toBe(n + 1);
@@ -232,14 +232,14 @@ describe('command handlers', () => {
   });
   it('install is rejected when under-funded', () => {
     const { s, fs } = fs1();
-    s.run.bank = { ore: 0, ice: 0, crystal: 0 };
+    s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
     expect(fs.slots[2]).toBeNull();
     expect(s.out.log.at(-1)).toMatchObject({ level: 'warn' });
   });
   it('remove re-clamps hull to the new max', () => {
     const { s, fs } = fs1();
-    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0 };
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0, alloy: 0, fuel: 0 };
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'armor' });
     fs.hull = 1e9;
     send(s, { t: 'remove', shipId: fs.id, slot: 2 });

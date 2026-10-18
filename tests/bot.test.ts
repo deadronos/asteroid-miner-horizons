@@ -63,7 +63,7 @@ describe('balance bot', () => {
     const fs = flagship(s.run);
     fs.pos = { x: 0, z: 0 };
     fs.order = null;
-    fs.cargo = { ore: 0, ice: 0, crystal: 0 };
+    fs.cargo = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
     s.run.pickups = [];
     // Ore is nearest; the ice rock is farther but scores as half distance for the contract.
     s.run.rocks = [rock(1, 'ore', 100, 0), rock(2, 'ice', 0, 150)];

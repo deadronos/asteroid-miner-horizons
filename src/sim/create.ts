@@ -7,6 +7,7 @@ import { PERK_IDS, type PerkId } from '../data/perks';
 import { TUNING } from '../data/tuning';
 import { fillBoard, newBoard } from './contracts';
 import { generateSystem, populateBelts } from './generate';
+import { newRefinery } from './refining';
 import { makeShip } from './ships';
 import type { GameState, Profile, Run } from './types';
 
@@ -35,6 +36,8 @@ export function newRun(profile: Profile): Run {
       ore: TUNING.startWallet.ore + kit * 80,
       ice: TUNING.startWallet.ice + kit * 25,
       crystal: 0,
+      alloy: 0,
+      fuel: 0,
     },
     runValue: 0,
     ships: [],
@@ -43,6 +46,7 @@ export function newRun(profile: Profile): Run {
     selectedId: 0,
     regrowTimer: 0,
     contracts: newBoard(profile.seed, number),
+    refinery: newRefinery(),
   };
   populateBelts(run);
 

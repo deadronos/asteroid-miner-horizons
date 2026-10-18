@@ -8,6 +8,8 @@
   --ore: #ffa040;
   --ice: #6fe6ff;
   --crystal: #d27bff;
+  --alloy: #c9d3e0;
+  --fuel: #ff7a4d;
   --warn: #ffc04d;
   --bad: #ff5d5d;
   --btn: rgba(40, 80, 120, 0.55);
@@ -176,6 +178,12 @@ select {
 }
 .res.crystal {
   color: var(--crystal);
+}
+.res.alloy {
+  color: var(--alloy);
+}
+.res.fuel {
+  color: var(--fuel);
 }
 .res.data {
   color: #ffe680;

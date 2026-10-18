@@ -8,13 +8,14 @@ import type { ComponentId, Tier } from '../data/components';
 import type { ContractKind } from '../data/contracts';
 import type { HullId } from '../data/hulls';
 import type { PerkId } from '../data/perks';
-import type { Cost, Resource, Wallet } from '../data/resources';
+import type { RecipeId } from '../data/refining';
+import type { Cost, RawResource, Wallet } from '../data/resources';
 
 export type RockSize = 0 | 1 | 2; // large, medium, small
 
 export interface Rock {
   id: number;
-  kind: Resource;
+  kind: RawResource;
   size: RockSize;
   pos: Vec2;
   vel: Vec2;
@@ -28,7 +29,7 @@ export interface Rock {
 
 export interface Pickup {
   id: number;
-  kind: Resource;
+  kind: RawResource;
   amount: number;
   pos: Vec2;
   vel: Vec2;
@@ -92,7 +93,7 @@ export interface Belt {
   inner: number;
   outer: number;
   /** Probability weights per resource kind. */
-  mix: Wallet;
+  mix: Record<RawResource, number>;
   initialCount: number;
 }
 
@@ -137,6 +138,22 @@ export interface ContractBoard {
   rewardValue: number;
 }
 
+export interface RefineJob {
+  recipe: RecipeId;
+  /** Batches still to finish, including the one in progress. */
+  count: number;
+  /** Original batch count, for the log and the UI's done/total label. */
+  total: number;
+  /** Seconds into the current batch. */
+  progress: number;
+}
+
+export interface Refinery {
+  queue: RefineJob[];
+  /** Units produced this run per recipe (balance metric). */
+  produced: Record<RecipeId, number>;
+}
+
 export interface Run {
   system: StarSystem;
   rng: Rng;
@@ -151,6 +168,7 @@ export interface Run {
   selectedId: number;
   regrowTimer: number;
   contracts: ContractBoard;
+  refinery: Refinery;
 }
 
 export interface Profile {
@@ -162,8 +180,8 @@ export interface Profile {
 }
 
 export type Fx =
-  | { t: 'crack'; pos: Vec2; kind: Resource; radius: number }
-  | { t: 'collect'; pos: Vec2; kind: Resource; amount: number; shipId: number }
+  | { t: 'crack'; pos: Vec2; kind: RawResource; radius: number }
+  | { t: 'collect'; pos: Vec2; kind: RawResource; amount: number; shipId: number }
   | { t: 'dock'; pos: Vec2; shipId: number; value: number }
   | { t: 'impact'; pos: Vec2 }
   | { t: 'explode'; pos: Vec2 }
