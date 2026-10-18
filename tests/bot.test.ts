@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { botCommands } from '../scripts/bot';
 import { runBot } from '../scripts/harness';
 import { contractReward } from '../src/sim/contracts';
+import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
+import { cometPathEscape, inFlareZone } from '../src/sim/hazards';
 import { droneCount, flagship, makeShip, shipStats } from '../src/sim/ships';
-import type { Contract, Rock } from '../src/sim/types';
+import type { Command } from '../src/sim/commands';
+import type { Contract, GameState, Rock } from '../src/sim/types';
 
 /** A deliverCrystal offer with a fixed id, for the bot's serviceability check. */
 const crystalOffer = (id: number): Contract => {
@@ -176,5 +179,89 @@ describe('balance bot', () => {
       { t: 'refine', recipe: 'fuel', count: 25 },
       { t: 'buyHull', hullId: 'drone' },
     ]);
+  });
+});
+
+/** A game where the bot's only decision is the flagship's order: no offers, perks, fuel or affordable purchases. */
+function orderOnly(): GameState {
+  const s = newGame(1000);
+  s.run.contracts.offers = [];
+  s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+  s.run.pickups = [];
+  s.run.rocks = [];
+  flagship(s.run).order = null;
+  return s;
+}
+
+/** Puts a flare warning on an M star. */
+function flareWarning(s: GameState): void {
+  s.run.system.starClass = 'M';
+  s.run.hazards.flare = { phase: 'warning', timeLeft: TUNING.flareWarning };
+}
+
+const only = (cmds: Command[]): Command => {
+  expect(cmds).toHaveLength(1);
+  return cmds[0]!;
+};
+
+/** The target of a move command; throws on anything else. */
+const moveTo = (cmd: Command): { x: number; z: number } => {
+  if (cmd.t !== 'move') throw new Error(`expected a move, got ${cmd.t}`);
+  return cmd.to;
+};
+
+describe('balance bot hazard reflexes', () => {
+  it('docks during a flare warning when the station is close', () => {
+    const s = orderOnly();
+    flareWarning(s);
+    const st = s.run.system.station.pos;
+    const fs = flagship(s.run);
+    fs.pos = { x: st.x * 1.14, z: st.z * 1.14 };
+    s.run.rocks.push(rock(500, 'ore', fs.pos.x + 40, fs.pos.z));
+    expect(only(botCommands(s))).toEqual({ t: 'dock', shipId: fs.id });
+  });
+
+  it('flees past the flare reach when the station is the long way round', () => {
+    const s = orderOnly();
+    flareWarning(s);
+    const st = s.run.system.station.pos;
+    const fs = flagship(s.run);
+    fs.pos = { x: -st.x * 1.2, z: -st.z * 1.2 };
+    expect(inFlareZone(s.run, moveTo(only(botCommands(s))))).toBe(false);
+  });
+
+  it('stays docked through a flare', () => {
+    const s = orderOnly();
+    flareWarning(s);
+    const fs = flagship(s.run);
+    fs.pos = { ...s.run.system.station.pos };
+    s.run.rocks.push(rock(500, 'ore', fs.pos.x + 200, fs.pos.z));
+    fs.order = { kind: 'mine', rockId: 500 };
+    expect(only(botCommands(s))).toEqual({ t: 'stop', shipId: fs.id });
+    fs.order = null;
+    expect(botCommands(s)).toEqual([]);
+  });
+
+  it('moves out of a comet path', () => {
+    const s = orderOnly();
+    const fs = flagship(s.run);
+    fs.pos = { x: 0, z: 610 };
+    s.run.hazards.comet = { from: { x: -3200, z: 600 }, vel: { x: 130, z: 0 }, belt: 0, timeLeft: 8 };
+    const to = moveTo(only(botCommands(s)));
+    expect(to.z).toBeGreaterThan(fs.pos.z);
+    expect(cometPathEscape(s.run, [], to, TUNING.cometDodgePad, { x: 0, z: 0 })).toBe(false);
+  });
+
+  it('skips a rock in a comet path, and drops a mine order on one', () => {
+    const s = orderOnly();
+    const fs = flagship(s.run);
+    fs.pos = { x: 0, z: 300 };
+    s.run.hazards.comet = { from: { x: -3200, z: 0 }, vel: { x: 130, z: 0 }, belt: 0, timeLeft: 8 };
+    s.run.rocks.push(rock(500, 'ore', 0, 60), rock(501, 'ore', 0, 600));
+    expect(only(botCommands(s))).toEqual({ t: 'mine', shipId: fs.id, rockId: 501 });
+    fs.order = { kind: 'mine', rockId: 500 };
+    expect(only(botCommands(s))).toEqual({ t: 'mine', shipId: fs.id, rockId: 501 });
+    s.run.rocks.pop();
+    expect(only(botCommands(s))).toEqual({ t: 'stop', shipId: fs.id });
   });
 });

@@ -5,30 +5,35 @@
 //   buy affordable perks → warp once the bank has the fuel → accept a
 //   serviceable contract → dock when the hold is full → while docked,
 //   repair / buy one thing → chase nearby debris → mine the nearest rock of
-//   whichever resource the bank (or the active delivery contract) needs. A fuel
-//   refine rides alongside the flagship's order rather than replacing it, so
-//   refining never costs the pilot a decision cycle; while docked the purchase
-//   is priced against the bank the refine leaves behind, so a price is not
-//   checked against ice the refine is about to spend and the ship still buys
-//   before it undocks.
+//   whichever resource the bank (or the active delivery contract) needs.
+//   Hazard reflexes come first in the flagship's order: step out of a comet
+//   path, and dock (staying docked) or flee past the reach of a pending or
+//   burning flare; targets in either are skipped. A fuel refine rides
+//   alongside the flagship's order rather than replacing it, so refining never
+//   costs the pilot a decision cycle; while docked the purchase is priced
+//   against the bank the refine leaves behind, so a price is not checked
+//   against ice the refine is about to spend and the ship still buys before it
+//   undocks.
 //
 // Ice reserve: any ice-priced purchase must leave at least ICE_RESERVE × warp
 // cost worth of ice (counting fuel as its ice equivalent), otherwise
 // ice-priced upgrades would starve the warp forever. An upgrade blocked only by
 // alloy is smelted from ore.
 
-import { dist, distSq } from '../src/core/vec';
+import { dist, distSq, type Vec2 } from '../src/core/vec';
 import { COMPONENTS, type ComponentId } from '../src/data/components';
 import { CONTRACTS } from '../src/data/contracts';
 import { HULLS } from '../src/data/hulls';
 import type { PerkId } from '../src/data/perks';
 import { RECIPES } from '../src/data/refining';
 import { canAfford, pay, type Cost } from '../src/data/resources';
+import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
+import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, queuedOutput, refineBlock } from '../src/sim/refining';
 import { cargoFree, flagship, isAlive, shipStats, type ShipStats } from '../src/sim/ships';
-import type { GameState, Rock, Ship } from '../src/sim/types';
+import type { GameState, Rock, Run, Ship } from '../src/sim/types';
 
 export const ICE_RESERVE = 0.5;
 /** Ice the fuel recipe eats per unit of fuel produced. */
@@ -41,6 +46,8 @@ const INSTALL_ORDER: ComponentId[] = ['cargo', 'sensor', 'engine', 'armor', 'las
 const UPGRADE_ORDER: ComponentId[] = ['laser', 'cargo', 'sensor', 'engine', 'armor', 'shield'];
 const PERK_ORDER: PerkId[] = ['yield', 'optics', 'bay', 'kit', 'thrust', 'warp'];
 const PICKUP_CHASE = 260;
+/** How far sideways the flagship is sent to leave a comet path. */
+const COMET_STEP = 150;
 
 export interface BotOptions {
   /** Allow the bot to warp (the bench turns this off to stay in one system). */
@@ -108,26 +115,59 @@ function projectedState(state: GameState, refine: Command): GameState {
   return { ...state, run: { ...run, bank, refinery: { ...run.refinery, queue } } };
 }
 
-/** The flagship's non-purchase order this cycle: dock, chase debris, or mine. */
+/** Live comet rocks plus a scratch vector, for the hazard checks of one decision cycle. */
+interface Hazard {
+  comets: Rock[];
+  out: Vec2;
+}
+
+/** True if `pos` lies in the flare zone or a comet path (see `sim/hazards`). */
+const unsafe = (run: Run, hz: Hazard, pos: Vec2): boolean =>
+  inFlareZone(run, pos) || cometPathEscape(run, hz.comets, pos, TUNING.cometDodgePad, hz.out);
+
+/** The flagship's non-purchase order this cycle: get clear of a hazard, dock, chase debris, or mine. */
 function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number): Command[] {
   const { run } = state;
+  const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
   const free = cargoFree(fs, st);
-  if (isFull(st.cargoCap, free)) return fs.order?.kind === 'dock' ? [] : [{ t: 'dock', shipId: fs.id }];
-  if (fs.order?.kind === 'dock' || fs.order?.kind === 'mine') return [];
+  const full = isFull(st.cargoCap, free);
+
+  if (cometPathEscape(run, hz.comets, fs.pos, TUNING.cometDodgePad + st.size, hz.out)) {
+    const to = { x: fs.pos.x + hz.out.x * COMET_STEP, z: fs.pos.z + hz.out.z * COMET_STEP };
+    return [{ t: 'move', shipId: fs.id, to }];
+  }
+  if (inFlareZone(run, fs.pos)) {
+    if (isDocked(run, fs)) return fs.order ? [{ t: 'stop', shipId: fs.id }] : [];
+    if (flareShelter(run, fs.pos, full, hz.out) === 'dock')
+      return fs.order?.kind === 'dock' ? [] : [{ t: 'dock', shipId: fs.id }];
+    return [{ t: 'move', shipId: fs.id, to: { ...hz.out } }];
+  }
+
+  if (full) return fs.order?.kind === 'dock' ? [] : [{ t: 'dock', shipId: fs.id }];
+  const o = fs.order;
+  if (o?.kind === 'dock') return [];
+  // A mine order stands unless its rock has drifted into danger.
+  let stale = false;
+  if (o?.kind === 'mine') {
+    const target = run.rocks.find((r) => r.id === o.rockId);
+    if (!target || !unsafe(run, hz, target.pos)) return [];
+    stale = true;
+  }
 
   let pickup: { x: number; z: number } | null = null;
   let best = PICKUP_CHASE * PICKUP_CHASE;
   for (const p of run.pickups) {
     const d = distSq(fs.pos, p.pos);
-    if (d < best) {
+    if (d < best && !unsafe(run, hz, p.pos)) {
       best = d;
       pickup = p.pos;
     }
   }
   if (pickup && best > st.magnet * st.magnet * 0.3) return [{ t: 'move', shipId: fs.id, to: pickup }];
 
-  const rock = pickRock(state, fs, wc);
-  return rock ? [{ t: 'mine', shipId: fs.id, rockId: rock.id }] : [];
+  const rock = pickRock(state, fs, wc, hz);
+  if (rock) return [{ t: 'mine', shipId: fs.id, rockId: rock.id }];
+  return stale ? [{ t: 'stop', shipId: fs.id }] : [];
 }
 
 function nextPerk(state: GameState): PerkId | null {
@@ -231,9 +271,10 @@ function nextPurchase(state: GameState, wc: number): Command | null {
 /**
  * Nearest rock, with the resource the bank is shorter on counting as half the
  * distance. An active delivery contract overrides that want with its resource;
- * an active breakLarge scores large (size-0) rocks at half distance.
+ * an active breakLarge scores large (size-0) rocks at half distance. Rocks in
+ * a flare zone or comet path are skipped.
  */
-function pickRock(state: GameState, fs: Ship, wc: number): Rock | null {
+function pickRock(state: GameState, fs: Ship, wc: number, hz: Hazard): Rock | null {
   const { bank } = state.run;
   const active = state.run.contracts.active;
   const iceEq = bank.ice + ICE_PER_FUEL * (bank.fuel + queuedOutput(state.run, 'fuel'));
@@ -245,6 +286,7 @@ function pickRock(state: GameState, fs: Ship, wc: number): Rock | null {
   let best: Rock | null = null;
   let bestScore = Infinity;
   for (const r of state.run.rocks) {
+    if (unsafe(state.run, hz, r.pos)) continue;
     let score = dist(fs.pos, r.pos) * (r.kind === want || (bonusCrystal && r.kind === 'crystal') ? 0.5 : 1);
     if (breakLarge && r.size === 0) score *= 0.5;
     if (score < bestScore) {
