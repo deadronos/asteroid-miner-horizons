@@ -44,7 +44,7 @@ export interface Settings {
   followByDefault: boolean;
   zoomSpeed: number;
   edgePan: boolean;
-  // Audio (music has no tracks yet)
+  // Audio
   volMaster: number;
   volSfx: number;
   volMusic: number;

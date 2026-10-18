@@ -86,16 +86,28 @@ export interface Voice {
   rate: number;
 }
 
+/** Gain at the screen edge relative to the centre: on-screen sources still fall off gently. */
+export const EDGE_GAIN = 0.6;
+/** Widest stereo position, reached at the left/right screen edge. */
+export const PAN_WIDTH = 0.8;
+/** View half-height (world units) at the default zoom; zooming out past it attenuates everything. */
+const REF_HALF_H = 420;
+/** Quietest the zoom factor gets, at whole-system overview. */
+const MIN_ZOOM_GAIN = 0.4;
+
 /**
- * Distance falloff: full volume on screen, fading to silence half a screen
- * beyond the edge. Returns [gain, pan].
+ * Positional mix from the source's place relative to the camera centre and
+ * zoom: full volume at the centre, EDGE_GAIN at the screen edge, silent half a
+ * screen beyond it; zooming out past the default makes everything quieter.
+ * Pan follows the horizontal screen position. Returns [gain, pan].
  */
 export function spatial(pos: Vec2, view: View): [number, number] {
   const dx = (pos.x - view.center.x) / view.halfW;
   const dz = (pos.z - view.center.z) / view.halfH;
-  const out = Math.max(Math.abs(dx), Math.abs(dz)) - 1;
-  const gain = out <= 0 ? 1 : Math.max(0, 1 - out * 2);
-  return [gain, Math.max(-1, Math.min(1, dx)) * 0.6];
+  const r = Math.max(Math.abs(dx), Math.abs(dz));
+  const place = r <= 1 ? 1 - (1 - EDGE_GAIN) * r : EDGE_GAIN * Math.max(0, 1 - (r - 1) * 2);
+  const zoom = Math.max(MIN_ZOOM_GAIN, Math.min(1, Math.sqrt(REF_HALF_H / view.halfH)));
+  return [place * zoom, Math.max(-1, Math.min(1, dx)) * PAN_WIDTH];
 }
 
 /** Tracks quick runs of pickups so each blip in a streak climbs in pitch. */

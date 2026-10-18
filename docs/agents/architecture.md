@@ -26,7 +26,8 @@ src/data  ──┼─▶ src/sim ──┬─▶ src/render  (three.js)
   `settings.ts`, `pause.ts`, `session.ts`.
 
 `src/audio` sits beside the presentation layers: `sfx.ts` holds pure rules for turning sim state into sound,
-and `AudioEngine.ts` owns the `AudioContext`.
+`music.ts` the pure per-star-class music rules, `AudioEngine.ts` owns the `AudioContext`, and `MusicPlayer.ts`
+schedules the generative music into its music bus.
 
 ## The tick
 
