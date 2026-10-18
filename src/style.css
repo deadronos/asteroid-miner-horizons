@@ -421,7 +421,9 @@ button.buy small {
 @media (max-width: 820px) {
   #fleet {
     width: 200px;
-    max-height: 38vh;
+    /* Stop above #contracts: 64px top + 110px bottom + its 30vh + 10px gap. */
+    max-height: min(38vh, calc(70vh - 184px));
+    min-height: 0;
   }
   #contracts {
     width: 200px;

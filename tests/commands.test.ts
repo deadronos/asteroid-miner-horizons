@@ -107,6 +107,16 @@ describe('command handlers', () => {
     expect(s.run.system.number).toBe(2);
   });
 
+  it('warp logs an active contract it leaves behind', () => {
+    const s = newGame(1);
+    s.run.bank.ice = 1000;
+    send(s, { t: 'acceptContract', contractId: s.run.contracts.offers[0]!.id });
+    s.out.log.length = 0;
+    send(s, { t: 'warp' });
+    expect(s.run.contracts.active).toBeNull();
+    expect(s.out.log.some((l) => l.level === 'warn' && l.text.startsWith('Contract left behind'))).toBe(true);
+  });
+
   it('acceptContract moves an offer to active and refills the board', () => {
     const s = newGame(1);
     const board = s.run.contracts;

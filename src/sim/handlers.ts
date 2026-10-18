@@ -92,12 +92,14 @@ export const handlers: Handlers = {
     profile.data += gain;
     profile.dataEarned += gain;
     profile.warps += 1;
+    const dropped = run.contracts.active;
     state.run = newRun(profile);
     out.fx.push({ t: 'warp' });
     out.log.push({
       level: 'major',
       text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.`,
     });
+    if (dropped) out.log.push({ level: 'warn', text: `Contract left behind: ${describeContract(dropped)}.` });
   },
 
   buyHull: (state, cmd) => {

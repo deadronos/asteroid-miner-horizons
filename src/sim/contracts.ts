@@ -31,10 +31,16 @@ export function contractReward(kind: ContractKind, target: number): { reward: Co
   return { reward, data: def.data };
 }
 
-/** Roll one offer for `system`, consuming only `board.rng` and `board.nextId`. */
+/**
+ * Roll one offer for `system`, consuming only `board.rng` and `board.nextId`.
+ * Kinds already offered or active are skipped while any other kind is eligible.
+ */
 export function rollContract(board: ContractBoard, system: number): Contract {
   const eligible = CONTRACT_KINDS.filter((k) => CONTRACTS[k].minSystem <= system);
-  const kind = pick(board.rng, eligible);
+  const taken = new Set(board.offers.map((o) => o.kind));
+  if (board.active) taken.add(board.active.kind);
+  const fresh = eligible.filter((k) => !taken.has(k));
+  const kind = pick(board.rng, fresh.length > 0 ? fresh : eligible);
   const def = CONTRACTS[kind];
   const target = Math.round(def.base * TUNING.contractGrowth ** (system - 1));
   const { reward, data } = contractReward(kind, target);

@@ -48,10 +48,10 @@ export function botCommands(state: GameState, opts: BotOptions = {}): Command[] 
   const wc = warpCost(state);
   if (opts.warp !== false && run.bank.ice >= wc) return [{ t: 'warp' }];
 
+  if (!isAlive(fs)) return [];
+
   const contract = nextContract(state);
   if (contract) return [contract];
-
-  if (!isAlive(fs)) return [];
 
   const st = shipStats(fs, profile);
   if (isDocked(run, fs)) {
@@ -142,10 +142,12 @@ function pickRock(state: GameState, fs: Ship, wc: number): Rock | null {
   const active = state.run.contracts.active;
   const want = (active && CONTRACTS[active.kind].resource) ?? (bank.ice / wc < bank.ore / 300 ? 'ice' : 'ore');
   const breakLarge = active?.kind === 'breakLarge';
+  // A delivery contract owns the want: crystal stops being a free bonus while it runs.
+  const bonusCrystal = !active || breakLarge;
   let best: Rock | null = null;
   let bestScore = Infinity;
   for (const r of state.run.rocks) {
-    let score = dist(fs.pos, r.pos) * (r.kind === want || r.kind === 'crystal' ? 0.5 : 1);
+    let score = dist(fs.pos, r.pos) * (r.kind === want || (bonusCrystal && r.kind === 'crystal') ? 0.5 : 1);
     if (breakLarge && r.size === 0) score *= 0.5;
     if (score < bestScore) {
       bestScore = score;

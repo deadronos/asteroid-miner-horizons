@@ -85,6 +85,27 @@ describe('contract generation', () => {
     for (let i = 0; i < 200; i++) expect(rollContract(board, 1).kind).not.toBe('deliverCrystal');
   });
 
+  it('never offers the same kind twice on one board while others are eligible', () => {
+    for (let seed = 1; seed <= 30; seed++) {
+      for (const system of [1, 2, 4]) {
+        const board = newBoard(seed, system);
+        fillBoard(board, system);
+        const kinds = board.offers.map((o) => o.kind);
+        expect(new Set(kinds).size).toBe(kinds.length);
+      }
+    }
+  });
+
+  it('skips the active contract kind when refilling the board', () => {
+    const state = newGame(3);
+    const board = state.run.contracts;
+    const active = setActive(state, 'deliverIce', 90);
+    board.offers = [];
+    // System 2 has four kinds, so three offers fit without reusing the active one.
+    fillBoard(board, 2);
+    expect(board.offers.map((o) => o.kind)).not.toContain(active.kind);
+  });
+
   it('scales targets by the system growth', () => {
     const board = newBoard(2, 3);
     for (let i = 0; i < 50; i++) {
