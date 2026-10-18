@@ -4,13 +4,17 @@ Progressive-disclosure docs for coding agents. [`AGENTS.md`](../../AGENTS.md) at
 always-read entry point; the files here are pulled in on demand. If you are human and looking for the game,
 start at [`README.md`](../../README.md) instead.
 
-| File                                       | Read it when                                                        |
-| ------------------------------------------ | ------------------------------------------------------------------- |
-| [`architecture.md`](architecture.md)       | You need the layers, the tick, or the design rules                  |
-| [`repo-structure.md`](repo-structure.md)   | You need to know what lives where, or what may import what          |
-| [`sim-conventions.md`](sim-conventions.md) | You are adding a command, tuning knob, RNG stream or save migration |
-| [`testing.md`](testing.md)                 | You are writing tests, or working on the bot/bench/balance harness  |
-| [`workflow.md`](workflow.md)               | You are turning an issue into a spec, plan and pull request         |
+Each fact has one owner here; other pages link to it rather than restating it. AGENTS.md says when to read each
+page; this table says what each one owns.
+
+| File                                       | Owns                                                                  |
+| ------------------------------------------ | --------------------------------------------------------------------- |
+| [`architecture.md`](architecture.md)       | The layers, the tick order, the sim → presentation outbox, boundaries |
+| [`repo-structure.md`](repo-structure.md)   | Where things live, what may import what, where new code goes          |
+| [`sim-conventions.md`](sim-conventions.md) | Purity and RNG streams, the command recipe, tuning, save migrations   |
+| [`testing.md`](testing.md)                 | Running tests, test conventions, the bot/bench/balance harness        |
+| [`workflow.md`](workflow.md)               | Spec, plan and run log; review model; verification; branches and PRs  |
+| [`style.md`](style.md)                     | Comment style, formatter and lint rules                               |
 
 ## Where truth lives
 

@@ -2,68 +2,31 @@
 
 ## Tree
 
+Directories, plus the files you need to know by name. Every module opens with a header comment saying what it
+is; `ls` a directory and read those for the rest.
+
 ```
 src/
-  core/          primitives, no project knowledge
-    array.ts       small array helpers (e.g. removeItem)
-    rng.ts         mulberry32 PRNG: makeRng/next/range/int/pick/chance/hash01
-    spatialHash.ts uniform-grid broad phase; rebuilt once per tick
-    vec.ts         minimal 2D helpers; the map plane is { x, z }
+  core/          primitives, no project knowledge (rng, vec, spatialHash, array)
   data/          pure tables and values, no logic
-    resources.ts   resource kinds (ore, ice, crystal, alloy, fuel), wallets, costs
-    components.ts  the six component types and their tier 1–3 stats
-    hulls.ts       hull base stats and slot counts
-    perks.ts       permanent prestige perks
-    refining.ts    refinery recipes
-    contracts.ts   station contract kinds, targets and reward shapes
-    modifiers.ts   per-system modifiers
     tuning.ts      every global balance knob
-  audio/
-    AudioEngine.ts Web Audio mixer; gesture-gated AudioContext
-    sfx.ts         pure rules: sim state -> which sound, how loud, where
-    zzfx.ts        ZzFX sample generator, adapted to TypeScript
+  audio/         Web Audio: AudioEngine.ts owns the AudioContext, sfx.ts holds the pure sound rules
   sim/           the deterministic game; no DOM, no three.js
     types.ts       GameState / Profile / Run / Ship / Rock / Fx / LogEntry
     create.ts      newGame / newRun, SAVE_VERSION
-    generate.ts    star systems, belts, rock spawning
     commands.ts    Command union + dispatch
     handlers.ts    one handler per Command variant, in an exhaustive map
-    economy.ts     read-only queries: costs, "why is this disabled"
-    pilot.ts       steering, obstacle avoidance, orders, drone AI
-    mining.ts      laser damage, cracking, debris drops
-    ships.ts       derived stats, damage, ship construction
-    index.ts       SimIndex: per-session derived state, rebuilt per tick
     update.ts      the fixed-step tick
-    assists.ts     autopilot toggle shape passed in from Settings
-    contracts.ts   contract offer generation, progress, timers
-    refining.ts    refinery queue, validation and tick
-    modifiers.ts   rolling and applying system modifiers
+    index.ts       SimIndex: per-session derived state, rebuilt per tick
     save.ts        save slots, import/export format and validation
     migrations.ts  versioned save upgrades
-  render/        three.js
-    Renderer.ts      camera, zoom, pan, follow; turns sim fx into particles
-    rocks.ts         asteroids + pickups as InstancedMesh, with a damage shader
-    shipView.ts      hull, flame, shield, rings, bars, mining beam
-    systemView.ts    star, heat zone, planets, moons, belts, station
-    particles.ts     cosmetic particle pool
-    debris.ts        tumbling chunks thrown off when a rock cracks
-    floatingText.ts  pooled "+12 ⬢" labels
-    backdrop.ts      parallax starfield layers + per-system nebula
-    cull.ts          view-rectangle culling (plain AABB on the ground plane)
-    util.ts          shared three.js helpers
-  ui/            DOM HUD
-    Hud.ts           composes the panels and owns the small overlays
-    Menu.ts          the ⚙ tabbed modal shell
-    dom.ts           tiny DOM toolkit; panels rebuild only when a key changes
-    panels/          TopBar, ShipPanel, FleetPanel, ContractsPanel,
-                     RefineryPanel, ResearchPanel (+ context.ts)
-    menu/            SavesTab, SettingsTabs, ControlsTab, AudioTab, form.ts
+  render/        three.js; Renderer.ts owns camera, zoom and fx
+  ui/            DOM HUD; Hud.ts composes panels/, Menu.ts is the ⚙ modal over menu/
   input.ts       keyboard/pointer -> Commands; world-space picking
   settings.ts    preferences store, separate from saves
   pause.ts       pause kind -> banner + continuous-audio policy
   session.ts     which slot is running; load/new/import/delete/autosave
   main.ts        bootstrap + 60 Hz fixed-step loop
-  style.css      HUD styling
 tests/           see testing.md
 scripts/         headless harness: bot.ts, harness.ts, bench.ts, balance.ts
 docs/
@@ -76,22 +39,19 @@ docs/
 
 The layers are enforced by convention and by `import/no-cycle` in `.oxlintrc.json`.
 
-| Directory            | May import                                                       |
-| -------------------- | ---------------------------------------------------------------- |
-| `core/`              | nothing                                                          |
-| `data/`              | only other `data/` files, and only for types or shared resources |
-| `sim/`               | `core/`, `data/`                                                 |
-| `render/`            | `core/`, `data/`, `sim/`                                         |
-| `ui/`                | `data/`, `sim/`                                                  |
-| `audio/`             | `core/`, `sim/`                                                  |
-| top-level `src/*.ts` | anything                                                         |
+| Directory            | May import                                                    |
+| -------------------- | ------------------------------------------------------------- |
+| `core/`              | other `core/` files only                                      |
+| `data/`              | other `data/` files only, for shared types and tables         |
+| `sim/`               | `core/`, `data/`                                              |
+| `render/`            | `core/`, `data/`, `sim/`, and top-level `settings.ts`         |
+| `ui/`                | `data/`, `sim/`, and top-level `settings.ts` and `session.ts` |
+| `audio/`             | `core/`, `sim/`, and top-level `settings.ts`                  |
+| top-level `src/*.ts` | anything                                                      |
 
-Two consequences worth remembering:
-
-- **`render/` and `ui/` may read sim state but never write it.** They send `Command`s. If you find yourself
-  wanting to poke `state.run` from a panel, add a command instead.
-- **`sim/` must never import `render/`, `ui/` or `audio/`.** If the sim needs to tell the presentation about
-  something, push an `Fx` or a `LogEntry` onto `state.out`.
+The rule that matters most: **`sim/` never imports `render/`, `ui/`, `audio/` or any top-level `src/*.ts`.**
+Presentation reads sim state and talks back only through `Command`s; the sim talks out only through `state.out`
+(see [`architecture.md`](architecture.md#design-rules)).
 
 ## Where new code goes
 

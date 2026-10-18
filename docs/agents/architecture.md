@@ -3,13 +3,14 @@
 ## Layers
 
 Six directories, with a one-way dependency flow. `core` and `data` know nothing about the game; nothing below
-imports anything above it.
+imports anything above it. The exact import rules, including the top-level `settings.ts` and `session.ts` that
+the presentation layers read, are in [`repo-structure.md`](repo-structure.md#what-may-import-what).
 
 ```
-                 ┌─▶ src/audio   (Web Audio; imports core + sim)
+                 ┌─▶ src/audio   (Web Audio)
 src/core  ──┐    │
-src/data  ──┼─▶ src/sim ──┬─▶ src/render  (three.js; imports core + data + sim)
-            │            └─▶ src/ui      (DOM HUD; imports data + sim)
+src/data  ──┼─▶ src/sim ──┬─▶ src/render  (three.js)
+            │            └─▶ src/ui      (DOM HUD)
 ```
 
 - **`src/core`** — primitives with no project knowledge: seeded `rng`, `vec` helpers, `spatialHash`, `array`.
@@ -39,11 +40,11 @@ refits in an open menu apply immediately.
 
 ## Design rules
 
-- **The sim is pure and deterministic.** All randomness goes through `run.rng`, which is stored in the save, so
-  the same seed and the same commands replay identically. Renderer particles may use `Math.random`; they are
-  cosmetic only.
+- **The sim is pure and deterministic**, so a seed and a command stream replay identically. The rules and the
+  RNG-stream pattern that keep it that way are in [`sim-conventions.md`](sim-conventions.md#purity). Renderer
+  particles may use `Math.random`; they are cosmetic only.
 - **Input and UI never mutate state.** They enqueue `Command`s, which `tick()` applies at the start of the next
-  step. Invalid commands are rejected with a log message.
+  step; the recipe is in [`sim-conventions.md`](sim-conventions.md#adding-a-command).
 - **The sim emits `out.fx` / `out.log`.** The renderer turns fx into particles and screen shake and the HUD
   drains the log. This outbox is the only sim → presentation channel.
 - **Rendering performance.** Asteroids and pickups use `InstancedMesh`: six shared rock shape pools (two per
@@ -60,9 +61,6 @@ refits in an open menu apply immediately.
 - **`GameState`** (`src/sim/types.ts`) is plain JSON-serialisable data — no classes, no `Map`s — so a save is
   `JSON.stringify` of `{ version, profile, run }`. Transient output lives in `out` and is not persisted. A
   `Profile` survives warps; a `Run` is one star system's progress and is rebuilt on every warp.
-
-The only non-determinism sits at the edges, never inside a tick: `newGame`'s default random seed and the
-`savedAt` timestamps in `src/sim/save.ts`.
 
 ## Debug hook
 

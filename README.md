@@ -26,7 +26,7 @@ GitHub Actions (`.github/workflows/ci.yml`) runs format check, lint, typecheck, 
 build on every push to `main` and on every pull request. For editor integration, install
 the Oxc extension (VS Code / Cursor). It picks up both config files.
 
-Requires Node 20+. Built with TypeScript 7, Vite 8 and three r186.
+Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 
 ## How to play
 
