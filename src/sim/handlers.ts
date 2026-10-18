@@ -8,6 +8,7 @@ import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
 import { RESOURCES, pay, type Cost } from '../data/resources';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
+import { describeContract, fillBoard } from './contracts';
 import { newRun } from './create';
 import {
   dataGain,
@@ -91,12 +92,14 @@ export const handlers: Handlers = {
     profile.data += gain;
     profile.dataEarned += gain;
     profile.warps += 1;
+    const dropped = run.contracts.active;
     state.run = newRun(profile);
     out.fx.push({ t: 'warp' });
     out.log.push({
       level: 'major',
       text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.`,
     });
+    if (dropped) out.log.push({ level: 'warn', text: `Contract left behind: ${describeContract(dropped)}.` });
   },
 
   buyHull: (state, cmd) => {
@@ -216,4 +219,24 @@ export const handlers: Handlers = {
     clampToStats(state, ship);
     state.out.log.push({ level: 'info', text: `${ship.name}: installed ${COMPONENTS[cmd.comp].name}.` });
   }),
+
+  acceptContract: (state, cmd) => {
+    const board = state.run.contracts;
+    if (board.active) return fail(state, 'Finish or abandon the current contract first.');
+    const offer = board.offers.find((o) => o.id === cmd.contractId);
+    if (!offer) return fail(state, 'That contract is no longer offered.');
+    board.offers = board.offers.filter((o) => o !== offer);
+    board.active = { ...offer, progress: 0, timeLeft: offer.timeLimit };
+    fillBoard(board, state.run.system.number);
+    state.out.log.push({ level: 'info', text: `Contract accepted: ${describeContract(offer)}.` });
+  },
+
+  abandonContract: (state) => {
+    const board = state.run.contracts;
+    const c = board.active;
+    if (!c) return;
+    board.failed++;
+    board.active = null;
+    state.out.log.push({ level: 'info', text: `Contract abandoned: ${describeContract(c)}.` });
+  },
 };

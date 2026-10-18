@@ -34,5 +34,17 @@ export const TUNING = {
   /** Horizon Data = floor(sqrt(runValue / dataDivisor)). */
   dataDivisor: 60,
 
+  // Contracts.
+  /** Offers kept on the station board per system. */
+  contractOffers: 3,
+  /** Seconds an un-accepted offer stays on the board. */
+  contractOfferTtl: 240,
+  /** Per-system multiplier on a contract's target. */
+  contractGrowth: 1.15,
+  /** Reward value as a fraction of the target's own value. */
+  contractRewardMul: 0.58,
+  /** Value of the units in one large rock (≈42 units at radius 30–44, ore/ice mix), used to price breakLarge rewards. */
+  contractRockValue: 45,
+
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;

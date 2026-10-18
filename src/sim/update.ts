@@ -1,5 +1,5 @@
 // The fixed-step simulation tick. Order of operations:
-// commands → orbits → rocks → ships (pilot, collide, heat, dock) → pickups → belt regrowth.
+// commands → orbits → rocks → ships (pilot, collide, heat, dock) → pickups → belt regrowth → contracts.
 
 import { range } from '../core/rng';
 import { damp, dist, type Vec2 } from '../core/vec';
@@ -7,6 +7,7 @@ import { walletValue, RESOURCES, RESOURCE_INFO, walletTotal } from '../data/reso
 import { TUNING } from '../data/tuning';
 import { DEFAULT_ASSISTS, type Assists } from './assists';
 import { applyCommand, type Command } from './commands';
+import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
 import { spawnBeltRock } from './generate';
 import type { SimIndex } from './index';
@@ -63,6 +64,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
 
   updatePickups(state, index.stats, dt);
   regrowBelts(state, dt);
+  updateContracts(state, dt);
 }
 
 function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void {
@@ -165,6 +167,8 @@ function unload(state: GameState, ship: Ship): void {
   const parts = RESOURCES.filter((r) => ship.cargo[r] >= 0.5).map(
     (r) => `${Math.floor(ship.cargo[r])}${RESOURCE_INFO[r].icon}`,
   );
+  for (const r of RESOURCES)
+    if (ship.cargo[r] > 0) contractProgress(state, { t: 'deliver', resource: r, amount: ship.cargo[r] });
   for (const r of RESOURCES) {
     run.bank[r] += ship.cargo[r];
     ship.cargo[r] = 0;

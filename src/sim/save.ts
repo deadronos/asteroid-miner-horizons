@@ -6,7 +6,7 @@
 // saves from a newer version are rejected rather than half-loaded.
 
 import { SAVE_VERSION } from './create';
-import { type MigrateOptions, migrate } from './migrations';
+import { chainCovers, type MigrateOptions, migrate } from './migrations';
 import type { GameState, Profile, Run } from './types';
 
 export const SLOT_COUNT = 3;
@@ -53,6 +53,19 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!profile || typeof profile.seed !== 'number' || typeof profile.perks !== 'object') return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
+  // The tick walks the board, so reject anything it cannot handle: offers, the
+  // id counter and the RNG state must all be present.
+  const board = run.contracts as { offers?: unknown; nextId?: unknown; rng?: { s?: unknown } | null };
+  if (
+    !board ||
+    typeof board !== 'object' ||
+    !Array.isArray(board.offers) ||
+    typeof board.nextId !== 'number' ||
+    typeof board.rng !== 'object' ||
+    !board.rng ||
+    typeof board.rng.s !== 'number'
+  )
+    return null;
   if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
   return { version: migrated.version, profile, run, out: { fx: [], log: [] } };
 }
@@ -82,9 +95,10 @@ export function parseImport(
     const to = opts?.to ?? SAVE_VERSION;
     if (typeof v === 'number' && v > to)
       return { ok: false, error: `This save is from a newer version (v${v}) and can't be loaded by this build.` };
-    // Only blame the version when it's one we can't upgrade; an upgradable save
-    // that still fails validation is just not a usable save.
-    if (Number.isInteger(v) && (v as number) >= 1 && !migrate(payload, opts))
+    // Only blame the version when the chain genuinely cannot reach it; an
+    // upgradable save that still fails (even by making a step throw) is just
+    // not a usable save.
+    if (Number.isInteger(v) && (v as number) >= 1 && !chainCovers(v as number, opts))
       return { ok: false, error: `Unsupported save version ${String(v)} (expected ${to}).` };
     return { ok: false, error: 'This is not an Asteroid Miner Horizons save.' };
   }

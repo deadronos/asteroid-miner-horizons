@@ -5,11 +5,12 @@ import { makeRng } from '../core/rng';
 import { v } from '../core/vec';
 import { PERK_IDS, type PerkId } from '../data/perks';
 import { TUNING } from '../data/tuning';
+import { fillBoard, newBoard } from './contracts';
 import { generateSystem, populateBelts } from './generate';
 import { makeShip } from './ships';
 import type { GameState, Profile, Run } from './types';
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 
 export function newProfile(seed: number): Profile {
   return {
@@ -41,6 +42,7 @@ export function newRun(profile: Profile): Run {
     pickups: [],
     selectedId: 0,
     regrowTimer: 0,
+    contracts: newBoard(profile.seed, number),
   };
   populateBelts(run);
 
@@ -50,6 +52,7 @@ export function newRun(profile: Profile): Run {
   run.ships.push(ship);
   run.selectedId = ship.id;
   if (kit >= 3) run.ships.push(makeShip(run, profile, 'drone', 'Drone-1', v(out.x + 40, out.z + 30)));
+  fillBoard(run.contracts, number);
   return run;
 }
 

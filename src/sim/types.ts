@@ -5,9 +5,10 @@
 import type { Rng } from '../core/rng';
 import type { Vec2 } from '../core/vec';
 import type { ComponentId, Tier } from '../data/components';
+import type { ContractKind } from '../data/contracts';
 import type { HullId } from '../data/hulls';
 import type { PerkId } from '../data/perks';
-import type { Resource, Wallet } from '../data/resources';
+import type { Cost, Resource, Wallet } from '../data/resources';
 
 export type RockSize = 0 | 1 | 2; // large, medium, small
 
@@ -110,6 +111,32 @@ export interface StarSystem {
   richness: number;
 }
 
+export interface Contract {
+  /** Board-local id (board.nextId), not run.nextId. */
+  id: number;
+  kind: ContractKind;
+  target: number;
+  progress: number;
+  /** Seconds to complete once accepted. */
+  timeLimit: number;
+  /** Offer: seconds left on the board. Active: seconds left to complete. */
+  timeLeft: number;
+  reward: Cost;
+  data: number;
+}
+
+export interface ContractBoard {
+  /** Dedicated stream: contract rolls never touch run.rng. */
+  rng: Rng;
+  nextId: number;
+  offers: Contract[];
+  active: Contract | null;
+  completed: number;
+  failed: number;
+  /** walletValue of all resource rewards paid this run (balance metric). */
+  rewardValue: number;
+}
+
 export interface Run {
   system: StarSystem;
   rng: Rng;
@@ -123,6 +150,7 @@ export interface Run {
   pickups: Pickup[];
   selectedId: number;
   regrowTimer: number;
+  contracts: ContractBoard;
 }
 
 export interface Profile {

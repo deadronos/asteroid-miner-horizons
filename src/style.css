@@ -198,7 +198,8 @@ button.glow {
   top: 64px;
   left: 10px;
   width: 250px;
-  max-height: calc(100vh - 290px);
+  max-height: calc(100vh - 530px);
+  min-height: 120px;
   overflow-y: auto;
 }
 .shiprow {
@@ -242,6 +243,15 @@ button.buy {
 }
 button.buy small {
   color: var(--dim);
+}
+
+/* Contracts (left, above the log) */
+#contracts {
+  left: 10px;
+  bottom: 210px;
+  width: 250px;
+  max-height: min(240px, calc(100vh - 400px));
+  overflow-y: auto;
 }
 
 /* Bars */
@@ -411,7 +421,14 @@ button.buy small {
 @media (max-width: 820px) {
   #fleet {
     width: 200px;
-    max-height: 38vh;
+    /* Stop above #contracts: 64px top + 110px bottom + its 30vh + 10px gap. */
+    max-height: min(38vh, calc(70vh - 184px));
+    min-height: 0;
+  }
+  #contracts {
+    width: 200px;
+    bottom: 110px;
+    max-height: 30vh;
   }
   #ship {
     width: 230px;

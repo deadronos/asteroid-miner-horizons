@@ -5,6 +5,7 @@
 import { range } from '../core/rng';
 import { fromAngle, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
+import { contractProgress } from './contracts';
 import { makeRock } from './generate';
 import type { GameState, Rock, RockSize } from './types';
 
@@ -40,6 +41,7 @@ export function destroyRock(state: GameState, rock: Rock): Rock[] {
   const { run } = state;
   run.rocks = run.rocks.filter((r) => r !== rock);
   state.out.fx.push({ t: 'crack', pos: { ...rock.pos }, kind: rock.kind, radius: rock.radius });
+  contractProgress(state, { t: 'break', size: rock.size });
 
   const kids = CHILDREN[rock.size];
   const spawned: Rock[] = [];
