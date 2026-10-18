@@ -21,4 +21,18 @@ describe('removeItem', () => {
     expect(removeItem(arr, 2)).toBe(true);
     expect(arr).toEqual([1]);
   });
+
+  it('returns false on an empty array', () => {
+    const arr: number[] = [];
+    expect(removeItem(arr, 1)).toBe(false);
+    expect(arr).toEqual([]);
+  });
+
+  it('removes a match at index 0', () => {
+    const arr = [1, 2, 3];
+    const same = arr;
+    expect(removeItem(arr, 1)).toBe(true);
+    expect(arr).toEqual([2, 3]);
+    expect(arr).toBe(same);
+  });
 });

@@ -71,6 +71,7 @@ describe('in-place rock removal', () => {
     expect(rocks[5]).toBe(next); // the next rock shifted into the freed slot
     expect(rocks).not.toContain(target);
     expect(rocks.length).toBe(before - 1 + frags.length); // fragments are appended
+    expect(rocks.slice(before - 1)).toEqual(frags); // ...after the survivors, in order
   });
 });
 

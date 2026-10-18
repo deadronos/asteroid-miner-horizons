@@ -25,7 +25,9 @@ describe('pilot scratch reuse', () => {
     const st = ctx.index.stats.get(ship.id)!;
     steer(ctx, ship, st, 1, 0, true);
     expect(ctx.index.avoid).toBe(scratch);
-    expect(Number.isFinite(ctx.index.avoid.x)).toBe(true);
+    // A rock 40 units ahead (radius 30) is in the corridor and nearly touching,
+    // so avoidance must push back/sideways — not just produce a finite number.
+    expect(Math.hypot(ctx.index.avoid.x, ctx.index.avoid.z)).toBeGreaterThan(0);
   });
 
   it('droneThink writes its home slot into the shared index scratch', () => {

@@ -1,4 +1,5 @@
 import { SpatialHash } from '../core/spatialHash';
+import type { Vec2 } from '../core/vec';
 import { applyEffects, systemEffects } from './modifiers';
 import { emptyStats, writeShipStats, type ShipStats } from './ships';
 import type { GameState, Rock } from './types';
@@ -17,9 +18,9 @@ export class SimIndex {
    */
   readonly stats = new Map<number, ShipStats>();
   /** Scratch written by `pilot.avoidance`; never read without writing first. */
-  readonly avoid = { x: 0, z: 0 };
+  readonly avoid: Vec2 = { x: 0, z: 0 };
   /** Scratch written by `pilot.droneThink`; never read without writing first. */
-  readonly home = { x: 0, z: 0 };
+  readonly home: Vec2 = { x: 0, z: 0 };
   /** Ids seen in the last `rebuild`, so the next one can prune the departed. */
   private readonly liveShipIds = new Set<number>();
 

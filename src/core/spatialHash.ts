@@ -14,9 +14,13 @@ type Bucket<T> = (T | number | undefined)[];
 
 export class SpatialHash<T extends { pos: Vec2 }> {
   private readonly cells = new Map<number, Bucket<T>>();
-  /** Live buckets for the current rebuild; `pool` is the free list. Swapped each rebuild. */
-  private used: Bucket<T>[] = [];
-  private pool: Bucket<T>[] = [];
+  /**
+   * Buckets in use by the current rebuild. Between rebuilds `spareBuckets` holds
+   * every other recycled bucket, ready to be handed back out; the two lists are
+   * swapped each rebuild so no array is allocated once warm.
+   */
+  private liveBuckets: Bucket<T>[] = [];
+  private spareBuckets: Bucket<T>[] = [];
 
   constructor(private readonly cell = 128) {}
 
@@ -26,17 +30,18 @@ export class SpatialHash<T extends { pos: Vec2 }> {
 
   rebuild(items: readonly T[]): void {
     this.cells.clear();
-    // Last rebuild's live buckets are all free now; this rebuild's live list is
-    // built into the previous free list, so no array is allocated once warm.
-    const free = this.used;
-    const live = this.pool;
+    // Last rebuild's live buckets are all free now (`spare`); this rebuild's
+    // live list is refilled from the previous spare list, so no array is
+    // allocated once warm.
+    const spare = this.liveBuckets;
+    const live = this.spareBuckets;
     let n = 0;
     for (const it of items) {
       const k = this.key(Math.floor(it.pos.x / this.cell), Math.floor(it.pos.z / this.cell));
       let bucket = this.cells.get(k);
       if (!bucket) {
-        if (n < free.length) {
-          bucket = free[n]!;
+        if (n < spare.length) {
+          bucket = spare[n]!;
           // Drop stale references (a bucket is reused at whatever length it
           // reached last time); its capacity is kept, only the count is reset.
           const old = bucket[0] as number;
@@ -53,9 +58,9 @@ export class SpatialHash<T extends { pos: Vec2 }> {
       bucket[0] = c + 1;
     }
     live.length = n;
-    free.length = 0;
-    this.used = live;
-    this.pool = free;
+    spare.length = 0;
+    this.liveBuckets = live;
+    this.spareBuckets = spare;
   }
 
   /** Calls fn for every item in cells overlapping the circle (center, radius). */

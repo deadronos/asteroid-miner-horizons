@@ -5,8 +5,10 @@ interface Thing {
   pos: { x: number; z: number };
 }
 const at = (x: number, z: number): Thing => ({ pos: { x, z } });
+/** A recycled bucket: slot 0 is the count, items follow. Mirrors the private type. */
+type Bucket = (Thing | number | undefined)[];
 /** The private fields the reuse test inspects. */
-type Internals = { cells: Map<number, Thing[]>; pool: Thing[][] };
+type Internals = { cells: Map<number, Bucket> };
 
 describe('SpatialHash', () => {
   it('reuses the same bucket array for a cell across rebuilds', () => {
@@ -19,12 +21,16 @@ describe('SpatialHash', () => {
     expect(internals.cells.values().next().value).toBe(bucket);
   });
 
-  it('allocates no new buckets once the pool is warm', () => {
+  it('allocates no new buckets across rebuilds once warm', () => {
     const hash = new SpatialHash<Thing>(128);
     const internals = hash as unknown as Internals;
-    for (let i = 0; i < 50; i++) hash.rebuild([at(10, 10)]);
+    const seen = new Set<Bucket>();
+    for (let i = 0; i < 50; i++) {
+      hash.rebuild([at(10, 10)]);
+      seen.add(internals.cells.values().next().value!);
+    }
     expect(internals.cells.size).toBe(1);
-    expect(internals.pool.length).toBe(0);
+    expect(seen.size).toBe(1); // one bucket identity served all 50 rebuilds
   });
 
   it('query sees exactly the items of the latest rebuild', () => {
