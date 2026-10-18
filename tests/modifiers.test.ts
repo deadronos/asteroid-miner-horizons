@@ -42,6 +42,7 @@ describe('modifier data', () => {
     for (const id of MODIFIER_IDS) {
       const m = MODIFIERS[id];
       expect(m.name.length).toBeGreaterThan(0);
+      expect(m.icon.length).toBeGreaterThan(0);
       const xs = [m.beltCount, m.magnet, m.regrowInterval, ...Object.values(m.mix ?? {})].filter(
         (x) => x !== undefined,
       );
@@ -160,7 +161,7 @@ describe('descriptions', () => {
   });
 
   it('renders a multiplier of exactly 1 as +0%', () => {
-    expect(describeDef({ id: 'dense', name: 'x', beltCount: 1 })).toBe('+0% asteroids');
+    expect(describeDef({ id: 'dense', name: 'x', icon: 'x', beltCount: 1 })).toBe('+0% asteroids');
   });
 
   it('follows a changed number', () => {
