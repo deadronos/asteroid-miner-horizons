@@ -76,6 +76,35 @@ function isQueue(queue: unknown[]): boolean {
   });
 }
 
+const finite = (n: unknown): boolean => typeof n === 'number' && Number.isFinite(n);
+const isVec = (p: unknown): boolean => !!p && finite((p as { x?: unknown }).x) && finite((p as { z?: unknown }).z);
+
+/** True when `h` has what the hazard tick reads: an RNG state, finite timers, and well-formed pending hazards. */
+function isHazards(h: unknown): boolean {
+  if (!h || typeof h !== 'object') return false;
+  const x = h as Record<string, unknown>;
+  const rng = x.rng as { s?: unknown } | null;
+  const comet = x.comet as { from?: unknown; vel?: unknown; belt?: unknown; timeLeft?: unknown } | null;
+  const flare = x.flare as { phase?: unknown; timeLeft?: unknown } | null;
+  return (
+    !!rng &&
+    typeof rng === 'object' &&
+    typeof rng.s === 'number' &&
+    finite(x.cometTimer) &&
+    finite(x.flareTimer) &&
+    finite(x.comets) &&
+    finite(x.flares) &&
+    (comet === null ||
+      (typeof comet === 'object' &&
+        isVec(comet.from) &&
+        isVec(comet.vel) &&
+        finite(comet.belt) &&
+        finite(comet.timeLeft))) &&
+    (flare === null ||
+      (typeof flare === 'object' && (flare.phase === 'warning' || flare.phase === 'active') && finite(flare.timeLeft)))
+  );
+}
+
 /** Validates the shape of parsed JSON well enough that the game can run on it. */
 function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   const migrated = migrate(data, opts);
@@ -120,6 +149,7 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   const { nextId } = refinery;
   if (typeof nextId !== 'number' || !Number.isFinite(nextId)) return null;
   if ((refinery.queue as { id: number }[]).some((j) => j.id >= nextId)) return null;
+  if (!isHazards(run.hazards)) return null;
   return { version: migrated.version, profile, run, out: { fx: [], log: [] } };
 }
 
