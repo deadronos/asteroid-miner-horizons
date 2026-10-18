@@ -1,5 +1,7 @@
 // Cosmetic particle pool (sparks, debris dust, thruster exhaust, explosions).
 // Purely visual, so it uses Math.random and never touches the sim.
+// Live particles are kept packed in slots [0, live): updates and uploads touch
+// only those, and the draw range stops at `live`, so idle frames cost nothing.
 
 import * as THREE from 'three';
 
@@ -14,7 +16,10 @@ export class Particles {
   private life = new Float32Array(CAP);
   private maxLife = new Float32Array(CAP);
   private drag = new Float32Array(CAP);
-  private cursor = 0;
+  /** Number of live particles; they occupy slots [0, live). */
+  private live = 0;
+  /** Slot to overwrite next when the pool is full (oldest first, then onward). */
+  private overflow = 0;
   /** Quality scaling for emission counts (0..1). */
   density = 1;
 
@@ -35,7 +40,12 @@ export class Particles {
     );
     this.points.frustumCulled = false;
     this.points.renderOrder = 10;
-    for (let i = 0; i < CAP; i++) this.pos[i * 3 + 1] = -9999;
+    geo.setDrawRange(0, 0);
+  }
+
+  /** How many particles are alive (for tests and debugging). */
+  get count(): number {
+    return this.live;
   }
 
   emit(
@@ -50,8 +60,12 @@ export class Particles {
     const scaled = n * this.density;
     n = Math.floor(scaled) + (Math.random() < scaled % 1 ? 1 : 0);
     for (let k = 0; k < n; k++) {
-      const i = this.cursor;
-      this.cursor = (this.cursor + 1) % CAP;
+      let i: number;
+      if (this.live < CAP) i = this.live++;
+      else {
+        i = this.overflow;
+        this.overflow = (this.overflow + 1) % CAP;
+      }
       const a =
         opts.dir != null ? opts.dir + (Math.random() - 0.5) * (opts.spread ?? 0.5) : Math.random() * Math.PI * 2;
       const sp = speed * (0.3 + Math.random() * 0.7);
@@ -70,27 +84,48 @@ export class Particles {
   }
 
   update(dt: number): void {
-    for (let i = 0; i < CAP; i++) {
-      if (this.life[i]! <= 0) continue;
-      const l = (this.life[i]! -= dt);
-      if (l <= 0) {
-        this.pos[i * 3 + 1] = -9999;
-        this.col[i * 3] = this.col[i * 3 + 1] = this.col[i * 3 + 2] = 0;
-        continue;
+    const { pos, col, vel, base, life, maxLife, drag } = this;
+    // Age, move and fade every live particle, sliding survivors down over the
+    // dead so slots [0, live) stay packed (and roughly oldest first).
+    let w = 0;
+    for (let i = 0; i < this.live; i++) {
+      const l = (life[i]! -= dt);
+      if (l <= 0) continue;
+      if (w !== i) {
+        pos[w * 3 + 1] = pos[i * 3 + 1]!;
+        vel[w * 2] = vel[i * 2]!;
+        vel[w * 2 + 1] = vel[i * 2 + 1]!;
+        base[w * 3] = base[i * 3]!;
+        base[w * 3 + 1] = base[i * 3 + 1]!;
+        base[w * 3 + 2] = base[i * 3 + 2]!;
+        life[w] = l;
+        maxLife[w] = maxLife[i]!;
+        drag[w] = drag[i]!;
       }
-      const d = Math.exp(-this.drag[i]! * dt);
-      this.vel[i * 2]! *= d;
-      this.vel[i * 2 + 1]! *= d;
-      this.pos[i * 3]! += this.vel[i * 2]! * dt;
-      this.pos[i * 3 + 2]! += this.vel[i * 2 + 1]! * dt;
-      const f = l / this.maxLife[i]!;
+      const d = Math.exp(-drag[w]! * dt);
+      vel[w * 2]! *= d;
+      vel[w * 2 + 1]! *= d;
+      pos[w * 3] = pos[i * 3]! + vel[w * 2]! * dt;
+      pos[w * 3 + 2] = pos[i * 3 + 2]! + vel[w * 2 + 1]! * dt;
+      const f = l / maxLife[w]!;
       const k = f * f;
-      this.col[i * 3] = this.base[i * 3]! * k;
-      this.col[i * 3 + 1] = this.base[i * 3 + 1]! * k;
-      this.col[i * 3 + 2] = this.base[i * 3 + 2]! * k;
+      col[w * 3] = base[w * 3]! * k;
+      col[w * 3 + 1] = base[w * 3 + 1]! * k;
+      col[w * 3 + 2] = base[w * 3 + 2]! * k;
+      w++;
     }
+    this.live = w;
+    if (this.overflow >= w) this.overflow = 0;
+
     const g = this.points.geometry;
-    g.getAttribute('position').needsUpdate = true;
-    g.getAttribute('color').needsUpdate = true;
+    g.setDrawRange(0, w);
+    // Upload only the packed range; an empty pool draws and uploads nothing.
+    if (w === 0) return;
+    for (const name of ['position', 'color'] as const) {
+      const attr = g.getAttribute(name) as THREE.BufferAttribute;
+      attr.clearUpdateRanges();
+      attr.addUpdateRange(0, w * 3);
+      attr.needsUpdate = true;
+    }
   }
 }

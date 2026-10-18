@@ -14,6 +14,7 @@ import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
 import { isAlive } from '../sim/ships';
 import type { GameState, Rock, StarSystem } from '../sim/types';
 import { Backdrop } from './backdrop';
+import type { ViewRect } from './cull';
 import { Debris } from './debris';
 import { FloatingText } from './floatingText';
 import { Particles } from './particles';
@@ -69,6 +70,8 @@ export class Renderer {
   private bloomOn = false;
   private readonly msaa: number;
   private warpFlash = 0;
+  /** The camera's world rectangle this frame (shake included), reused for culling. */
+  private readonly cullView: ViewRect = { x: 0, z: 0, halfW: 0, halfH: 0 };
 
   /** View state. `follow` keeps the camera on the selected ship. */
   center: Vec2 = { x: 0, z: 0 };
@@ -268,7 +271,12 @@ export class Renderer {
 
     this.backdrop.update(cx, cz, this.halfH);
     this.system.update(sys, run.time);
-    this.rocks.update(run.rocks, run.pickups, run.time);
+    const v = this.cullView;
+    v.x = cx;
+    v.z = cz;
+    v.halfW = this.halfH * a;
+    v.halfH = this.halfH;
+    this.rocks.update(run.rocks, run.pickups, run.time, v);
     const wpp = this.wpp;
     const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars);
 
