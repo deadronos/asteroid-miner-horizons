@@ -105,5 +105,29 @@ export const TUNING = {
   /** Share of the beam's dps dealt to each rock inside a Wide Beam's splash radius. */
   splashMul: 0.5,
 
+  // Automation (#39).
+  /** Haulers skim a miner once it carries this share of its hold. */
+  haulMinShare: 0.3,
+  /** Haulers empty an outpost once it holds this many units. */
+  haulMinOutpost: 15,
+  /** Gap between hulls (or hull and outpost rock) at which cargo can be transferred. */
+  haulTransferGap: 30,
+  /** Units per second a transfer moves. */
+  haulTransferRate: 30,
+  /** How far from the station a hauler will go to skim a miner (outposts are served anywhere). */
+  haulRange: 1800,
+  /** Outposts that can be deployed at once. */
+  outpostMax: 3,
+  /** Bank cost of one outpost. */
+  outpostCost: { ore: 120, ice: 30, alloy: 15 },
+  /** Gap between the flagship's hull and the rock's surface it must be inside to deploy. */
+  outpostDeployGap: 120,
+  /** An outpost taps a deep reserve this many times its host rock's units; the rock itself is left intact. */
+  outpostReserveMul: 10,
+  /** Reserve units an outpost extracts per second (before the yield perk). */
+  outpostRate: 0.8,
+  /** Units an outpost can hold before it stalls waiting for pickup. */
+  outpostCapacity: 100,
+
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;

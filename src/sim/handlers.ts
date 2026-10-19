@@ -10,6 +10,7 @@ import { PERKS } from '../data/perks';
 import { RECIPES } from '../data/refining';
 import { RESOURCES, formatCost, pay, type Cost } from '../data/resources';
 import { TUNING } from '../data/tuning';
+import { makeOutpost, outpostAt, outpostBlock } from './automation';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
 import { describeContract, fillBoard } from './contracts';
 import { newRun } from './create';
@@ -100,6 +101,7 @@ export const handlers: Handlers = {
     profile.warps += 1;
     const dropped = run.contracts.active;
     const left = run.refinery.queue;
+    const outposts = run.automation.outposts.length;
     state.run = newRun(profile);
     out.fx.push({ t: 'warp' });
     out.log.push({
@@ -113,6 +115,11 @@ export const handlers: Handlers = {
       const jobs = left.map((j) => `${j.count} × ${RECIPES[j.recipe].name.toLowerCase()}`).join(', ');
       out.log.push({ level: 'warn', text: `Refinery queue left behind: ${jobs}.` });
     }
+    if (outposts > 0)
+      out.log.push({
+        level: 'warn',
+        text: `Outposts left behind: ${outposts}. Their reserves stay in the old system.`,
+      });
   },
 
   refine: (state, cmd) => {
@@ -184,6 +191,7 @@ export const handlers: Handlers = {
     if (st.dps <= 0) return fail(state, `${ship.name} has no mining laser fitted.`);
     const rock = state.run.rocks.find((r) => r.id === cmd.rockId);
     if (!rock) return;
+    if (outpostAt(state, rock.id)) return fail(state, 'That asteroid hosts an outpost; haulers collect from it.');
     if (!canMine(st, rock)) return fail(state, `Dense rock — needs a tier-${TUNING.denseMinLaserTier} laser.`);
     ship.order = { kind: 'mine', rockId: cmd.rockId };
   }),
@@ -274,6 +282,25 @@ export const handlers: Handlers = {
     board.active = { ...offer, progress: 0, timeLeft: offer.timeLimit };
     fillBoard(board, state.run.system.number);
     state.out.log.push({ level: 'info', text: `Contract accepted: ${describeContract(offer)}.` });
+  },
+
+  deployOutpost: (state, cmd) => {
+    const { run, out } = state;
+    const rock = run.rocks.find((r) => r.id === cmd.rockId);
+    const block = outpostBlock(state, rock);
+    if (block || !rock) return fail(state, block ?? 'That rock is gone.');
+    pay(run.bank, TUNING.outpostCost);
+    const outpost = makeOutpost(rock);
+    run.automation.outposts.push(outpost);
+    // Nobody keeps cutting a rock that now hosts an outpost.
+    for (const s of run.ships) {
+      if (s.order?.kind === 'mine' && s.order.rockId === rock.id) s.order = null;
+      if (s.aiTargetId === rock.id) s.aiTargetId = null;
+    }
+    out.log.push({
+      level: 'info',
+      text: `Outpost deployed on a large ${rock.kind} asteroid (${Math.round(outpost.reserve)} units in reserve).`,
+    });
   },
 
   abandonContract: (state) => {

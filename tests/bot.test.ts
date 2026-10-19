@@ -5,6 +5,7 @@ import { contractReward } from '../src/sim/contracts';
 import { isVariant } from '../src/data/components';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
+import { makeOutpost } from '../src/sim/automation';
 import { cometPathEscape, inFlareZone } from '../src/sim/hazards';
 import { droneCount, flagship, makeShip, shipStats } from '../src/sim/ships';
 import type { Command } from '../src/sim/commands';
@@ -299,5 +300,58 @@ describe('balance bot hazard reflexes', () => {
     expect(only(botCommands(s))).toEqual({ t: 'mine', shipId: fs.id, rockId: 501 });
     s.run.rocks.pop();
     expect(only(botCommands(s))).toEqual({ t: 'stop', shipId: fs.id });
+  });
+
+  it('mines around an outpost rock rather than into it', () => {
+    const s = orderOnly();
+    const fs = flagship(s.run);
+    fs.pos = { x: 0, z: 300 };
+    s.run.rocks.push(rock(500, 'ore', 0, 320), rock(501, 'ore', 0, 600));
+    s.run.automation.outposts.push(makeOutpost(s.run.rocks[0]!));
+    expect(only(botCommands(s))).toEqual({ t: 'mine', shipId: fs.id, rockId: 501 });
+  });
+});
+
+/** Docked at the station with a rich bank, nothing else to decide, and `drones` mining drones. */
+function docked(drones: number): GameState {
+  const s = newGame(1000);
+  const st = s.run.system.station.pos;
+  flagship(s.run).pos = { ...st };
+  s.run.contracts.offers = [];
+  s.profile.perks.bay = 1;
+  for (let i = 0; i < drones; i++) s.run.ships.push(makeShip(s.run, s.profile, 'drone', `Drone-${i}`, st));
+  s.run.bank = { ore: 5000, ice: 5000, crystal: 0, alloy: 500, fuel: 1000 };
+  return s;
+}
+
+/** Undocked beside a large rock, with nothing to buy; `hauler` adds one to the fleet. */
+function besideLarge(hauler: boolean): { s: GameState; large: Rock } {
+  const s = orderOnly();
+  const fs = flagship(s.run);
+  const large: Rock = { ...rock(500, 'ore', 0, 600), size: 0, radius: 36 };
+  s.run.rocks.push(large);
+  fs.pos = { x: 0, z: 600 - large.radius - 40 };
+  s.run.bank = { ...TUNING.outpostCost, crystal: 0, fuel: 1000, ore: TUNING.outpostCost.ore };
+  if (hauler) s.run.ships.push(makeShip(s.run, s.profile, 'hauler', 'Hauler-1', s.run.system.station.pos));
+  return { s, large };
+}
+
+describe('balance bot automation', () => {
+  it('spends the fleet slot after two drones on a hauler', () => {
+    expect(botCommands(docked(2), { warp: false })).toEqual([{ t: 'buyHull', hullId: 'hauler' }]);
+  });
+
+  it('still buys a second drone before any hauler', () => {
+    expect(botCommands(docked(1), { warp: false })).toEqual([{ t: 'buyHull', hullId: 'drone' }]);
+  });
+
+  it('deploys an outpost on a large rock beside the flagship once it has a hauler', () => {
+    const { s, large } = besideLarge(true);
+    expect(botCommands(s, { warp: false })).toContainEqual({ t: 'deployOutpost', rockId: large.id });
+  });
+
+  it('deploys no outpost without a hauler to service it', () => {
+    const { s } = besideLarge(false);
+    expect(botCommands(s, { warp: false }).some((c) => c.t === 'deployOutpost')).toBe(false);
   });
 });

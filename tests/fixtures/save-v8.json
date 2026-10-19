@@ -1,0 +1,357 @@
+{
+  "format": "amh-save",
+  "savedAt": 0,
+  "state": {
+    "version": 8,
+    "profile": {
+      "seed": 1,
+      "warps": 0,
+      "data": 0,
+      "dataEarned": 0,
+      "perks": {
+        "yield": 0,
+        "optics": 0,
+        "thrust": 0,
+        "bay": 0,
+        "kit": 0,
+        "warp": 0
+      }
+    },
+    "run": {
+      "system": {
+        "name": "Qutha",
+        "number": 1,
+        "starClass": "G",
+        "starRadius": 75,
+        "starColor": 16765562,
+        "heatRadius": 150,
+        "planets": [
+          {
+            "name": "Qutha I",
+            "orbitR": 276.01871953345835,
+            "radius": 22.86365905450657,
+            "angle": 1.1766382256935866,
+            "speed": 0.011078982090577484,
+            "color": 10506090,
+            "ringed": false,
+            "moons": [
+              {
+                "orbitR": 48.76364963687956,
+                "radius": 8.821155170211568,
+                "angle": 1.730060155561206,
+                "speed": 0.48103098943829536,
+                "color": 10134450
+              },
+              {
+                "orbitR": 64.12598632182926,
+                "radius": 7.686313325306401,
+                "angle": 5.4402546075267875,
+                "speed": 0.2522201414220035,
+                "color": 10134450
+              },
+              {
+                "orbitR": 55.17299959529191,
+                "radius": 4.018644604133442,
+                "angle": 3.1122089038329577,
+                "speed": 0.4522892299108207,
+                "color": 10134450
+              }
+            ]
+          },
+          {
+            "name": "Qutha II",
+            "orbitR": 484.98988260980695,
+            "radius": 22.17289524897933,
+            "angle": 2.844967972312623,
+            "speed": 0.013545012038201092,
+            "color": 6271912,
+            "ringed": true,
+            "moons": []
+          },
+          {
+            "name": "Qutha III",
+            "orbitR": 1721.609222367406,
+            "radius": 21.799708963371813,
+            "angle": 5.639770633095805,
+            "speed": 0.012150136394705623,
+            "color": 10506090,
+            "ringed": false,
+            "moons": []
+          }
+        ],
+        "belts": [
+          {
+            "inner": 610,
+            "outer": 870,
+            "mix": {
+              "ore": 0.72,
+              "ice": 0.28,
+              "crystal": 0
+            },
+            "initialCount": 160
+          },
+          {
+            "inner": 1160,
+            "outer": 1440,
+            "mix": {
+              "ore": 0.3,
+              "ice": 0.7,
+              "crystal": 0
+            },
+            "initialCount": 140
+          }
+        ],
+        "station": {
+          "pos": {
+            "x": -538.9796416366055,
+            "z": 854.1668138608969
+          },
+          "angle": 2.13369893865669
+        },
+        "richness": 1,
+        "modifiers": []
+      },
+      "rng": {
+        "s": -1430342020
+      },
+      "nextId": 302,
+      "time": 0,
+      "bank": {
+        "ore": 40,
+        "ice": 10,
+        "crystal": 0,
+        "alloy": 0,
+        "fuel": 0
+      },
+      "runValue": 0,
+      "ships": [
+        {
+          "id": 301,
+          "name": "Horizon",
+          "hullId": "prospector",
+          "pos": {
+            "x": -495.86127030567707,
+            "z": 785.8334687520252
+          },
+          "vel": {
+            "x": 0,
+            "z": 0
+          },
+          "angle": -1.5707963267948966,
+          "hull": 100,
+          "shield": 0,
+          "slots": [
+            {
+              "type": "laser",
+              "tier": 1,
+              "variant": "focused"
+            },
+            {
+              "type": "engine",
+              "tier": 1,
+              "variant": "ion"
+            },
+            null,
+            null
+          ],
+          "cargo": {
+            "ore": 0,
+            "ice": 0,
+            "crystal": 0,
+            "alloy": 0,
+            "fuel": 0
+          },
+          "order": null,
+          "aiMode": "assist",
+          "beamOn": false,
+          "beamTargetId": null,
+          "aiTargetId": null,
+          "thrusting": false,
+          "collisionCd": 0,
+          "respawn": 0
+        }
+      ],
+      "rocks": [
+        {
+          "id": 1,
+          "kind": "ore",
+          "size": 0,
+          "pos": {
+            "x": 300.3182736030201,
+            "z": -592.4334807647203
+          },
+          "vel": {
+            "x": 0,
+            "z": 0
+          },
+          "radius": 41.314905531704426,
+          "hp": 172.61300083860047,
+          "maxHp": 172.61300083860047,
+          "units": 51,
+          "belt": 0
+        },
+        {
+          "id": 2,
+          "kind": "ore",
+          "size": 2,
+          "pos": {
+            "x": 862.6636818666265,
+            "z": 28.6644938353327
+          },
+          "vel": {
+            "x": 0,
+            "z": 0
+          },
+          "radius": 9.38353223563172,
+          "hp": 18.683699860983328,
+          "maxHp": 18.683699860983328,
+          "units": 3,
+          "belt": 0
+        },
+        {
+          "id": 3,
+          "kind": "ore",
+          "size": 0,
+          "pos": {
+            "x": 355.7537296903146,
+            "z": -735.137726716316
+          },
+          "vel": {
+            "x": 0,
+            "z": 0
+          },
+          "radius": 41.23988115414977,
+          "hp": 172.14303841623277,
+          "maxHp": 172.14303841623277,
+          "units": 51,
+          "belt": 0
+        },
+        {
+          "id": 4,
+          "kind": "ice",
+          "size": 1,
+          "pos": {
+            "x": -506.93675255888076,
+            "z": 342.67064914195527
+          },
+          "vel": {
+            "x": 0,
+            "z": 0
+          },
+          "radius": 19.799194887280464,
+          "hp": 57.26439179055733,
+          "maxHp": 57.26439179055733,
+          "units": 12,
+          "belt": 0
+        },
+        {
+          "id": 5,
+          "kind": "ore",
+          "size": 1,
+          "pos": {
+            "x": -525.4949087944273,
+            "z": 401.70395086574837
+          },
+          "vel": {
+            "x": 0,
+            "z": 0
+          },
+          "radius": 17.311548501253128,
+          "hp": 46.81847159428427,
+          "maxHp": 46.81847159428427,
+          "units": 9,
+          "belt": 0
+        },
+        {
+          "id": 6,
+          "kind": "ice",
+          "size": 1,
+          "pos": {
+            "x": -410.1092308104932,
+            "z": -617.0921754357483
+          },
+          "vel": {
+            "x": 0,
+            "z": 0
+          },
+          "radius": 21.07100616581738,
+          "hp": 62.86968261707453,
+          "maxHp": 62.86968261707453,
+          "units": 13,
+          "belt": 0
+        }
+      ],
+      "pickups": [],
+      "selectedId": 301,
+      "regrowTimer": 0,
+      "contracts": {
+        "rng": {
+          "s": -1554648948
+        },
+        "nextId": 4,
+        "offers": [
+          {
+            "id": 1,
+            "kind": "deliverOre",
+            "target": 150,
+            "progress": 0,
+            "timeLimit": 300,
+            "timeLeft": 240,
+            "reward": {
+              "ice": 58
+            },
+            "data": 0
+          },
+          {
+            "id": 2,
+            "kind": "deliverIce",
+            "target": 90,
+            "progress": 0,
+            "timeLimit": 300,
+            "timeLeft": 240,
+            "reward": {
+              "ore": 78
+            },
+            "data": 0
+          },
+          {
+            "id": 3,
+            "kind": "breakLarge",
+            "target": 5,
+            "progress": 0,
+            "timeLimit": 360,
+            "timeLeft": 240,
+            "reward": {
+              "ore": 65,
+              "ice": 44
+            },
+            "data": 0
+          }
+        ],
+        "active": null,
+        "completed": 0,
+        "failed": 0,
+        "rewardValue": 0
+      },
+      "refinery": {
+        "queue": [],
+        "nextId": 1,
+        "produced": {
+          "alloy": 0,
+          "fuel": 0
+        }
+      },
+      "hazards": {
+        "rng": {
+          "s": 1
+        },
+        "cometTimer": 100,
+        "comet": null,
+        "flareTimer": 100,
+        "flare": null,
+        "comets": 0,
+        "flares": 0
+      }
+    }
+  }
+}

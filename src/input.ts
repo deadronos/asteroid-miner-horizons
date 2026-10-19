@@ -4,6 +4,7 @@
 import { dist, type Vec2 } from './core/vec';
 import { HULLS } from './data/hulls';
 import type { Command } from './sim/commands';
+import { outpostAt } from './sim/automation';
 import { isAlive } from './sim/ships';
 import type { GameState } from './sim/types';
 import type { HoverTarget, Renderer } from './render/Renderer';
@@ -114,6 +115,12 @@ export class Input {
       case 'pause':
         this.onPause();
         return;
+      case 'outpost': {
+        if (!this.mouse.inside) return;
+        const hit = this.pick(this.mouse.x, this.mouse.y);
+        if (hit?.kind === 'rock') this.send({ t: 'deployOutpost', rockId: hit.rock.id });
+        return;
+      }
     }
     if (/^Digit[1-9]$/.test(e.code)) {
       const ship = s.run.ships[Number(e.code.slice(5)) - 1];
@@ -211,6 +218,7 @@ export class Input {
         : hit?.kind === 'ship'
           ? (s.run.ships.find((x) => x.id === hit.id)?.name ?? null)
           : null;
-    this.hud.showTooltip(this.mouse.x, this.mouse.y, hit?.kind === 'rock' ? hit.rock : null, label);
+    const rock = hit?.kind === 'rock' ? hit.rock : null;
+    this.hud.showTooltip(this.mouse.x, this.mouse.y, rock, label, rock ? outpostAt(s, rock.id) : undefined);
   }
 }

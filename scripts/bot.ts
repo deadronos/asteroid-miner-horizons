@@ -4,7 +4,8 @@
 // Each call looks at the state and returns the commands for the next tick:
 //   buy affordable perks → warp once the bank has the fuel → accept a
 //   serviceable contract → dock when the hold is full → while docked,
-//   repair / buy one thing → chase nearby debris → mine the nearest rock of
+//   repair / buy one thing → deploy an outpost on a large rock alongside (once
+//   a hauler can service it) → chase nearby debris → mine the nearest rock of
 //   whichever resource the bank (or the active delivery contract) needs.
 //   Hazard reflexes come first in the flagship's order: step out of a comet
 //   path, and dock (staying docked) or flee past the reach of a pending or
@@ -30,9 +31,10 @@ import { canAfford, pay, type Cost } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
+import { isHauler, outpostAt, outpostBlock } from '../src/sim/automation';
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, queuedOutput, refineBlock } from '../src/sim/refining';
-import { cargoFree, flagship, isAlive, shipStats, type ShipStats } from '../src/sim/ships';
+import { cargoFree, flagship, isAlive, isFlagship, shipStats, type ShipStats } from '../src/sim/ships';
 import { canMine } from '../src/sim/traits';
 import type { GameState, Rock, Run, Ship } from '../src/sim/types';
 
@@ -54,6 +56,8 @@ const INSTALL_ORDER: { comp: ComponentId; variant: VariantId }[] = [
 const UPGRADE_ORDER: ComponentId[] = ['laser', 'cargo', 'sensor', 'engine', 'armor', 'shield'];
 const PERK_ORDER: PerkId[] = ['yield', 'optics', 'bay', 'kit', 'thrust', 'warp'];
 const PICKUP_CHASE = 260;
+/** Mining drones owned before the bot spends a fleet slot on a hauler. */
+const HAULER_AFTER = 2;
 /** How far sideways the flagship is sent to leave a comet path. */
 const COMET_STEP = 150;
 
@@ -93,8 +97,55 @@ export function botCommands(state: GameState, opts: BotOptions = {}): Command[] 
     if (buy) return fuel ? [fuel, buy] : [buy];
   }
 
+  const outpost = nextOutpost(state, fs, wc);
+  if (outpost) return fuel ? [fuel, outpost] : [outpost];
+
   const order = flagshipOrder(state, fs, st, wc);
   return fuel ? [fuel, ...order] : order;
+}
+
+/** Price checks shared by every purchase: the ice reserve, and smelting an alloy shortfall from ore. */
+interface Purse {
+  /** Affordable now without dipping into the ice the next warp needs. */
+  ok(c: Cost): boolean;
+  /** Not affordable only because alloy is short. */
+  needsAlloy(c: Cost): boolean;
+  /** Smelts `c`'s alloy shortfall when the ore is there on top of the price. */
+  smeltFor(c: Cost): Command | null;
+}
+
+function purse(state: GameState, wc: number): Purse {
+  const { run } = state;
+  const iceEq = run.bank.ice + ICE_PER_FUEL * (run.bank.fuel + queuedOutput(run, 'fuel'));
+  const reserve = iceReserve(wc);
+  const ok = (c: Cost): boolean => canAfford(run.bank, c) && (!c.ice || iceEq - c.ice >= reserve);
+  const alloyHave = run.bank.alloy + queuedOutput(run, 'alloy');
+  return {
+    ok,
+    needsAlloy: (c) => (c.alloy ?? 0) > alloyHave && ok({ ...c, alloy: 0 }),
+    smeltFor: (c) => {
+      const short = (c.alloy ?? 0) - alloyHave;
+      if (short <= 0 || run.bank.ore - (c.ore ?? 0) < short * ORE_PER_ALLOY) return null;
+      const block = refineBlock(run, 'alloy', short);
+      return 'n' in block ? { t: 'refine', recipe: 'alloy', count: block.n } : null;
+    },
+  };
+}
+
+/**
+ * Deploys an outpost on a large rock the flagship is already beside, once a hauler is in the fleet to service it and
+ * the bank can pay without touching the warp's ice. Rocks in a flare zone or comet path are skipped.
+ */
+function nextOutpost(state: GameState, fs: Ship, wc: number): Command | null {
+  const { run } = state;
+  if (!run.ships.some(isHauler) || run.automation.outposts.length >= TUNING.outpostMax) return null;
+  if (!purse(state, wc).ok(TUNING.outpostCost)) return null;
+  const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
+  for (const r of run.rocks) {
+    if (r.size !== 0 || dist(r.pos, fs.pos) > r.radius + TUNING.outpostDeployGap + 40) continue;
+    if (!outpostBlock(state, r) && !unsafe(run, hz, r.pos)) return { t: 'deployOutpost', rockId: r.id };
+  }
+  return null;
 }
 
 /**
@@ -222,29 +273,25 @@ function nextContract(state: GameState): Command | null {
   return offer ? { t: 'acceptContract', contractId: offer.id } : null;
 }
 
-/** Repair, then one purchase per call: drone, empty-slot installs, upgrades, bigger flagship. */
+/** Repair, then one purchase per call: hauler or drone, empty-slot installs, upgrades, bigger flagship. */
 function nextPurchase(state: GameState, wc: number): Command | null {
   const { run, profile } = state;
   const fs = flagship(run);
-  const iceEq = run.bank.ice + ICE_PER_FUEL * (run.bank.fuel + queuedOutput(run, 'fuel'));
-  const reserve = iceReserve(wc);
-  const ok = (c: Cost): boolean => canAfford(run.bank, c) && (!c.ice || iceEq - c.ice >= reserve);
-  const alloyHave = run.bank.alloy + queuedOutput(run, 'alloy');
-  /** A price the bot can't pay yet only because alloy is short. */
-  const needsAlloy = (c: Cost): boolean => (c.alloy ?? 0) > alloyHave && ok({ ...c, alloy: 0 });
-  /** Smelts `c`'s alloy shortfall when the ore is there on top of the price. */
-  const smeltFor = (c: Cost): Command | null => {
-    const short = (c.alloy ?? 0) - alloyHave;
-    if (short <= 0 || run.bank.ore - (c.ore ?? 0) < short * ORE_PER_ALLOY) return null;
-    const block = refineBlock(run, 'alloy', short);
-    return 'n' in block ? { t: 'refine', recipe: 'alloy', count: block.n } : null;
-  };
+  const { ok, needsAlloy, smeltFor } = purse(state, wc);
 
   const rc = repairCost(state, fs);
   if (rc > 0 && fs.hull < shipStats(fs, profile).maxHull * 0.7 && run.bank.ore >= rc)
     return { t: 'repair', shipId: fs.id };
 
-  if (!hullBlock(state, 'drone') && ok(HULLS.drone.cost)) return { t: 'buyHull', hullId: 'drone' };
+  // Once two drones mine, the next fleet slot is kept for one hauler rather than another drone.
+  const miners = run.ships.filter((x) => !isFlagship(x) && !isHauler(x)).length;
+  const wantHauler = miners >= HAULER_AFTER && !run.ships.some(isHauler);
+  if (wantHauler && !hullBlock(state, 'hauler')) {
+    if (ok(HULLS.hauler.cost)) return { t: 'buyHull', hullId: 'hauler' };
+    const refine = needsAlloy(HULLS.hauler.cost) ? smeltFor(HULLS.hauler.cost) : null;
+    if (refine) return refine;
+  }
+  if (!wantHauler && !hullBlock(state, 'drone') && ok(HULLS.drone.cost)) return { t: 'buyHull', hullId: 'drone' };
 
   const docked = run.ships.filter((s) => !refitBlock(state, s));
   for (const { comp, variant } of INSTALL_ORDER) {
@@ -296,7 +343,7 @@ function pickRock(state: GameState, fs: Ship, wc: number, hz: Hazard): Rock | nu
   const st = shipStats(fs, state.profile);
   for (const r of state.run.rocks) {
     if (unsafe(state.run, hz, r.pos)) continue;
-    if (!canMine(st, r)) continue;
+    if (!canMine(st, r) || outpostAt(state, r.id)) continue;
     let score = dist(fs.pos, r.pos) * (r.kind === want || (bonusCrystal && r.kind === 'crystal') ? 0.5 : 1);
     if (breakLarge && r.size === 0) score *= 0.5;
     if (score < bestScore) {

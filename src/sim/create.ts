@@ -5,6 +5,7 @@ import { makeRng } from '../core/rng';
 import { v } from '../core/vec';
 import { PERK_IDS, type PerkId } from '../data/perks';
 import { TUNING } from '../data/tuning';
+import { newAutomation } from './automation';
 import { fillBoard, newBoard } from './contracts';
 import { newHazards } from './hazards';
 import { generateSystem, populateBelts } from './generate';
@@ -12,7 +13,7 @@ import { newRefinery } from './refining';
 import { makeShip } from './ships';
 import type { GameState, Profile, Run } from './types';
 
-export const SAVE_VERSION = 8;
+export const SAVE_VERSION = 9;
 
 export function newProfile(seed: number): Profile {
   return {
@@ -49,6 +50,7 @@ export function newRun(profile: Profile): Run {
     contracts: newBoard(profile.seed, number),
     refinery: newRefinery(),
     hazards: newHazards(profile.seed, number),
+    automation: newAutomation(),
   };
   populateBelts(run, profile.seed);
 

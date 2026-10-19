@@ -4,6 +4,7 @@
 // replaying the entries in order instead of being rejected outright.
 
 import { defaultVariant } from '../data/components';
+import { newAutomation } from './automation';
 import { newBoard } from './contracts';
 import { SAVE_VERSION } from './create';
 import { newHazards } from './hazards';
@@ -56,6 +57,11 @@ export const migrations: Record<number, Migration> = {
   // default, whose numbers are the ones it already had.
   7: (d) => {
     for (const ship of d.run.ships) for (const f of ship.slots) if (f) f.variant = defaultVariant(f.type);
+    return d;
+  },
+  // v9 added `run.automation`: no outposts yet.
+  8: (d) => {
+    d.run.automation = newAutomation();
     return d;
   },
 };

@@ -45,6 +45,14 @@ const HULL_SHAPES: Record<HullId, [number, number][]> = {
     [-8, -9],
     [6, -9],
   ],
+  hauler: [
+    [12, 0],
+    [8, 7],
+    [-12, 7],
+    [-9, 0],
+    [-12, -7],
+    [8, -7],
+  ],
 };
 
 function hullGeometry(id: HullId): THREE.BufferGeometry {
