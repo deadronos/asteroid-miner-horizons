@@ -67,22 +67,22 @@
 - Test: a new `tests/*.test.ts`
 
 **Build:**
-- [ ] An exported helper `warmComposer(composer)` taking a minimal shape `{ renderToScreen: boolean;
+- [x] An exported helper `warmComposer(composer)` taking a minimal shape `{ renderToScreen: boolean;
       render(dt?: number): void }`. It sets `renderToScreen = false`, calls `render(0)`, and restores the previous
       value in a `finally`.
-- [ ] In `Renderer`, track which composer passes have been warmed: the present pass, and the present pass plus
+- [x] In `Renderer`, track which composer passes have been warmed: the present pass, and the present pass plus
       bloom. In `applySettings`, after `resize()`, warm when the composer is in use (`viaComposer`) and its
       currently enabled passes have not been warmed yet. Ideally this is a tiny pure predicate that the tests also
       cover.
-- [ ] The constructor already calls `applySettings`, so a cold start at medium or high warms before the first
+- [x] The constructor already calls `applySettings`, so a cold start at medium or high warms before the first
       frame.
-- [ ] A short comment saying why the warm-up is an off-screen render and not `compileAsync`: program keys depend on
+- [x] A short comment saying why the warm-up is an off-screen render and not `compileAsync`: program keys depend on
       the target's colour space.
 
 **Tests:**
-- [ ] `warmComposer` renders with `renderToScreen` false, passes 0, and restores the flag, also when `render`
+- [x] `warmComposer` renders with `renderToScreen` false, passes 0, and restores the flag, also when `render`
       throws.
-- [ ] The "needs warming" predicate covers:
+- [x] The "needs warming" predicate covers:
   - no composer use;
   - the first bloom use;
   - the fallback (bloom disabled) followed by bloom enabled;
