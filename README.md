@@ -93,8 +93,10 @@ All keys can be rebound in ⚙ → Controls.
   **Horizon Data** = ⌊√(value delivered this run / 60)⌋. Research spends it on permanent
   perks: yield, laser damage, speed, fleet capacity, a starter kit, and cheaper warps.
 - **Saves**: the ⚙ menu has three save slots in `localStorage`. The running game
-  autosaves to its slot every 10 s and when the tab is hidden or closed. Filled slots can
-  be loaded, exported as text (to copy) or downloaded as a `.json` file, and deleted. The
+  autosaves to its slot every 10 s (in the browser's next idle moment) and when the tab is
+  hidden or closed. Filled slots can be loaded, exported as compact text (to copy) or
+  downloaded as a `.json` file, and deleted. Exports round positions and timers to six
+  significant digits; the slots themselves keep full precision. The
   running slot can instead be restarted as a new game. Empty slots can start a new game,
   import a `.json` file, or take pasted save text. Imports are validated and give a
   readable error. The ⚙ menu also has a Controls tab.

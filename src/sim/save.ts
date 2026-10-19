@@ -1,9 +1,11 @@
 // Save slots in localStorage, plus import/export text. GameState is plain data,
 // so a save is its JSON minus the transient outbox, wrapped in a small record:
 //   { format: 'amh-save', savedAt: <epoch ms>, state: { version, profile, run } }
-// The same record is what export produces and import accepts (a bare state
-// object is accepted too). Older versions are upgraded through sim/migrations;
-// saves from a newer version are rejected rather than half-loaded.
+// Slots keep exact floats. Export rounds them to a few significant digits, and
+// the copy-paste text is that JSON gzipped and base64'd behind a short prefix.
+// Import accepts the compact text, a record or a bare state object. Older
+// versions are upgraded through sim/migrations; saves from a newer version are
+// rejected rather than half-loaded.
 
 import { COMPONENTS, isVariant, type ComponentId } from '../data/components';
 import { MODIFIERS } from '../data/modifiers';
@@ -21,6 +23,10 @@ const ACTIVE_KEY = `${PREFIX}/active-slot`;
 /** Pre-slot single save key; migrated into slot 0 on first run. */
 const LEGACY_KEY = `${PREFIX}/save`;
 const FORMAT = 'amh-save';
+/** Marks compact export text: base64 of the gzipped export JSON follows. */
+const COMPACT_PREFIX = 'amh1:';
+/** Significant digits kept for non-integer numbers in exported text. */
+const EXPORT_DIGITS = 6;
 
 export interface SaveRecord {
   savedAt: number;
@@ -188,9 +194,57 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   return { version: migrated.version, profile, run, out: { fx: [], log: [] } };
 }
 
-/** Text for export: a save record with metadata, pretty enough to eyeball. */
+/** The exact save record a slot stores, built without re-parsing the state. */
+function recordText(state: GameState, savedAt: number): string {
+  return `{"format":"${FORMAT}","savedAt":${savedAt},"state":${serialize(state)}}`;
+}
+
+/** JSON replacer that rounds non-integer numbers; integers (ids, RNG state, colours) stay exact. */
+const roundFloat = (_key: string, v: unknown): unknown =>
+  typeof v === 'number' && !Number.isInteger(v) ? Number(v.toPrecision(EXPORT_DIGITS)) : v;
+
+/** Text for export: a save record with floats rounded, still plain JSON to eyeball. */
 export function exportText(state: GameState, savedAt = Date.now()): string {
-  return JSON.stringify({ format: FORMAT, savedAt, state: JSON.parse(serialize(state)) });
+  const record = { format: FORMAT, savedAt, state: { version: state.version, profile: state.profile, run: state.run } };
+  return JSON.stringify(record, roundFloat);
+}
+
+/** Copy-paste export: `exportText` gzipped and base64'd, roughly a quarter of the exact save's size. */
+export async function exportCompact(state: GameState, savedAt = Date.now()): Promise<string> {
+  const gz = new Blob([exportText(state, savedAt)]).stream().pipeThrough(new CompressionStream('gzip'));
+  return COMPACT_PREFIX + toBase64(new Uint8Array(await new Response(gz).arrayBuffer()));
+}
+
+/** Like `parseImport`, but also accepts compact text from `exportCompact`. */
+export async function parseImportText(
+  text: string,
+  opts?: MigrateOptions,
+): Promise<{ ok: true; record: SaveRecord } | { ok: false; error: string }> {
+  const t = text.trim();
+  if (!t.startsWith(COMPACT_PREFIX)) return parseImport(t, opts);
+  let json: string;
+  try {
+    const bytes = fromBase64(t.slice(COMPACT_PREFIX.length).replace(/\s+/g, ''));
+    const raw = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+    json = await new Response(raw).text();
+  } catch {
+    return { ok: false, error: 'This save text is damaged or incomplete.' };
+  }
+  return parseImport(json, opts);
+}
+
+function toBase64(bytes: Uint8Array): string {
+  let bin = '';
+  // Chunked so a large save doesn't overflow the argument limit.
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return btoa(bin);
+}
+
+function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
+  const bin = atob(b64);
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  return bytes;
 }
 
 /** Parses exported text (a save record or a bare state). */
@@ -235,7 +289,7 @@ export function readSlot(i: number): SaveRecord | null {
 
 export function writeSlot(i: number, state: GameState): void {
   try {
-    storage()?.setItem(slotKey(i), exportText(state));
+    storage()?.setItem(slotKey(i), recordText(state, Date.now()));
   } catch {
     // Storage full or blocked: the game keeps running unsaved.
   }

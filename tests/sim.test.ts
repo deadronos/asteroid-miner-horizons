@@ -173,13 +173,15 @@ describe('save', () => {
     for (const r of RESOURCES) expect(back.run.bank[r]).toBe(s.run.bank[r]);
   });
 
-  it('export text imports back to the same state', () => {
+  it('export text imports back to the same rounded state', () => {
     const s = newGame(77);
     run(s, 2);
-    const res = parseImport(exportText(s, 1234));
+    const text = exportText(s, 1234);
+    const res = parseImport(text);
     if (!res.ok) throw new Error(`import failed: ${res.error}`);
     expect(res.record.savedAt).toBe(1234);
-    expect(serialize(res.record.state)).toEqual(serialize(s));
+    // Export rounds floats, so re-exporting the imported state reproduces the text exactly.
+    expect(exportText(res.record.state, 1234)).toEqual(text);
     // A bare serialized state is accepted too.
     expect(parseImport(serialize(s)).ok).toBe(true);
   });
