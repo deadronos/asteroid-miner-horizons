@@ -5,7 +5,7 @@
 import { range } from '../core/rng';
 import { damp, dist, integrate, type Vec2 } from '../core/vec';
 import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
-import { walletValue, RESOURCES, RESOURCE_INFO, walletTotal } from '../data/resources';
+import { walletValue, RESOURCES, formatWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { updateAchievements } from './achievements';
 import { DEFAULT_ASSISTS, type Assists } from './assists';
@@ -211,9 +211,7 @@ function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 function unload(state: GameState, ship: Ship): void {
   const { run } = state;
   const value = walletValue(ship.cargo);
-  const parts = RESOURCES.filter((r) => ship.cargo[r] >= 0.5).map(
-    (r) => `${Math.floor(ship.cargo[r])}${RESOURCE_INFO[r].icon}`,
-  );
+  const parts = formatWallet(ship.cargo);
   for (const r of RESOURCES)
     if (ship.cargo[r] > 0) contractProgress(state, { t: 'deliver', resource: r, amount: ship.cargo[r] });
   for (const r of RESOURCES) {
@@ -222,8 +220,7 @@ function unload(state: GameState, ship: Ship): void {
   }
   run.runValue += value;
   if (value > 0) state.out.fx.push({ t: 'dock', pos: { ...ship.pos }, shipId: ship.id, value });
-  if (isFlagship(ship) && parts.length)
-    state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts.join(' ')}.` });
+  if (isFlagship(ship) && parts) state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts}.` });
 }
 
 function updatePickups(state: GameState, index: SimIndex, dt: number): void {

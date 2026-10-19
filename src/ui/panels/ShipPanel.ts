@@ -10,7 +10,7 @@ import {
   type VariantId,
 } from '../../data/components';
 import { HULLS } from '../../data/hulls';
-import { RESOURCES, RESOURCE_INFO, canAfford, formatCost, type Cost, walletTotal } from '../../data/resources';
+import { canAfford, formatCost, formatWallet, type Cost, walletTotal } from '../../data/resources';
 import { isDocked, refitBlock, repairCost, scrapValue, upgradeCost } from '../../sim/economy';
 import { applySystemStats } from '../../sim/modifiers';
 import { findShip, isAlive, isFlagship, selectedShip, shipStats } from '../../sim/ships';
@@ -130,12 +130,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         );
         const tot = walletTotal(s.cargo);
         cargo.set(tot / k.cargoCap, `Cargo ${Math.floor(tot)}/${k.cargoCap}`);
-        setText(
-          cargoDetail,
-          RESOURCES.filter((r) => s.cargo[r] >= 1)
-            .map((r) => `${RESOURCE_INFO[r].icon} ${Math.floor(s.cargo[r])}`)
-            .join('  ') || 'Hold empty',
-        );
+        setText(cargoDetail, formatWallet(s.cargo, { min: 1, sep: '  ', iconFirst: true, empty: 'Hold empty' }));
         const mag = applySystemStats(k, state.run.system).magnet;
         setText(
           stats,

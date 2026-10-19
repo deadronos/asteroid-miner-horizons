@@ -5,15 +5,7 @@
 // draws from an RNG or moves a ship, rock or pickup.
 
 import { HULLS } from '../data/hulls';
-import {
-  credit,
-  RAW_RESOURCES,
-  RESOURCE_INFO,
-  RESOURCES,
-  emptyWallet,
-  walletTotal,
-  walletValue,
-} from '../data/resources';
+import { credit, RAW_RESOURCES, emptyWallet, formatWallet, walletTotal, walletValue } from '../data/resources';
 import type { Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { yieldMul } from './mining';
@@ -127,12 +119,10 @@ export function formatAway(sec: number): string {
 
 /** The summary line, also shown as a toast. */
 export function offlineLog(gains: OfflineGains, capped: boolean): LogEntry {
-  const parts = RESOURCES.filter((r) => gains.bank[r] >= 0.5).map(
-    (r) => `${Math.floor(gains.bank[r])}${RESOURCE_INFO[r].icon}`,
-  );
+  const parts = formatWallet(gains.bank);
   const away = formatAway(gains.seconds) + (capped ? ' (cap)' : '');
   const lines: string[] = [];
-  if (parts.length) lines.push(`fleet banked ${parts.join(' ')}`);
+  if (parts) lines.push(`fleet banked ${parts}`);
   if (gains.stored >= 0.5) lines.push(`outposts stored ${Math.floor(gains.stored)} units`);
   const detail = lines.join('; ') || 'fleet banked a few scraps';
   return {
