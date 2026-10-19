@@ -78,6 +78,7 @@ function spawnComet(state: GameState, w: CometWarning): void {
     comet: true,
   });
   run.hazards.comets += 1;
+  state.profile.stats.comets += 1;
   state.out.fx.push({ t: 'hazard', kind: 'comet', phase: 'start', pos: { ...w.from } });
 }
 

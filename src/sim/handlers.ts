@@ -87,6 +87,7 @@ export const handlers: Handlers = {
     if (profile.data < cost) return fail(state, 'Not enough Horizon Data.');
     profile.data -= cost;
     profile.perks[cmd.perk] += 1;
+    profile.stats.perks += 1;
     out.log.push({ level: 'major', text: `Researched ${PERKS[cmd.perk].name} ${profile.perks[cmd.perk]}.` });
     for (const s of run.ships) clampToStats(state, s);
   },
@@ -99,6 +100,7 @@ export const handlers: Handlers = {
     profile.data += gain;
     profile.dataEarned += gain;
     profile.warps += 1;
+    profile.stats.warps += 1;
     const dropped = run.contracts.active;
     const left = run.refinery.queue;
     const outposts = run.automation.outposts.length;
@@ -173,6 +175,7 @@ export const handlers: Handlers = {
         v(st.x + n * 6, st.z - 20),
       );
       run.ships.push(ship);
+      profile.stats.drones += 1;
       out.log.push({ level: 'info', text: `${ship.name} launched from the station.` });
     }
   },
@@ -292,6 +295,7 @@ export const handlers: Handlers = {
     pay(run.bank, TUNING.outpostCost);
     const outpost = makeOutpost(rock);
     run.automation.outposts.push(outpost);
+    state.profile.stats.outposts += 1;
     // Nobody keeps cutting a rock that now hosts an outpost.
     for (const s of run.ships) {
       if (s.order?.kind === 'mine' && s.order.rockId === rock.id) s.order = null;

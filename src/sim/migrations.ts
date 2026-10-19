@@ -4,6 +4,7 @@
 // replaying the entries in order instead of being rejected outright.
 
 import { defaultVariant } from '../data/components';
+import { newStats } from './achievements';
 import { newAutomation } from './automation';
 import { newBoard } from './contracts';
 import { SAVE_VERSION } from './create';
@@ -68,6 +69,23 @@ export const migrations: Record<number, Migration> = {
   9: (d) => {
     d.profile.perks.furnace = 0;
     d.profile.perks.hopper = 0;
+    return d;
+  },
+  // v11 added lifetime stats and achievements (#40). Counters the save already
+  // implies seed the stats: warps and research levels in full, and this run's
+  // time, contracts, refined units and comets as a lower bound. Nothing is
+  // unlocked yet; the first tick unlocks whatever those counters already reach.
+  10: (d) => {
+    const { profile, run } = d;
+    const stats = newStats();
+    stats.warps = profile.warps;
+    stats.perks = Object.values(profile.perks).reduce((sum, l) => sum + l, 0);
+    stats.time = run.time;
+    stats.contracts = run.contracts.completed;
+    stats.refined = Object.values(run.refinery.produced).reduce((sum, n) => sum + n, 0);
+    stats.comets = run.hazards.comets;
+    profile.stats = stats;
+    profile.achievements = [];
     return d;
   },
 };

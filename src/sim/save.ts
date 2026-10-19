@@ -7,6 +7,7 @@
 // versions are upgraded through sim/migrations; saves from a newer version are
 // rejected rather than half-loaded.
 
+import { ACHIEVEMENTS, STAT_KEYS } from '../data/achievements';
 import { COMPONENTS, isVariant, type ComponentId } from '../data/components';
 import { MODIFIERS } from '../data/modifiers';
 import { PERK_IDS } from '../data/perks';
@@ -164,6 +165,18 @@ function isAutomation(a: unknown, rocks: unknown[]): boolean {
   });
 }
 
+/** True when `p` has a finite number under every stat key and a duplicate-free list of known achievements. */
+function isLifetime(p: Profile): boolean {
+  const stats = p.stats as Record<string, unknown> | null | undefined;
+  if (!stats || typeof stats !== 'object' || !STAT_KEYS.every((k) => finite(stats[k]))) return false;
+  const got = p.achievements as unknown;
+  return (
+    Array.isArray(got) &&
+    got.every((a) => typeof a === 'string' && Object.hasOwn(ACHIEVEMENTS, a)) &&
+    new Set(got).size === got.length
+  );
+}
+
 /** Validates the shape of parsed JSON well enough that the game can run on it. */
 function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   const migrated = migrate(data, opts);
@@ -173,6 +186,8 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!profile || typeof profile.seed !== 'number' || !profile.perks || typeof profile.perks !== 'object') return null;
   // Stats, costs and the refinery read every perk level, so each must be a finite number.
   if (!PERK_IDS.every((p) => finite(profile.perks[p]))) return null;
+  // The tick adds to every stat and the Stats tab looks up every unlocked achievement.
+  if (!isLifetime(profile)) return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
   // A trait the sim doesn't know would drive behaviour no rock can roll.

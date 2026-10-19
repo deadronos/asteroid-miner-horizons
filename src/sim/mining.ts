@@ -43,6 +43,7 @@ export function dropPickups(state: GameState, rock: Rock, units: number): void {
 export function destroyRock(state: GameState, rock: Rock): Rock[] {
   const { run } = state;
   removeItem(run.rocks, rock);
+  state.profile.stats.rocksBroken += 1;
   state.out.fx.push({ t: 'crack', pos: { ...rock.pos }, kind: rock.kind, radius: rock.radius });
   contractProgress(state, { t: 'break', size: rock.size });
 
