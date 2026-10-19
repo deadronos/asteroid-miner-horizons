@@ -2,22 +2,12 @@ import { describe, expect, it } from 'vitest';
 import { walletTotal } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { outpostAt, transfer } from '../src/sim/automation';
-import { applyCommand, type Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { SimIndex } from '../src/sim/index';
 import { flagship, makeShip } from '../src/sim/ships';
 import type { GameState, Rock, Ship } from '../src/sim/types';
 import { tick, type TickInput } from '../src/sim/update';
-
-const DT = 1 / 60;
-
-function run(state: GameState, seconds: number, commands: Command[] = []): void {
-  const index = new SimIndex();
-  const input: TickInput = { thrust: { x: 0, z: 0 }, commands };
-  for (let t = 0; t < seconds; t += DT) tick(state, DT, input, index);
-}
-
-const send = (s: GameState, c: Command): void => applyCommand(s, c);
+import { DT, runFor, send } from './helpers';
 
 /** A plain large rock, with the flagship parked just off its surface and the bank able to pay. */
 function setup(seed = 1): { s: GameState; rock: Rock; fs: Ship } {
@@ -108,7 +98,7 @@ describe('outposts', () => {
     const o = outpostAt(s, rock.id)!;
     const units = rock.units;
     const reserve = o.reserve;
-    run(s, 10);
+    runFor(s, 10);
     expect(o.stored[rock.kind]).toBeCloseTo(TUNING.outpostRate * 10, 1);
     expect(o.reserve + o.stored[rock.kind]).toBeCloseTo(reserve, 6);
     expect(s.run.automation.extracted).toBeCloseTo(o.stored[rock.kind], 6);
@@ -119,7 +109,7 @@ describe('outposts', () => {
   it('stall at capacity until collected', () => {
     const { s, rock } = setup();
     send(s, { t: 'deployOutpost', rockId: rock.id });
-    run(s, TUNING.outpostCapacity / TUNING.outpostRate + 30);
+    runFor(s, TUNING.outpostCapacity / TUNING.outpostRate + 30);
     expect(walletTotal(outpostAt(s, rock.id)!.stored)).toBeCloseTo(TUNING.outpostCapacity, 6);
   });
 
@@ -127,7 +117,7 @@ describe('outposts', () => {
     const { s, rock } = setup();
     s.profile.perks.yield = 2;
     send(s, { t: 'deployOutpost', rockId: rock.id });
-    run(s, 10);
+    runFor(s, 10);
     expect(outpostAt(s, rock.id)!.stored[rock.kind]).toBeCloseTo(TUNING.outpostRate * 10 * 1.2, 1);
   });
 
@@ -136,11 +126,11 @@ describe('outposts', () => {
     send(s, { t: 'deployOutpost', rockId: rock.id });
     const o = outpostAt(s, rock.id)!;
     o.reserve = 0.1;
-    run(s, 1);
+    runFor(s, 1);
     expect(o.reserve).toBe(0);
     expect(outpostAt(s, rock.id)).toBeDefined(); // still holding what it extracted
     o.stored[rock.kind] = 0;
-    run(s, DT);
+    runFor(s, DT);
     expect(outpostAt(s, rock.id)).toBeUndefined();
     expect(s.run.rocks).toContain(rock);
   });
@@ -150,8 +140,8 @@ describe('outposts', () => {
     const b = setup();
     send(a.s, { t: 'deployOutpost', rockId: a.rock.id });
     b.s.run.bank = { ...a.s.run.bank };
-    run(a.s, 5);
-    run(b.s, 5);
+    runFor(a.s, 5);
+    runFor(b.s, 5);
     expect(a.s.run.rng.s).toBe(b.s.run.rng.s);
   });
 
@@ -162,7 +152,7 @@ describe('outposts', () => {
     s.run.rocks = [rock];
     const drone = makeShip(s.run, s.profile, 'drone', 'Drone-1', fs.pos);
     s.run.ships.push(drone);
-    run(s, 3);
+    runFor(s, 3);
     expect(drone.aiTargetId).toBeNull();
     expect(drone.beamOn).toBe(false);
   });
@@ -218,7 +208,7 @@ describe('haulers', () => {
     const drone = makeShip(s.run, s.profile, 'drone', 'Drone-1', { x: st.x + 500, z: st.z });
     drone.cargo.ore = 40 * TUNING.haulMinShare - 1;
     s.run.ships.push(drone);
-    run(s, 2);
+    runFor(s, 2);
     expect(hauler.aiTargetId).toBeNull();
   });
 
@@ -235,14 +225,14 @@ describe('haulers', () => {
       reserve: 0,
     });
     const bank = s.run.bank[rock.kind];
-    run(s, 90);
+    runFor(s, 90);
     expect(s.run.automation.outposts).toEqual([]); // emptied with no reserve left: dismantled
     expect(s.run.bank[rock.kind]).toBeCloseTo(bank + 50, 6);
   });
 
   it('wait by the station when there is nothing to haul', () => {
     const { s, hauler } = haulerSetup();
-    run(s, 5);
+    runFor(s, 5);
     expect(hauler.aiTargetId).toBeNull();
     const d = Math.hypot(hauler.pos.x - s.run.system.station.pos.x, hauler.pos.z - s.run.system.station.pos.z);
     expect(d).toBeLessThan(200);

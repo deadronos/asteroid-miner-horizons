@@ -9,8 +9,7 @@ import { serialize } from '../src/sim/save';
 import { flagship, shipStats } from '../src/sim/ships';
 import type { GameState, Rock, StarClass } from '../src/sim/types';
 import { tick } from '../src/sim/update';
-
-const DT = 1 / 60;
+import { DT, runTicks } from './helpers';
 
 /** A fresh game in system `number` (default 2, the first that schedules hazards). */
 function game(seed: number, number = 2, starClass?: StarClass): GameState {
@@ -18,11 +17,6 @@ function game(seed: number, number = 2, starClass?: StarClass): GameState {
   const state: GameState = { version: SAVE_VERSION, profile, run: newRun(profile), out: { fx: [], log: [] } };
   if (starClass) state.run.system.starClass = starClass;
   return state;
-}
-
-function ticks(state: GameState, n: number, level?: HazardLevel, index = new SimIndex()): void {
-  const input = { thrust: { x: 0, z: 0 }, commands: [], hazards: level };
-  for (let i = 0; i < n; i++) tick(state, DT, input, index);
 }
 
 /** Calls `updateHazards` for `n` ticks, draining the outbox like the renderer would. */
@@ -164,7 +158,7 @@ function flareLoss(level: HazardLevel): number {
   const st = shipStats(ship, state.profile);
   ship.shield = st.maxShield / 2;
   const s0 = ship.shield;
-  ticks(state, 1, level);
+  runTicks(state, 1, { hazards: level });
   return s0 + st.shieldRegen * DT - ship.shield;
 }
 
@@ -199,8 +193,8 @@ describe('hazards off', () => {
     const a = game(11);
     const b = game(11);
     const timers = [a.run.hazards.cometTimer, a.run.hazards.flareTimer];
-    ticks(a, 20000); // hazards absent
-    ticks(b, 20000, 'off');
+    runTicks(a, 20000); // hazards absent
+    runTicks(b, 20000, { hazards: 'off' });
     expect(serialize(b)).toBe(serialize(a));
     expect(b.run.hazards.comet).toBeNull();
     expect(b.run.hazards.flare).toBeNull();
@@ -212,7 +206,7 @@ describe('hazards off', () => {
   it('never schedules in system 1', () => {
     const state = game(11, 1);
     const before = { ...state.run.hazards, rng: { ...state.run.hazards.rng } };
-    ticks(state, 20000, 'harsh');
+    runTicks(state, 20000, { hazards: 'harsh' });
     const hz = state.run.hazards;
     expect(hz.comet).toBeNull();
     expect(hz.flare).toBeNull();
@@ -225,8 +219,8 @@ describe('determinism', () => {
   it('replays a normal run byte-identically', () => {
     const a = soonGame(7);
     const b = soonGame(7);
-    ticks(a, 12000, 'normal');
-    ticks(b, 12000, 'normal');
+    runTicks(a, 12000, { hazards: 'normal' });
+    runTicks(b, 12000, { hazards: 'normal' });
     expect(a.run.hazards.comets).toBeGreaterThan(0);
     expect(serialize(b)).toBe(serialize(a));
   });
@@ -315,19 +309,19 @@ describe('comets', () => {
     state.run.hazards.cometTimer = 0;
     state.run.hazards.flareTimer = 1e9;
     const index = new SimIndex();
-    ticks(state, 1, 'normal', index);
-    ticks(state, Math.round(TUNING.cometWarning * 60) + 2, 'normal', index);
+    runTicks(state, 1, { hazards: 'normal', index });
+    runTicks(state, Math.round(TUNING.cometWarning * 60) + 2, { hazards: 'normal', index });
     const c = cometOf(state)!;
     expect(c).toBeDefined();
     state.run.hazards.cometTimer = 1e9;
     const vel = { ...c.vel };
     const p0 = { ...c.pos };
     const n = 600;
-    ticks(state, n, 'normal', index);
+    runTicks(state, n, { hazards: 'normal', index });
     expect(c.vel).toEqual(vel);
     expect(c.pos.x).toBeCloseTo(p0.x + vel.x * n * DT, 6);
     expect(c.pos.z).toBeCloseTo(p0.z + vel.z * n * DT, 6);
-    ticks(state, 4000, 'normal', index);
+    runTicks(state, 4000, { hazards: 'normal', index });
     expect(state.run.rocks).not.toContain(c);
   });
 
@@ -360,7 +354,7 @@ describe('comets', () => {
     updateHazards(state, DT, 'normal');
     expect(state.run.hazards.comet).not.toBeNull(); // a second warning pending
     const index = new SimIndex();
-    ticks(state, 4500, 'off', index);
+    runTicks(state, 4500, { hazards: 'off', index });
     expect(state.run.rocks).not.toContain(c);
     expect(state.run.hazards.comet).toBeNull();
   });
@@ -383,7 +377,7 @@ describe('comets', () => {
     ship.shield = st.maxShield;
     const before = ship.hull + ship.shield;
     state.run.hazards.cometTimer = 1e9;
-    ticks(state, 1, 'normal');
+    runTicks(state, 1, { hazards: 'normal' });
     expect(ship.hull + ship.shield).toBeLessThan(before - 20);
     expect(c.vel).toEqual({ x: -130, z: 0 });
     expect(c.comet).toBe(true);
@@ -459,11 +453,11 @@ describe('solar flares', () => {
     const st = shipStats(ship, state.profile);
     ship.shield = st.maxShield / 2;
     const hull = ship.hull;
-    ticks(state, 1, 'normal');
+    runTicks(state, 1, { hazards: 'normal' });
     expect(ship.shield).toBeLessThan(st.maxShield / 2 + st.shieldRegen * DT);
     expect(ship.hull).toBe(hull);
     ship.shield = 0;
-    ticks(state, 1, 'normal');
+    runTicks(state, 1, { hazards: 'normal' });
     expect(ship.hull).toBeLessThan(hull);
   });
 
@@ -472,7 +466,7 @@ describe('solar flares', () => {
     ship.pos = { ...state.run.system.station.pos };
     const st = shipStats(ship, state.profile);
     ship.shield = st.maxShield;
-    ticks(state, 60, 'harsh');
+    runTicks(state, 60, { hazards: 'harsh' });
     expect(ship.shield).toBe(st.maxShield);
     expect(ship.hull).toBe(st.maxHull);
   });
@@ -481,7 +475,7 @@ describe('solar flares', () => {
     const { state, ship } = flareGame(FLARES.M!.reach + 50);
     const st = shipStats(ship, state.profile);
     ship.shield = st.maxShield;
-    ticks(state, 60, 'harsh');
+    runTicks(state, 60, { hazards: 'harsh' });
     expect(ship.shield).toBe(st.maxShield);
     expect(ship.hull).toBe(st.maxHull);
   });
@@ -523,7 +517,7 @@ describe('solar flares', () => {
     ship.hull = 0.5;
     state.out.fx.length = 0;
     state.out.log.length = 0;
-    ticks(state, 1, 'normal');
+    runTicks(state, 1, { hazards: 'normal' });
     expect(state.out.fx.filter((f) => f.t === 'explode')).toHaveLength(1);
     expect(state.out.log.filter((l) => /destroyed/.test(l.text))).toHaveLength(1);
   });
@@ -532,7 +526,7 @@ describe('solar flares', () => {
     const { state, ship } = flareGame(900);
     const st = shipStats(ship, state.profile);
     ship.shield = st.maxShield;
-    ticks(state, 60, 'off');
+    runTicks(state, 60, { hazards: 'off' });
     expect(state.run.hazards.flare).toBeNull();
     expect(ship.shield).toBe(st.maxShield);
   });

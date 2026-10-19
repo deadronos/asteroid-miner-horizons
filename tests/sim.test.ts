@@ -11,14 +11,7 @@ import { deserialize, exportText, parseImport, serialize } from '../src/sim/save
 import { flagship, shipStats } from '../src/sim/ships';
 import { tick } from '../src/sim/update';
 import type { GameState } from '../src/sim/types';
-
-const DT = 1 / 60;
-
-function run(state: GameState, seconds: number, commands: Command[] = []): void {
-  const input = { thrust: { x: 0, z: 0 }, commands };
-  const index = new SimIndex();
-  for (let t = 0; t < seconds; t += DT) tick(state, DT, input, index);
-}
+import { DT, runFor } from './helpers';
 
 function totalUnits(state: GameState): number {
   return state.run.rocks.reduce((s, r) => s + r.units, 0) + state.run.pickups.reduce((s, p) => s + p.amount, 0);
@@ -28,8 +21,8 @@ describe('determinism', () => {
   it('replays identically from the same seed', () => {
     const a = newGame(42);
     const b = newGame(42);
-    run(a, 20);
-    run(b, 20);
+    runFor(a, 20);
+    runFor(b, 20);
     expect(serialize(a)).toEqual(serialize(b));
   });
 });
@@ -58,10 +51,10 @@ describe('mining loop', () => {
     const rock = makeRock(s.run, 'ore', 2, { x: st.x + 120, z: st.z }, 5, 0);
     s.run.rocks.push(rock);
     ship.pos = { x: st.x + 40, z: st.z };
-    run(s, 8, [{ t: 'mine', shipId: ship.id, rockId: rock.id }]);
+    runFor(s, 8, { commands: [{ t: 'mine', shipId: ship.id, rockId: rock.id }] });
     expect(s.run.rocks.find((r) => r.id === rock.id)).toBeUndefined();
-    run(s, 4, [{ t: 'dock', shipId: ship.id }]);
-    run(s, 6);
+    runFor(s, 4, { commands: [{ t: 'dock', shipId: ship.id }] });
+    runFor(s, 6);
     expect(s.run.runValue).toBeGreaterThan(0);
     expect(walletTotal(ship.cargo)).toBe(0);
   });
@@ -74,9 +67,9 @@ describe('mining loop', () => {
     s.run.rocks.push(rock);
     ship.pos = { x: st.x + 40, z: st.z };
     s.out.fx.length = 0;
-    run(s, 8, [{ t: 'mine', shipId: ship.id, rockId: rock.id }]);
-    run(s, 4, [{ t: 'dock', shipId: ship.id }]);
-    run(s, 6);
+    runFor(s, 8, { commands: [{ t: 'mine', shipId: ship.id, rockId: rock.id }] });
+    runFor(s, 4, { commands: [{ t: 'dock', shipId: ship.id }] });
+    runFor(s, 6);
     let collected = 0;
     let docked = 0;
     for (const f of s.out.fx) {
@@ -101,7 +94,7 @@ describe('progression', () => {
       cmds.push({ t: 'install', shipId: ship.id, slot: i, comp: 'cargo', variant: 'standard' }),
     );
     for (let n = 0; n < 2; n++) ship.slots.forEach((_, i) => cmds.push({ t: 'upgrade', shipId: ship.id, slot: i }));
-    run(s, DT, cmds);
+    runFor(s, DT, { commands: cmds });
     expect(ship.slots.every((f) => f?.type === 'cargo' && f.tier === 3)).toBe(true);
   });
 
@@ -120,7 +113,7 @@ describe('progression', () => {
     const ship = flagship(s.run);
     ship.pos = { x: 0, z: 2000 };
     s.run.bank.ore = 1000;
-    run(s, DT, [{ t: 'install', shipId: ship.id, slot: 2, comp: 'shield', variant: 'standard' }]);
+    runFor(s, DT, { commands: [{ t: 'install', shipId: ship.id, slot: 2, comp: 'shield', variant: 'standard' }] });
     expect(ship.slots[2]).toBeNull();
   });
 });
@@ -134,7 +127,7 @@ describe('warp / prestige', () => {
     const gain = dataGain(s);
     expect(gain).toBeGreaterThan(0);
     const oldName = s.run.system.name;
-    run(s, DT, [{ t: 'warp' }]);
+    runFor(s, DT, { commands: [{ t: 'warp' }] });
     expect(s.profile.warps).toBe(1);
     expect(s.profile.data).toBe(gain);
     expect(s.run.system.number).toBe(2);
@@ -145,7 +138,7 @@ describe('warp / prestige', () => {
 
   it('refuses to warp without fuel', () => {
     const s = newGame(12);
-    run(s, DT, [{ t: 'warp' }]);
+    runFor(s, DT, { commands: [{ t: 'warp' }] });
     expect(s.profile.warps).toBe(0);
   });
 
@@ -154,7 +147,7 @@ describe('warp / prestige', () => {
     const ship = flagship(s.run);
     const before = shipStats(ship, s.profile).dps;
     s.profile.data = 10;
-    run(s, DT, [{ t: 'buyPerk', perk: 'optics' }]);
+    runFor(s, DT, { commands: [{ t: 'buyPerk', perk: 'optics' }] });
     expect(shipStats(ship, s.profile).dps).toBeCloseTo(before * 1.12);
   });
 
@@ -167,7 +160,7 @@ describe('warp / prestige', () => {
 describe('save', () => {
   it('round-trips through JSON', () => {
     const s = newGame(99);
-    run(s, 3);
+    runFor(s, 3);
     const back = deserialize(serialize(s))!;
     expect(serialize(back)).toEqual(serialize(s));
     for (const r of RESOURCES) expect(back.run.bank[r]).toBe(s.run.bank[r]);
@@ -175,7 +168,7 @@ describe('save', () => {
 
   it('export text imports back to the same rounded state', () => {
     const s = newGame(77);
-    run(s, 2);
+    runFor(s, 2);
     const text = exportText(s, 1234);
     const res = parseImport(text);
     if (!res.ok) throw new Error(`import failed: ${res.error}`);

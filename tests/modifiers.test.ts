@@ -14,8 +14,8 @@ import {
 } from '../src/sim/modifiers';
 import { SimIndex } from '../src/sim/index';
 import { flagship, shipStats } from '../src/sim/ships';
-import { tick } from '../src/sim/update';
 import type { Belt } from '../src/sim/types';
+import { DT, runFor } from './helpers';
 
 // [seed, n, name, class, richness, station angle, planets, belt counts] captured at efc16f2.
 const SNAPSHOT: [number, number, string, string, number, number, number, number[]][] = [
@@ -181,18 +181,10 @@ describe('applySystemStats', () => {
   });
 });
 
-const DT = 1 / 60;
-const idle = { thrust: { x: 0, z: 0 }, commands: [] };
-
 function withMods(mods: ModifierId[]) {
   const g = newGame(1);
   g.run.system.modifiers = mods;
   return g;
-}
-
-function tickFor(g: ReturnType<typeof newGame>, seconds: number): void {
-  const index = new SimIndex();
-  for (let t = 0; t < seconds; t += DT) tick(g, DT, idle, index);
 }
 
 /** Velocity of a pickup placed at 0.9× the flagship's base magnet radius after one tick. */
@@ -203,7 +195,7 @@ function pickupVelAfterTick(mods: ModifierId[]) {
   const d = shipStats(fs, g.profile).magnet * 0.9;
   const pos = { x: fs.pos.x + d, z: fs.pos.z };
   g.run.pickups = [{ id: 9999, kind: 'ore', amount: 1, pos, vel: { x: 0, z: 0 }, age: 0 }];
-  tickFor(g, DT);
+  runFor(g, DT);
   return g.run.pickups[0]!.vel;
 }
 
@@ -213,7 +205,7 @@ function rocksAfter(mods: ModifierId[], seconds: number): number {
   g.run.rocks = [];
   g.run.regrowTimer = 0;
   for (const s of g.run.ships) s.pos = { x: 1e5, z: 1e5 };
-  tickFor(g, seconds);
+  runFor(g, seconds);
   return g.run.rocks.length;
 }
 

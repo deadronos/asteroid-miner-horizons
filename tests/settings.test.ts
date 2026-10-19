@@ -2,11 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULTS, SettingsStore, actionFor } from '../src/settings';
 import { newGame } from '../src/sim/create';
 import { makeRock } from '../src/sim/generate';
-import { SimIndex } from '../src/sim/index';
 import { flagship, makeShip } from '../src/sim/ships';
 import type { Assists } from '../src/sim/assists';
-import { tick } from '../src/sim/update';
-import type { GameState } from '../src/sim/types';
+import { runFor } from './helpers';
 
 class MemStorage {
   m = new Map<string, string>();
@@ -65,12 +63,6 @@ describe('settings store', () => {
   });
 });
 
-function runFor(s: GameState, sec: number, assists: Assists, cmds: Parameters<typeof tick>[2]['commands'] = []): void {
-  const input = { thrust: { x: 0, z: 0 }, commands: cmds, assists };
-  const index = new SimIndex();
-  for (let t = 0; t < sec; t += 1 / 60) tick(s, 1 / 60, input, index);
-}
-
 describe('assists', () => {
   const ON: Assists = { avoid: true, autoDock: true, chain: true };
 
@@ -82,7 +74,7 @@ describe('assists', () => {
       ship.pos = { x: st.x, z: st.z };
       const rock = makeRock(s.run, 'ore', 1, { x: st.x + 100, z: st.z }, 10, 0);
       s.run.rocks.push(rock);
-      runFor(s, 8, { ...ON, chain }, [{ t: 'mine', shipId: ship.id, rockId: rock.id }]);
+      runFor(s, 8, { assists: { ...ON, chain }, commands: [{ t: 'mine', shipId: ship.id, rockId: rock.id }] });
       expect(s.run.rocks.includes(rock)).toBe(false);
       // With chaining the order moves on to a fragment; without it the order ends.
       expect(ship.order !== null).toBe(chain);
@@ -98,7 +90,7 @@ describe('assists', () => {
       s.run.ships.push(drone);
       // Park the flagship away from the station so "escorting" it doesn't dock the drone by accident.
       flagship(s.run).pos = { x: st.x + 600, z: st.z };
-      runFor(s, 15, { ...ON, autoDock });
+      runFor(s, 15, { assists: { ...ON, autoDock } });
       // Assert the unload itself rather than an empty hold: a faster drone
       // starts re-mining within the window, so its hold is non-empty again.
       expect(s.run.runValue > 0).toBe(autoDock);
