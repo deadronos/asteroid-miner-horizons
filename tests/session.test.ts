@@ -169,6 +169,11 @@ describe('GameSession saving', () => {
   });
 });
 
+/** Node has no requestIdleCallback, so a queued autosave runs on a zero timeout (clamped to 1 ms). */
+const idle = (): void => {
+  vi.advanceTimersByTime(1);
+};
+
 describe('GameSession autosave', () => {
   beforeEach(() => vi.useFakeTimers());
   afterEach(() => vi.useRealTimers());
@@ -180,6 +185,8 @@ describe('GameSession autosave', () => {
 
     s.start();
     vi.advanceTimersByTime(10_000);
+    expect(readSlot(0)).toBeNull();
+    idle();
 
     expect(readSlot(0)!.state.run.time).toBe(7);
     expect(s.state.out.log).toHaveLength(before);
@@ -204,6 +211,7 @@ describe('GameSession autosave', () => {
     vi.advanceTimersByTime(6_000);
     set.set({ volMaster: 0.3 });
     vi.advanceTimersByTime(4_000);
+    idle();
 
     expect(readSlot(0)!.state.run.time).toBe(4);
   });
@@ -218,6 +226,7 @@ describe('GameSession autosave', () => {
     vi.advanceTimersByTime(29_000);
     expect(readSlot(0)).toBeNull();
     vi.advanceTimersByTime(1_000);
+    idle();
     expect(readSlot(0)!.state.run.time).toBe(4);
 
     set.set({ autosaveSec: 0 });
@@ -288,5 +297,56 @@ describe('GameSession page lifecycle', () => {
     s.stop();
     win.dispatchEvent(new Event('beforeunload'));
     expect(slotWrites(write)).toBe(1);
+  });
+});
+
+describe('GameSession idle autosave', () => {
+  let queued: Map<number, () => void>;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    queued = new Map();
+    let next = 1;
+    vi.stubGlobal('requestIdleCallback', (cb: () => void) => {
+      queued.set(next, cb);
+      return next++;
+    });
+    vi.stubGlobal('cancelIdleCallback', (id: number) => queued.delete(id));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  /** Run every queued idle callback, as the browser would between frames. */
+  const flushIdle = (): void => {
+    const cbs = [...queued.values()];
+    queued.clear();
+    for (const cb of cbs) cb();
+  };
+
+  it('waits for an idle moment, and queues one save however many intervals pass', () => {
+    const s = new GameSession(settings(10));
+    atTime(s.state, 3);
+    s.start();
+
+    vi.advanceTimersByTime(30_000);
+    expect(readSlot(0)).toBeNull();
+    expect(queued.size).toBe(1);
+
+    flushIdle();
+    expect(readSlot(0)!.state.run.time).toBe(3);
+  });
+
+  it('drops the queued save on stop() and after an immediate save', () => {
+    const s = new GameSession(settings(10));
+    s.start();
+    vi.advanceTimersByTime(10_000);
+    s.saveNow();
+    expect(queued.size).toBe(0);
+
+    vi.advanceTimersByTime(10_000);
+    s.stop();
+    expect(queued.size).toBe(0);
   });
 });

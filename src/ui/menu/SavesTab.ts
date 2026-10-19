@@ -1,8 +1,8 @@
 // Saves tab: the 3 localStorage slots (load / save / new / delete), import
-// from a file or pasted text, export to text or a downloaded .json.
+// from a file or pasted text, export to compact text or a downloaded .json.
 
 import type { SaveActions } from '../../session';
-import { SLOT_COUNT, exportText, parseImport, readSlot, type SaveRecord } from '../../sim/save';
+import { SLOT_COUNT, exportCompact, exportText, parseImportText, readSlot, type SaveRecord } from '../../sim/save';
 import type { GameState } from '../../sim/types';
 import { h } from '../dom';
 import type { MenuCtx } from './context';
@@ -107,7 +107,7 @@ export class SavesTab {
           );
         }
         btns.append(
-          h('button', { text: 'Export…', onclick: () => this.exportWindow(i, rec.state) }),
+          h('button', { text: 'Export…', onclick: () => void this.exportWindow(i, rec.state) }),
           h('button', {
             text: 'Download',
             title: 'Download as a .json file',
@@ -182,7 +182,7 @@ export class SavesTab {
   private onFilePicked = async (): Promise<void> => {
     const file = this.fileInput.files?.[0];
     if (!file) return;
-    const res = parseImport(await file.text());
+    const res = await parseImportText(await file.text());
     if (!res.ok) {
       alert(`Couldn't import ${file.name}: ${res.error}`);
       return;
@@ -221,10 +221,13 @@ export class SavesTab {
     return { area, error };
   }
 
-  private exportWindow(slot: number, state: GameState): void {
-    const text = exportText(state);
+  private async exportWindow(slot: number, state: GameState): Promise<void> {
+    const text = await exportCompact(state);
     const copy = h('button', { text: 'Copy' });
-    const dl = h('button', { text: 'Download .json', onclick: () => download(fileName(state, slot), text) });
+    const dl = h('button', {
+      text: 'Download .json',
+      onclick: () => download(fileName(state, slot), exportText(state)),
+    });
     const { area } = this.textWindow(
       `Export slot ${slot + 1}`,
       `${summary(state)[0]}. Copy this text somewhere safe; paste it into an empty slot to restore it.`,
@@ -248,13 +251,13 @@ export class SavesTab {
     const go = h('button', { text: 'Import' });
     const { area, error } = this.textWindow(
       `Import into slot ${slot + 1}`,
-      'Paste exported save text (JSON) below.',
+      'Paste exported save text (or a downloaded .json) below.',
       '',
       false,
       [go],
     );
-    go.addEventListener('click', () => {
-      const res = parseImport(area.value);
+    go.addEventListener('click', async () => {
+      const res = await parseImportText(area.value);
       if (!res.ok) {
         error.textContent = res.error;
         return;

@@ -19,6 +19,9 @@ export interface SaveActions {
   remove(slot: number): void;
 }
 
+/** Longest an autosave waits for an idle moment before it runs anyway. */
+const IDLE_TIMEOUT_MS = 2000;
+
 export interface GameSessionHooks {
   /** The running game was swapped for a different one (load, new game, restart). */
   onSwitch?(): void;
@@ -30,6 +33,8 @@ export class GameSession implements SaveActions {
   private autosaveTimer = 0;
   /** The interval the timer runs at, or null while stopped. */
   private armedSec: number | null = null;
+  /** Cancels the autosave waiting for an idle moment, or null when none is queued. */
+  private cancelIdle: (() => void) | null = null;
   private detach: (() => void) | null = null;
   /** Per-session derived state for the running game; never serialized. */
   readonly sim = new SimIndex();
@@ -123,6 +128,8 @@ export class GameSession implements SaveActions {
     clearInterval(this.autosaveTimer);
     this.autosaveTimer = 0;
     this.armedSec = null;
+    this.cancelIdle?.();
+    this.cancelIdle = null;
     this.detach?.();
     this.detach = null;
   }
@@ -149,11 +156,29 @@ export class GameSession implements SaveActions {
     this.autosaveTimer = 0;
     const sec = this.settings.value.autosaveSec;
     this.armedSec = sec;
-    if (sec > 0) this.autosaveTimer = setInterval(() => this.persist(), sec * 1000);
+    if (sec > 0) this.autosaveTimer = setInterval(() => this.persistWhenIdle(), sec * 1000);
   }
 
-  /** Write the running game to its slot, silently. */
+  /** Queue a save for the browser's next idle moment, so it lands between frames rather than inside one. */
+  private persistWhenIdle(): void {
+    if (this.cancelIdle) return;
+    const run = (): void => {
+      this.cancelIdle = null;
+      this.persist();
+    };
+    if (typeof requestIdleCallback === 'function') {
+      const id = requestIdleCallback(run, { timeout: IDLE_TIMEOUT_MS });
+      this.cancelIdle = () => cancelIdleCallback(id);
+    } else {
+      const id = setTimeout(run, 0);
+      this.cancelIdle = () => clearTimeout(id);
+    }
+  }
+
+  /** Write the running game to its slot, silently. A queued idle save is now redundant. */
   private persist(): void {
+    this.cancelIdle?.();
+    this.cancelIdle = null;
     writeSlot(this.slot, this.state);
   }
 
