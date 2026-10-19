@@ -279,10 +279,11 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   if (st.dps > 0) {
     let rock = ship.aiTargetId != null ? ctx.index.rockById.get(ship.aiTargetId) : undefined;
-    if (rock && (dist(rock.pos, anchor) > TUNING.droneLeash || unsafe(ctx, rock.pos))) rock = undefined;
+    if (rock && (!canMine(st, rock) || dist(rock.pos, anchor) > TUNING.droneLeash || unsafe(ctx, rock.pos)))
+      rock = undefined;
     if (!rock && ship.aiMode === 'assist' && fs.order?.kind === 'mine') {
       rock = ctx.index.rockById.get(fs.order.rockId);
-      if (rock && unsafe(ctx, rock.pos)) rock = undefined;
+      if (rock && (!canMine(st, rock) || unsafe(ctx, rock.pos))) rock = undefined;
     }
     if (!rock) {
       rock =
