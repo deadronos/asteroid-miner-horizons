@@ -35,10 +35,10 @@ export interface SaveRecord {
   state: GameState;
 }
 
-/** localStorage, or null where it's missing or blocked (private mode, tests). */
-export function safeStorage(): Storage | null {
+/** localStorage (or sessionStorage), or null where it's missing or blocked (private mode, tests). */
+export function safeStorage(area: 'localStorage' | 'sessionStorage' = 'localStorage'): Storage | null {
   try {
-    return globalThis.localStorage ?? null;
+    return globalThis[area] ?? null;
   } catch {
     return null;
   }

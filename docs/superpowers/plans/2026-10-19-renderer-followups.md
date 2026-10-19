@@ -111,15 +111,15 @@ visible frame compiles them. No frame shows a wrong look.
 - Test: create `tests/reloadGuard.test.ts`
 
 **Build:**
-- [ ] Pure functions in `src/reloadGuard.ts`:
+- [x] Pure functions in `src/reloadGuard.ts`:
   - `parseLosses(raw: string | null): number[]`. Tolerates null, bad JSON, non-arrays and non-finite entries.
   - `decideReload(losses: readonly number[], now: number, windowMs, maxReloads)`. Returns
     `{ reload: boolean; losses: number[] }`, where `losses` keeps only the timestamps inside the window plus `now`,
     capped in length. With the defaults (`maxReloads` 2, window 60 s), the first and second losses in the window
     reload, and the third shows the notice.
-- [ ] `safeStorage(area = 'localStorage')` in `src/sim/save.ts` also accepts `'sessionStorage'`. Existing callers
+- [x] `safeStorage(area = 'localStorage')` in `src/sim/save.ts` also accepts `'sessionStorage'`. Existing callers
       are unchanged.
-- [ ] `main.ts` `onContextLost`:
+- [x] `main.ts` `onContextLost`:
   - save as today;
   - read and decide through `safeStorage('sessionStorage')`, guarding the write against a full or blocked store;
   - then either show "Graphics reset — reloading…" and reload, or show a persistent notice: "Graphics keep
@@ -127,20 +127,20 @@ visible frame compiles them. No frame shows a wrong look.
     `location.reload()`.
 
   Storage failure must fall back to today's behaviour (reload).
-- [ ] `Hud.showNotice(text, action?)` gains an optional button. The notice takes pointer events so the button works.
+- [x] `Hud.showNotice(text, action?)` gains an optional button. The notice takes pointer events so the button works.
       The banner stays above the menu, so the player can still open ⚙ to change quality.
-- [ ] Not doing the optional "drop to low on the second loss". Changing the player's preset silently is out of
+- [x] Not doing the optional "drop to low on the second loss". Changing the player's preset silently is out of
       scope; the notice suggests it instead.
 
 **Tests:**
-- [ ] `decideReload`:
+- [x] `decideReload`:
   - first loss reloads;
   - second within the window reloads;
   - third within the window does not;
   - losses older than the window are dropped and reloading resumes;
   - future timestamps or junk are ignored;
   - the stored list stays bounded.
-- [ ] `parseLosses` with null, bad JSON, an object, and mixed entries.
+- [x] `parseLosses` with null, bad JSON, an object, and mixed entries.
 
 **Done when:** `npm run check` is green. In the browser, `WEBGL_lose_context.loseContext()`:
 - reloads on the first and second loss;
