@@ -3,7 +3,7 @@
 
 import { RECIPES, RECIPE_IDS } from '../../data/refining';
 import { RESOURCE_INFO } from '../../data/resources';
-import { describeRecipe, jobProgress, maxBatches, refineBlock } from '../../sim/refining';
+import { describeRecipe, findJob, jobProgress, maxBatches, refineBlock } from '../../sim/refining';
 import type { GameState } from '../../sim/types';
 import { Panel, bar, h, setBlocked, setText, slotRow } from '../dom';
 import type { PanelCtx } from './context';
@@ -65,7 +65,7 @@ export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             onclick: () => ctx.send({ t: 'cancelRefine', jobId }),
           });
           bind(() => {
-            const job = st().run.refinery.queue.find((j) => j.id === jobId);
+            const job = findJob(st().run, jobId);
             if (job) setText(done, `${job.total - job.count}/${job.total}`);
           });
           nodes.push(slotRow(`${RESOURCE_INFO[id].icon} ${RECIPES[id].name}`, done, cancel));

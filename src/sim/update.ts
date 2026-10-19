@@ -9,7 +9,7 @@ import { walletValue, RESOURCES, formatWallet, walletTotal } from '../data/resou
 import { TUNING } from '../data/tuning';
 import { updateAchievements } from './achievements';
 import { DEFAULT_ASSISTS, type Assists } from './assists';
-import { haulerThink, isHauler, updateOutposts } from './automation';
+import { haulerThink, updateOutposts } from './automation';
 import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
@@ -19,7 +19,7 @@ import type { SimIndex } from './index';
 import { systemEffects } from './modifiers';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
 import { updateRefinery } from './refining';
-import { cargoFree, damageShip, isAlive, isFlagship, type ShipStats } from './ships';
+import { cargoFree, damageShip, isAlive, isFlagship, isHauler, type ShipStats } from './ships';
 import { magnetPull } from './traits';
 import type { GameState, Run, Ship } from './types';
 

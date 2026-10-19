@@ -5,12 +5,11 @@
 // draws from an RNG or moves a ship, rock or pickup.
 
 import { formatDuration } from '../core/format';
-import { HULLS } from '../data/hulls';
 import { credit, RAW_RESOURCES, emptyWallet, formatWallet, walletTotal, walletValue } from '../data/resources';
 import type { Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { yieldMul } from './mining';
-import { shipStats } from './ships';
+import { isDrone, isHauler, shipStats } from './ships';
 import type { GameState, LogEntry } from './types';
 
 export interface OfflineGains {
@@ -64,9 +63,8 @@ export function offlineGains(state: GameState, awaySec: number): OfflineGains {
   let dps = 0;
   let haulers = 0;
   for (const s of run.ships) {
-    const role = HULLS[s.hullId].role;
-    if (role === 'hauler') haulers++;
-    if (role === 'drone') dps += shipStats(s, profile).dps;
+    if (isHauler(s)) haulers++;
+    if (isDrone(s)) dps += shipStats(s, profile).dps;
   }
   const mined = dps * TUNING.offlineUnitsPerDps * TUNING.offlineEfficiency * mul * seconds;
   if (mined > 0) {

@@ -10,12 +10,10 @@ import { isDocked } from './economy';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
 import { arrive, dodgeHazards, formationSlot, steer, unsafe, type TickCtx } from './pilot';
-import { cargoFree, findShip, flagship, isAlive, isHoldFull, type ShipStats } from './ships';
+import { cargoFree, findShip, flagship, isAlive, isDrone, isHauler, isHoldFull, type ShipStats } from './ships';
 import type { Automation, GameState, Outpost, Rock, Ship } from './types';
 
 export const newAutomation = (): Automation => ({ outposts: [], extracted: 0 });
-
-export const isHauler = (ship: Ship): boolean => HULLS[ship.hullId].role === 'hauler';
 
 export const outpostAt = (state: GameState, rockId: number): Outpost | undefined =>
   state.run.automation.outposts.find((o) => o.rockId === rockId);
@@ -149,8 +147,7 @@ function sourceFor(ctx: TickCtx, id: number): Source | null {
 }
 
 /** A live mining drone out in the field (one docked at the station unloads itself). */
-const isMiner = (ctx: TickCtx, s: Ship): boolean =>
-  HULLS[s.hullId].role === 'drone' && isAlive(s) && !isDocked(ctx.state.run, s);
+const isMiner = (ctx: TickCtx, s: Ship): boolean => isDrone(s) && isAlive(s) && !isDocked(ctx.state.run, s);
 
 /**
  * Picks the fullest worthwhile source per unit of distance, skipping ones another hauler has claimed or that sit in

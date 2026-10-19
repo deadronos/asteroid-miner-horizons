@@ -23,10 +23,9 @@ import { formatCountdown } from '../src/core/format';
 import { HAZARD_LEVEL_IDS, type HazardLevel } from '../src/data/hazards';
 import { MODIFIER_IDS, MODIFIERS } from '../src/data/modifiers';
 import { walletValue } from '../src/data/resources';
-import { isHauler } from '../src/sim/automation';
 import { newGame } from '../src/sim/create';
 import { isDocked } from '../src/sim/economy';
-import { droneCount, fleetCap, isFlagship } from '../src/sim/ships';
+import { droneCount, fleetCap, isFlagship, isHauler } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
 import { runBot } from './harness';
 

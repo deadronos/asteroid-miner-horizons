@@ -16,6 +16,7 @@ import { newGame } from '../src/sim/create';
 import {
   cancelRefine,
   describeRecipe,
+  findJob,
   jobLabel,
   jobProgress,
   maxBatches,
@@ -279,6 +280,16 @@ describe('cancelRefine', () => {
 
     expect(cancelRefine(run, fuelId)?.recipe).toBe('fuel');
     expect(run.refinery.queue.map((j) => j.recipe)).toEqual(['alloy']);
+  });
+});
+
+describe('findJob', () => {
+  it('returns the queued job with the id, or undefined when it is gone', () => {
+    const { run } = stateWith({ ore: 40 });
+    queueRefine(run, 'alloy', 2);
+    const id = run.refinery.queue[0]!.id;
+    expect(findJob(run, id)?.recipe).toBe('alloy');
+    expect(findJob(run, id + 1)).toBeUndefined();
   });
 });
 

@@ -114,12 +114,15 @@ export function maxBatches(run: Run, recipe: RecipeId): number {
   return Math.max(0, cap);
 }
 
+/** The queued job with `id`, or undefined when it has finished or been cancelled. */
+export const findJob = (run: Run, id: number): RefineJob | undefined => run.refinery.queue.find((j) => j.id === id);
+
 /** Removes the job with `id` and refunds every unfinished batch; null when it is no longer queued. */
 export function cancelRefine(run: Run, id: number): RefineJob | null {
   const queue = run.refinery.queue;
-  const index = queue.findIndex((j) => j.id === id);
-  if (index < 0) return null;
-  const job = queue[index]!;
+  const job = findJob(run, id);
+  if (!job) return null;
+  const index = queue.indexOf(job);
   queue.splice(index, 1);
   const cost = batchCost(job.recipe, job.count);
   credit(run.bank, cost);
