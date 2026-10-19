@@ -1,5 +1,6 @@
 // Gameplay, Graphics and Interface tabs: plain settings forms.
 
+import { TUNING } from '../../data/tuning';
 import type { SettingsStore } from '../../settings';
 import { rangeRow, section, selectRow, toggleRow } from './form';
 
@@ -20,6 +21,12 @@ export function renderGameplay(settings: SettingsStore): Node[] {
       'confirmDestructive',
       'Confirm restart, delete and scrap',
       'Ask before erasing a save or scrapping a ship',
+    ),
+    toggleRow(
+      settings,
+      'offlineProgress',
+      'Offline progress',
+      `On load, drones and outposts are credited a reduced income for the time away, up to ${TUNING.offlineCapSec / 3600} hours`,
     ),
     section('Hazards'),
     selectRow(

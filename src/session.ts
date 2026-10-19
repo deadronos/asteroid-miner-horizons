@@ -1,9 +1,12 @@
 // The playing session: which save slot is running, the live GameState, and
-// every way it changes (load, new game, import, delete, autosave). `main.ts`
-// only wires the renderer, HUD, input and loop around this.
+// every way it changes (load, new game, import, delete, autosave). Loading a
+// save credits offline progress for the time since it was written, then saves
+// at once so a reload cannot credit the same absence twice. `main.ts` only
+// wires the renderer, HUD, input and loop around this.
 
 import { newGame } from './sim/create';
 import { SimIndex } from './sim/index';
+import { applyOffline } from './sim/offline';
 import { activeSlot, clearSlot, migrateLegacy, readSlot, type SaveRecord, setActiveSlot, writeSlot } from './sim/save';
 import type { GameState } from './sim/types';
 import type { SettingsStore } from './settings';
@@ -45,8 +48,10 @@ export class GameSession implements SaveActions {
   ) {
     migrateLegacy();
     this.slot = activeSlot();
-    this.running = readSlot(this.slot)?.state ?? newGame();
+    const rec = readSlot(this.slot);
+    this.running = rec?.state ?? newGame();
     if (this.running.run.time > 0) this.logLoaded(this.slot);
+    if (rec) this.creditOffline(rec.savedAt);
     // Only a change to the interval restarts the timer, so unrelated settings
     // (a volume drag, say) don't keep pushing the next autosave back.
     settings.onChange((v) => {
@@ -79,6 +84,7 @@ export class GameSession implements SaveActions {
     if (!rec) return;
     this.switchTo(i, rec.state);
     this.logLoaded(i);
+    this.creditOffline(rec.savedAt);
   }
 
   /** Start a brand-new game in slot `i`. */
@@ -180,6 +186,12 @@ export class GameSession implements SaveActions {
     this.cancelIdle?.();
     this.cancelIdle = null;
     writeSlot(this.slot, this.state);
+  }
+
+  /** Credits the fleet's income since `savedAt` (if the setting allows) and saves, so it is credited once. */
+  private creditOffline(savedAt: number): void {
+    if (!this.settings.value.offlineProgress) return;
+    if (applyOffline(this.state, (Date.now() - savedAt) / 1000)) this.persist();
   }
 
   private logLoaded(i: number): void {

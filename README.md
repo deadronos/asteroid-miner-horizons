@@ -105,6 +105,12 @@ All keys can be rebound in ⚙ → Controls.
   asteroids broken, units mined, warps, contracts, refined units, outposts, launches,
   research, comets and ships lost) and 21 achievements unlocked from them. An unlock shows
   a toast and a log line; ⚙ → Stats lists the stats and each achievement's progress.
+- **Offline progress**: loading a save credits the fleet for the time it was closed, up to
+  8 hours (absences under a minute are ignored). It is an estimate, not a replay: each
+  drone earns a tenth of its active-play rate from its laser dps, split by the belts near
+  the station, and outposts extract at their normal rate, into their own storage or, with
+  a hauler in the fleet, into the bank. A toast and a log line summarise it. Turn it off
+  under ⚙ → Gameplay.
 - **Saves**: the ⚙ menu has three save slots in `localStorage`. The running game
   autosaves to its slot every 10 s (in the browser's next idle moment) and when the tab is
   hidden or closed. Filled slots can be loaded, exported as compact text (to copy) or
@@ -115,9 +121,9 @@ All keys can be rebound in ⚙ → Controls.
   readable error. The ⚙ menu also has a Controls tab.
 - **Settings** (⚙ menu, stored separately from saves so they apply to every slot):
   - _Gameplay_: pause while menus are open or the window is unfocused (P pauses
-    manually; menus keep working while paused), autosave interval, confirmations, the
-    hazard level (Off / Normal / Harsh), and the autopilot assists (rock avoidance,
-    drone auto-unload, fragment chaining).
+    manually; menus keep working while paused), autosave interval, confirmations, offline
+    progress, the hazard level (Off / Normal / Harsh), and the autopilot assists (rock
+    avoidance, drone auto-unload, fragment chaining).
   - _Graphics_: Low/Medium/High quality (resolution cap, star and particle density),
     nebula, anti-aliasing (applies on reload), screen shake, FPS counter.
   - _Interface_: HUD scale, always-on ship bars, help box, event log verbosity, camera

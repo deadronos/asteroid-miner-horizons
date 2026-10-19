@@ -34,6 +34,8 @@ export interface Settings {
   assistAutoDock: boolean;
   assistChain: boolean;
   hazards: HazardLevel;
+  /** Credit drone and outpost income for the time a save was closed. */
+  offlineProgress: boolean;
   // Graphics
   quality: Quality;
   nebula: boolean;
@@ -107,6 +109,7 @@ export const DEFAULTS: Settings = {
   assistAutoDock: true,
   assistChain: true,
   hazards: 'normal',
+  offlineProgress: true,
   quality: 'high',
   nebula: true,
   antialias: true,
