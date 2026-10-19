@@ -67,20 +67,35 @@ describe('command handlers', () => {
   it('install', () => {
     const { s, fs } = fs1();
     s.run.bank.ore = 1000;
-    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
     expect(fs.slots[2]).toEqual({ type: 'shield', variant: 'standard', tier: 1 });
+  });
+  it('install fits the chosen variant at tier 1', () => {
+    const { s, fs } = fs1();
+    s.run.bank.ore = 1000;
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'laser', variant: 'wide' });
+    expect(fs.slots[2]).toEqual({ type: 'laser', variant: 'wide', tier: 1 });
+  });
+  it('rejects an unknown component variant', () => {
+    const { s, fs } = fs1();
+    s.run.bank.ore = 1000;
+    const bankBefore = JSON.stringify(s.run.bank);
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'laser', variant: 'ion' });
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn', text: 'Unknown component variant.' });
+    expect(fs.slots[2]).toBeNull();
+    expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
   });
   it('upgrade', () => {
     const { s, fs } = fs1();
     s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0, alloy: 0, fuel: 0 };
-    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
     send(s, { t: 'upgrade', shipId: fs.id, slot: 2 });
     expect(fs.slots[2]!.tier).toBe(2);
   });
   it('remove', () => {
     const { s, fs } = fs1();
     s.run.bank.ore = 1000;
-    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
     send(s, { t: 'remove', shipId: fs.id, slot: 2 });
     expect(fs.slots[2]).toBeNull();
   });
@@ -340,20 +355,20 @@ describe('command handlers', () => {
     const { s, fs } = fs1();
     fs.pos = { x: 0, z: 5000 };
     s.run.bank.ore = 1000;
-    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
     expect(fs.slots[2]).toBeNull();
   });
   it('install is rejected when under-funded', () => {
     const { s, fs } = fs1();
     s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
-    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
     expect(fs.slots[2]).toBeNull();
     expect(s.out.log.at(-1)).toMatchObject({ level: 'warn' });
   });
   it('remove re-clamps hull to the new max', () => {
     const { s, fs } = fs1();
     s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0, alloy: 0, fuel: 0 };
-    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'armor' });
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'armor', variant: 'standard' });
     fs.hull = 1e9;
     send(s, { t: 'remove', shipId: fs.id, slot: 2 });
     expect(fs.hull).toBeLessThanOrEqual(100);

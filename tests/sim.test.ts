@@ -97,7 +97,9 @@ describe('progression', () => {
     s.run.bank = { ore: 1e6, ice: 1e6, crystal: 1e6, alloy: 1e6, fuel: 0 };
     ship.pos = { ...s.run.system.station.pos };
     const cmds: Command[] = [];
-    ship.slots.forEach((_, i) => cmds.push({ t: 'install', shipId: ship.id, slot: i, comp: 'cargo' }));
+    ship.slots.forEach((_, i) =>
+      cmds.push({ t: 'install', shipId: ship.id, slot: i, comp: 'cargo', variant: 'standard' }),
+    );
     for (let n = 0; n < 2; n++) ship.slots.forEach((_, i) => cmds.push({ t: 'upgrade', shipId: ship.id, slot: i }));
     run(s, DT, cmds);
     expect(ship.slots.every((f) => f?.type === 'cargo' && f.tier === 3)).toBe(true);
@@ -118,7 +120,7 @@ describe('progression', () => {
     const ship = flagship(s.run);
     ship.pos = { x: 0, z: 2000 };
     s.run.bank.ore = 1000;
-    run(s, DT, [{ t: 'install', shipId: ship.id, slot: 2, comp: 'shield' }]);
+    run(s, DT, [{ t: 'install', shipId: ship.id, slot: 2, comp: 'shield', variant: 'standard' }]);
     expect(ship.slots[2]).toBeNull();
   });
 });

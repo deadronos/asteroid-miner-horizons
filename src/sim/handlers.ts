@@ -4,7 +4,7 @@
 
 import { removeItem } from '../core/array';
 import { v } from '../core/vec';
-import { COMPONENTS, defaultVariant, variantDef, type Tier } from '../data/components';
+import { isVariant, variantDef, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
 import { RECIPES } from '../data/refining';
@@ -248,16 +248,20 @@ export const handlers: Handlers = {
   }),
 
   install: withShip((state, ship, cmd) => {
+    if (!isVariant(cmd.comp, cmd.variant)) return fail(state, 'Unknown component variant.');
     const t = slotTarget(state, ship, cmd.slot);
     if (!t) return;
     const { cur } = t;
     if (cur?.type === cmd.comp) return;
-    if (!pay(state.run.bank, variantDef(cmd.comp, defaultVariant(cmd.comp)).cost(1)))
+    if (!pay(state.run.bank, variantDef(cmd.comp, cmd.variant).cost(1)))
       return fail(state, 'Not enough resources for that component.');
     if (cur) refund(state, halve(investedCost(cur.type, cur.variant, cur.tier)));
-    ship.slots[cmd.slot] = { type: cmd.comp, variant: defaultVariant(cmd.comp), tier: 1 };
+    ship.slots[cmd.slot] = { type: cmd.comp, variant: cmd.variant, tier: 1 };
     clampToStats(state, ship);
-    state.out.log.push({ level: 'info', text: `${ship.name}: installed ${COMPONENTS[cmd.comp].name}.` });
+    state.out.log.push({
+      level: 'info',
+      text: `${ship.name}: installed ${variantDef(cmd.comp, cmd.variant).name}.`,
+    });
   }),
 
   acceptContract: (state, cmd) => {

@@ -142,8 +142,10 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             sel.append(o);
           }
           sel.addEventListener('change', () => {
-            if (sel.value)
-              send({ t: 'install', shipId: id, slot: i, comp: sel.value as (typeof COMPONENT_IDS)[number] });
+            if (sel.value) {
+              const comp = sel.value as (typeof COMPONENT_IDS)[number];
+              send({ t: 'install', shipId: id, slot: i, comp, variant: defaultVariant(comp) });
+            }
             sel.selectedIndex = 0;
           });
           row.append(sel);

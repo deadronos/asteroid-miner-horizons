@@ -248,7 +248,7 @@ function nextPurchase(state: GameState, wc: number): Command | null {
         ok(variantDef(comp, defaultVariant(comp)).cost(1)) &&
         !s.slots.some((f) => f?.type === comp && comp !== 'laser')
       )
-        return { t: 'install', shipId: s.id, slot: i, comp };
+        return { t: 'install', shipId: s.id, slot: i, comp, variant: defaultVariant(comp) };
     }
   }
   for (const comp of UPGRADE_ORDER) {
