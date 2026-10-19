@@ -25,6 +25,7 @@ import {
   upgradeCost,
   warpCost,
 } from './economy';
+import { findRock } from './generate';
 import { describeModifiers } from './modifiers';
 import { batchCost, cancelRefine, queueRefine } from './refining';
 import { droneCount, findShip, flagship, isAlive, isFlagship, makeShip, shipStats } from './ships';
@@ -192,7 +193,7 @@ export const handlers: Handlers = {
     if (!isAlive(ship)) return;
     const st = shipStats(ship, state.profile);
     if (st.dps <= 0) return fail(state, `${ship.name} has no mining laser fitted.`);
-    const rock = state.run.rocks.find((r) => r.id === cmd.rockId);
+    const rock = findRock(state.run, cmd.rockId);
     if (!rock) return;
     if (outpostAt(state, rock.id)) return fail(state, 'That asteroid hosts an outpost; haulers collect from it.');
     if (!canMine(st, rock)) return fail(state, `Dense rock — needs a tier-${TUNING.denseMinLaserTier} laser.`);
@@ -289,7 +290,7 @@ export const handlers: Handlers = {
 
   deployOutpost: (state, cmd) => {
     const { run, out } = state;
-    const rock = run.rocks.find((r) => r.id === cmd.rockId);
+    const rock = findRock(run, cmd.rockId);
     const block = outpostBlock(state, rock);
     if (block || !rock) return fail(state, block ?? 'That rock is gone.');
     pay(run.bank, TUNING.outpostCost);

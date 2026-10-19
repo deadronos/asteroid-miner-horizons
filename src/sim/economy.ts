@@ -7,7 +7,7 @@ import { HULLS, type HullId } from '../data/hulls';
 import { PERKS, type PerkId } from '../data/perks';
 import { RESOURCES, canAfford, type Cost } from '../data/resources';
 import { TUNING } from '../data/tuning';
-import { droneCount, fleetCap, isAlive, isFlagship, shipStats } from './ships';
+import { droneCount, flagship, fleetCap, isAlive, shipStats } from './ships';
 import type { GameState, Run, Ship } from './types';
 
 export const isDocked = (run: Run, ship: Ship): boolean =>
@@ -49,7 +49,7 @@ export function hullBlock(state: GameState, hullId: HullId): string | null {
   const { run, profile } = state;
   const h = HULLS[hullId];
   if (h.role === 'flagship') {
-    const fs = run.ships.find(isFlagship)!;
+    const fs = flagship(run);
     if (fs.hullId === hullId) return 'Already flying this hull';
     if (!isDocked(run, fs)) return 'Flagship must be docked';
   } else if (droneCount(run) >= fleetCap(profile)) {

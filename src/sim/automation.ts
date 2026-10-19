@@ -10,7 +10,7 @@ import { isDocked } from './economy';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
 import { arrive, dodgeHazards, steer, unsafe, type TickCtx } from './pilot';
-import { cargoFree, flagship, isAlive, isHoldFull, type ShipStats } from './ships';
+import { cargoFree, findShip, flagship, isAlive, isHoldFull, type ShipStats } from './ships';
 import type { Automation, GameState, Outpost, Rock, Ship } from './types';
 
 export const newAutomation = (): Automation => ({ outposts: [], extracted: 0 });
@@ -143,7 +143,7 @@ function sourceFor(ctx: TickCtx, id: number): Source | null {
     if (!rock || walletTotal(o.stored) <= 1e-6 || unsafe(ctx, rock.pos)) return null;
     return { id, pos: rock.pos, vel: rock.vel, radius: rock.radius, hold: o.stored, avoidId: rock.id };
   }
-  const s = run.ships.find((x) => x.id === id);
+  const s = findShip(run, id);
   if (!s || !isMiner(ctx, s) || walletTotal(s.cargo) <= 1e-6 || unsafe(ctx, s.pos)) return null;
   return { id, pos: s.pos, vel: s.vel, radius: ctx.index.stats.get(s.id)!.size, hold: s.cargo, avoidId: null };
 }

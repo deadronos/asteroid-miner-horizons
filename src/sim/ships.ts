@@ -120,6 +120,9 @@ export const flagship = (run: Run): Ship => run.ships.find(isFlagship)!;
 
 export const findShip = (run: Run, id: number): Ship | undefined => run.ships.find((s) => s.id === id);
 
+/** The ship the player has selected, if it still exists. */
+export const selectedShip = (run: Run): Ship | undefined => findShip(run, run.selectedId);
+
 /** Applies damage through shields then hull. Handles death. */
 export function damageShip(state: GameState, ship: Ship, raw: number): void {
   const { run, profile, out } = state;

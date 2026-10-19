@@ -32,6 +32,7 @@ import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
 import { isHauler, outpostAt, outpostBlock } from '../src/sim/automation';
+import { findRock } from '../src/sim/generate';
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
 import { flagship, isAlive, isFlagship, isHoldFull, shipStats, type ShipStats } from '../src/sim/ships';
@@ -204,7 +205,7 @@ function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number): C
   // A mine order stands unless its rock has drifted into danger.
   let stale = false;
   if (o?.kind === 'mine') {
-    const target = run.rocks.find((r) => r.id === o.rockId);
+    const target = findRock(run, o.rockId);
     if (!target || !unsafe(run, hz, target.pos)) return [];
     stale = true;
   }

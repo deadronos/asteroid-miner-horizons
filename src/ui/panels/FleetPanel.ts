@@ -5,7 +5,7 @@ import { formatCost, walletTotal } from '../../data/resources';
 import { TUNING } from '../../data/tuning';
 import { isHauler } from '../../sim/automation';
 import { hullBlock, isDocked } from '../../sim/economy';
-import { droneCount, fleetCap, isAlive, isFlagship, isHoldFull, shipStats } from '../../sim/ships';
+import { droneCount, findShip, fleetCap, isAlive, isFlagship, isHoldFull, shipStats } from '../../sim/ships';
 import type { GameState, Ship } from '../../sim/types';
 import { Panel, bar, h, setDisabled, setText } from '../dom';
 import type { PanelCtx } from './context';
@@ -61,7 +61,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             class: 'mode',
             onclick: (e) => {
               e.stopPropagation();
-              const cur = st().run.ships.find((x) => x.id === id);
+              const cur = findShip(st().run, id);
               if (cur) ctx.send({ t: 'aiMode', shipId: id, mode: cur.aiMode === 'assist' ? 'auto' : 'assist' });
             },
           });
@@ -70,7 +70,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         }
         bind(() => {
           const s = st();
-          const cur = s.run.ships.find((x) => x.id === id);
+          const cur = findShip(s.run, id);
           if (!cur) return;
           const stt = shipStats(cur, s.profile);
           row.classList.toggle('sel', s.run.selectedId === id);

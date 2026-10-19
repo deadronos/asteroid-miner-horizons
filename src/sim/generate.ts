@@ -10,6 +10,9 @@ import { applyBeltModifiers, rollModifiers } from './modifiers';
 import { rollTrait, traitYield } from './traits';
 import type { Belt, Planet, Rock, RockSize, Run, StarClass, StarSystem } from './types';
 
+/** Looks a rock up by id. Inside the tick, prefer `SimIndex.rockById`. */
+export const findRock = (run: Run, id: number): Rock | undefined => run.rocks.find((r) => r.id === id);
+
 const SYL = ['ka', 've', 'lor', 'tha', 'zen', 'mi', 'dra', 'os', 'qu', 'rel', 'syn', 'tar', 'ul', 'ix', 'no', 'pha'];
 const PLANET_COLORS = [0x4d7dd1, 0xc96b3a, 0x7fc46b, 0xb49be0, 0xd9c27a, 0x5fb3a8, 0xa04f6a];
 
