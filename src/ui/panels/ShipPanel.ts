@@ -22,7 +22,7 @@ import type { PanelCtx } from './context';
 export interface InstallOption {
   /** `component:variant`, the option's `value`. */
   value: string;
-  /** Option text: the family name, plus the variant when the family has several. */
+  /** Option text: the family name, plus the variant when the family has several, plus the tier-1 price. */
   label: string;
   comp: ComponentId;
   variant: VariantId;
@@ -36,12 +36,14 @@ export function installOptions(): InstallOption[] {
   for (const cid of COMPONENT_IDS) {
     const def = COMPONENTS[cid];
     for (const v of def.variants) {
+      const cost = v.cost(1);
+      const name = def.variants.length > 1 ? `${def.name} — ${v.name}` : def.name;
       out.push({
         value: `${cid}:${v.id}`,
-        label: def.variants.length > 1 ? `${def.name} — ${v.name}` : def.name,
+        label: `${name} — ${formatCost(cost)}`,
         comp: cid,
         variant: v.id,
-        cost: v.cost(1),
+        cost,
       });
     }
   }

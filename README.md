@@ -76,9 +76,11 @@ All keys can be rebound in ⚙ → Controls.
   clear when a flare builds.
 - **Hulls & slots**: every ship has a hull (base stats plus N generic slots). Each slot
   takes one component at tier 1–3: Mining Laser, Ion Engine, Deflector Shield,
-  Composite Armor, Cargo Pod, or Sensor & Tractor Array. Effects stack, so two lasers
-  give twice the DPS. Refits, repairs and scrapping require the ship to be docked.
-  Removing a part refunds half its value.
+  Composite Armor, Cargo Pod, or Sensor & Tractor Array. Mining Laser and Ion Engine
+  each offer a sidegrade variant chosen when installing — Focused/Wide Beam and
+  Standard Drive/Vector Thruster. Effects stack, so two lasers give twice the DPS.
+  Refits, repairs and scrapping require the ship to be docked. Removing a part refunds
+  half its value.
 - **Fleet**: buy Mining Drones (2 slots) or Harvesters (3 slots). Drones auto-mine, sweep
   up debris and return to unload when full. In **Assist** mode they work near the
   flagship; in **Auto** mode they work near the station. Select one to give it manual

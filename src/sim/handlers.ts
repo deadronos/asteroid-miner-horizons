@@ -4,7 +4,7 @@
 
 import { removeItem } from '../core/array';
 import { v } from '../core/vec';
-import { isVariant, variantDef, type Tier } from '../data/components';
+import { COMPONENTS, isVariant, variantDef, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
 import { RECIPES } from '../data/refining';
@@ -248,7 +248,8 @@ export const handlers: Handlers = {
   }),
 
   install: withShip((state, ship, cmd) => {
-    if (!isVariant(cmd.comp, cmd.variant)) return fail(state, 'Unknown component variant.');
+    if (!Object.hasOwn(COMPONENTS, cmd.comp) || !isVariant(cmd.comp, cmd.variant))
+      return fail(state, 'Unknown component variant.');
     const t = slotTarget(state, ship, cmd.slot);
     if (!t) return;
     const { cur } = t;

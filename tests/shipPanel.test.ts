@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMPONENTS, COMPONENT_IDS, variantDef } from '../src/data/components';
+import { COMPONENTS, COMPONENT_IDS, variantDef, type ComponentId, type VariantId } from '../src/data/components';
 import { formatCost } from '../src/data/resources';
 import { newGame } from '../src/sim/create';
 import { halve, investedCost } from '../src/sim/economy';
@@ -21,12 +21,24 @@ describe('installOptions', () => {
     for (const o of installOptions()) expect(o.value).toBe(`${o.comp}:${o.variant}`);
   });
 
-  it('labels a multi-variant family with the variant and a solo one with the family name', () => {
+  it('labels a multi-variant family with the variant and a solo one with the family name, plus the price', () => {
     const opts = installOptions();
-    expect(opts.find((o) => o.value === 'laser:wide')!.label).toBe('Mining Laser — Wide Beam');
-    expect(opts.find((o) => o.value === 'laser:focused')!.label).toBe('Mining Laser — Focused Beam');
-    expect(opts.find((o) => o.value === 'engine:thruster')!.label).toBe('Ion Engine — Vector Thruster');
-    expect(opts.find((o) => o.value === 'shield:standard')!.label).toBe('Deflector Shield');
+    const label = (comp: ComponentId, variant: VariantId): string =>
+      opts.find((o) => o.value === `${comp}:${variant}`)!.label;
+    expect(label('laser', 'wide')).toBe(
+      `Mining Laser — Wide Beam — ${formatCost(variantDef('laser', 'wide').cost(1))}`,
+    );
+    expect(label('laser', 'focused')).toBe(
+      `Mining Laser — Focused Beam — ${formatCost(variantDef('laser', 'focused').cost(1))}`,
+    );
+    expect(label('engine', 'thruster')).toBe(
+      `Ion Engine — Vector Thruster — ${formatCost(variantDef('engine', 'thruster').cost(1))}`,
+    );
+    expect(label('shield', 'standard')).toBe(
+      `Deflector Shield — ${formatCost(variantDef('shield', 'standard').cost(1))}`,
+    );
+    // The two lasers show their different tier-1 prices.
+    expect(label('laser', 'wide')).not.toBe(label('laser', 'focused'));
   });
 
   it('prices each option at that variant’s tier-1 cost', () => {
