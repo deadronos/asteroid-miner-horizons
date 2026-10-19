@@ -110,12 +110,19 @@ export class Hud {
     if (reason) setText(this.paused, reason);
   }
 
-  /** Shows `text` in the banner for the rest of the session, replacing the pause reason. */
-  showNotice(text: string): void {
+  /**
+   * Shows `text` in the banner for the rest of the session, replacing the pause reason. With `action`, the
+   * banner also gets a button that runs it; only the button takes pointer events.
+   */
+  showNotice(text: string, action?: { label: string; onClick: () => void }): void {
     this.noticeShown = true;
     this.paused.classList.remove('hidden');
     this.paused.classList.add('gfx-reset');
-    setText(this.paused, text);
+    this.paused.classList.toggle('actionable', !!action);
+    if (action) this.paused.setAttribute('role', 'alert');
+    else this.paused.removeAttribute('role');
+    if (action) this.paused.replaceChildren(text, h('button', { text: action.label, onclick: action.onClick }));
+    else setText(this.paused, text);
     // The frame loop may have stopped, so a warp flash would otherwise stay frozen over the notice.
     this.flash.style.opacity = '0';
   }

@@ -18,6 +18,7 @@ import type { GameState, Rock, StarSystem } from '../sim/types';
 import { contextAntialias, useComposer } from './aa';
 import { Backdrop } from './backdrop';
 import { CameraRig } from './camera';
+import { type WarmKey, claimWarm, composerWarmKey, warmComposer } from './composerWarmup';
 import { watchContextLoss } from './contextLoss';
 import type { ViewRect } from './cull';
 import { FxView } from './fxView';
@@ -82,6 +83,8 @@ export class Renderer {
   private bloomOn = false;
   /** Whether this frame renders through the composer; set by applySettings. */
   private viaComposer = false;
+  /** Composer looks whose programs are already compiled; see warmComposer. */
+  private warmed = new Set<WarmKey>();
   /** Whether the WebGL context was created with `antialias`; fixed for its lifetime. */
   private readonly contextAA: boolean;
   private readonly msaa: number;
@@ -159,6 +162,19 @@ export class Renderer {
     }
     this.rocks.glow = this.ships.glow = this.bloomOn ? 1.8 : 1;
     this.resize();
+    // Warm-up is an off-screen render rather than compileAsync, because program keys depend on the target's
+    // colour space. It runs after resize() so the targets have their real size. The scene is hidden so the
+    // render builds only the pass programs; the scene's own programs are warmed by warmShaders (#118).
+    const warmKey = composerWarmKey(this.viaComposer, this.bloomOn);
+    if (warmKey && this.composer && !this.gl.getContext().isContextLost() && claimWarm(warmKey, this.warmed)) {
+      const sceneVisible = this.scene.visible;
+      this.scene.visible = false;
+      try {
+        warmComposer(this.composer);
+      } finally {
+        this.scene.visible = sceneVisible;
+      }
+    }
     this.backdrop.configure(q.stars, s.nebula);
     this.fx.density = q.particles;
     this.shakeScale = SHAKE_SCALE[s.shake];

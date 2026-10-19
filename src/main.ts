@@ -6,11 +6,13 @@ import { AudioEngine } from './audio/AudioEngine';
 import { TUNING } from './data/tuning';
 import { Input } from './input';
 import { pauseAudio, pauseBanner, pauseKind } from './pause';
+import { recordLoss } from './reloadGuard';
 import { Renderer } from './render/Renderer';
 import { GameSession } from './session';
 import type { HazardLevel } from './data/hazards';
 import type { Assists } from './sim/assists';
 import type { Command } from './sim/commands';
+import { safeStorage } from './sim/save';
 import { applyCommands, tick } from './sim/update';
 import { SettingsStore } from './settings';
 import { Hud } from './ui/Hud';
@@ -119,10 +121,18 @@ function frame(now: number): void {
   }
   requestAnimationFrame(frame);
 }
-// A lost WebGL context leaves a black canvas: save, say so, and reload into the same game.
+// A lost WebGL context leaves a black canvas: save, then reload into the same game. A GPU that keeps
+// resetting would reload forever, so after too many losses in a short window the page stays up instead.
 renderer.onContextLost = () => {
   contextLost = true;
   session.saveNow();
+  if (!recordLoss(safeStorage('sessionStorage'), Date.now())) {
+    hud.showNotice('Graphics keep resetting — try lowering quality or disabling anti-aliasing, then reload', {
+      label: 'Reload',
+      onClick: () => location.reload(),
+    });
+    return;
+  }
   hud.showNotice('Graphics reset — reloading…');
   setTimeout(() => location.reload(), 1500);
 };

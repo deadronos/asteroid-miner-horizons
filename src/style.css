@@ -683,9 +683,17 @@ kbd {
   pointer-events: none;
   z-index: 25;
 }
-/* The graphics-reset banner must stay above the menu backdrop and the warp flash. */
+/* The graphics-reset banner must stay above the menu backdrop and the warp flash. A long notice wraps
+   inside the viewport instead of spanning the side panels. */
 .paused.gfx-reset {
   z-index: 50;
+  width: max-content;
+  max-width: min(560px, calc(100vw - 32px));
+}
+/* Only the notice's button takes clicks; the banner itself stays click-through. */
+.paused.gfx-reset.actionable button {
+  pointer-events: auto;
+  margin-left: 12px;
 }
 /* Hazard banner: sits under the top bar, below the pause banner's slot */
 .hazard {
