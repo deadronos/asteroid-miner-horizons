@@ -123,6 +123,16 @@ export class Hud {
     }
   }
 
+  /** Client rectangles of the visible HUD panels and banners, which map labels keep clear of. */
+  blockerRects(): { x: number; y: number; w: number; h: number }[] {
+    const out: { x: number; y: number; w: number; h: number }[] = [];
+    for (const e of this.root.querySelectorAll(':scope > .hud, :scope > .paused, :scope > .hazard')) {
+      const r = e.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) out.push({ x: r.left, y: r.top, w: r.width, h: r.height });
+    }
+    return out;
+  }
+
   /** Esc: close the topmost open overlay. Returns true if something closed. */
   escape(): boolean {
     if (this.menu.escape()) return true;

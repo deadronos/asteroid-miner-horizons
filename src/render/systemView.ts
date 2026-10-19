@@ -4,6 +4,7 @@
 import * as THREE from 'three';
 import { TUNING } from '../data/tuning';
 import type { StarSystem } from '../sim/types';
+import { planetPos } from './labels';
 import { HALO_SCALE, PlanetSurface, RIM_SCALE, atmosphereMaterial, planetKind, planetSeed } from './planetLook';
 import { additive, circleLoop, flat, glowTexture } from './util';
 
@@ -154,8 +155,7 @@ export class SystemView {
     sys.planets.forEach((p, i) => {
       const v = this.planets[i];
       if (!v) return;
-      const px = Math.cos(p.angle) * p.orbitR;
-      const pz = Math.sin(p.angle) * p.orbitR;
+      const { x: px, z: pz } = planetPos(p);
       v.body.position.set(px, 0, pz);
       v.body.rotation.y = time * 0.1;
       v.ring?.position.set(px, 0, pz);

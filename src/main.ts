@@ -41,6 +41,7 @@ const session = new GameSession(settings, {
 });
 
 const hud = new Hud(app, () => session.state, { send, saves: session }, settings);
+renderer.labelBlockers = () => hud.blockerRects();
 let manualPause = false;
 const input = new Input(
   renderer,

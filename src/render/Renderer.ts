@@ -18,6 +18,7 @@ import type { ViewRect } from './cull';
 import { Debris } from './debris';
 import { FloatingText } from './floatingText';
 import { HazardView } from './hazardView';
+import { type Box, MapLabels } from './labels';
 import { OutpostView } from './outpostView';
 import { Particles } from './particles';
 import { ROCK_TINT, RockView } from './rocks';
@@ -68,6 +69,9 @@ export class Renderer {
   private flareGlow = 0;
   private debris = new Debris();
   private floaters: FloatingText;
+  private labels: MapLabels;
+  /** Client rectangles map labels must not cover; main.ts points this at the HUD panels. */
+  labelBlockers: () => Box[] = () => [];
   private hoverRing: THREE.Mesh;
   private moveMarker: THREE.Mesh;
   private shake = 0;
@@ -103,6 +107,7 @@ export class Renderer {
     this.msaa = settings.antialias ? 4 : 0;
     this.canvas = this.gl.domElement;
     container.appendChild(this.canvas);
+    this.labels = new MapLabels(container, () => this.labelBlockers());
     this.floaters = new FloatingText(container);
 
     this.camera.up.set(0, 0, -1);
@@ -311,6 +316,7 @@ export class Renderer {
     this.debris.update(dt);
     this.updateMarkers(state, moveMark, wpp);
     this.setPlayfieldVisible(!w.hidden);
+    this.labels.update(sys, w.hidden ? 0 : this.halfH, this.wpp, dt, (p) => this.worldToScreen(p));
     this.floaters.update(
       dt,
       (p) => this.worldToScreen(p),

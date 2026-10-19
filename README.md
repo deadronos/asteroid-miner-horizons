@@ -45,7 +45,7 @@ Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 | Right-click                | Order the selected ship without changing the selection                                           |
 | Mouse wheel                | Zoom (toward the cursor when not following)                                                      |
 | Drag                       | Pan (camera stops following) · `F` follows again                                                 |
-| `M`                        | System map toggle                                                                                |
+| `M`                        | System map toggle; the station and planets are labelled when zoomed out                          |
 | `O` over a large asteroid  | Deploy a mining outpost there (the flagship must be beside it)                                   |
 | `R`                        | Research (prestige) panel · `P` pause · `H` hides help · `Esc` closes menus, else stops the ship |
 | ⚙ button                   | Menu: save slots, settings, key rebinding                                                        |
