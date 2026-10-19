@@ -202,9 +202,9 @@ describe('beam hums', () => {
   it('raises pitch with dps, kept inside the [60, 320] band', () => {
     const state = beamState(4);
     const weak = addBeam(state, 'drone', { x: 0, z: 0 });
-    weak.slots[0] = { type: 'laser', tier: 1 };
+    weak.slots[0] = { type: 'laser', variant: 'focused', tier: 1 };
     const strong = addBeam(state, 'drone', { x: 100, z: 0 });
-    strong.slots[0] = { type: 'laser', tier: 3 };
+    strong.slots[0] = { type: 'laser', variant: 'focused', tier: 3 };
 
     const hums = beamHums(state.run, state.profile, view);
     for (const h of hums) {

@@ -37,7 +37,7 @@ const cometOf = (state: GameState): Rock | undefined => state.run.rocks.find((r)
 
 /** Replaces the ship's last slot with a tier-2 shield so it has shields to soak damage. */
 function fitShield(ship: ReturnType<typeof flagship>): void {
-  ship.slots[ship.slots.length - 1] = { type: 'shield', tier: 2 };
+  ship.slots[ship.slots.length - 1] = { type: 'shield', variant: 'standard', tier: 2 };
 }
 
 /** A game whose first comet and flare are due within a second. */

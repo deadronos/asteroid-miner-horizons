@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMPONENTS, type Tier } from '../src/data/components';
+import { COMPONENTS, COMPONENT_IDS, type Tier } from '../src/data/components';
 import { RESOURCES, walletTotal, walletValue } from '../src/data/resources';
 import type { Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
@@ -104,10 +104,12 @@ describe('progression', () => {
   });
 
   it('tier costs rise monotonically in value', () => {
-    for (const c of Object.values(COMPONENTS)) {
-      const value = [1, 2, 3].map((t) => walletValue(c.cost(t as Tier)));
-      expect(value[0]).toBeLessThan(value[1]!);
-      expect(value[1]).toBeLessThan(value[2]!);
+    for (const id of COMPONENT_IDS) {
+      for (const v of COMPONENTS[id].variants) {
+        const value = [1, 2, 3].map((t) => walletValue(v.cost(t as Tier)));
+        expect(value[0]).toBeLessThan(value[1]!);
+        expect(value[1]).toBeLessThan(value[2]!);
+      }
     }
   });
 

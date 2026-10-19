@@ -101,5 +101,9 @@ export const TUNING = {
   magnetTraitMaxSpeed: 24,
   magnetTraitYieldMul: 1.3,
 
+  // Component variants (#49).
+  /** Share of the beam's dps dealt to each rock inside a Wide Beam's splash radius. */
+  splashMul: 0.5,
+
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;

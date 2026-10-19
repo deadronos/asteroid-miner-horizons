@@ -142,18 +142,18 @@ describe('balance bot', () => {
     const fs = flagship(s.run);
     fs.pos = { ...s.run.system.station.pos };
     fs.slots = [
-      { type: 'laser', tier: 3 },
-      { type: 'cargo', tier: 2 },
-      { type: 'sensor', tier: 3 },
-      { type: 'armor', tier: 3 },
+      { type: 'laser', variant: 'focused', tier: 3 },
+      { type: 'cargo', variant: 'standard', tier: 2 },
+      { type: 'sensor', variant: 'standard', tier: 3 },
+      { type: 'armor', variant: 'standard', tier: 3 },
     ];
     fs.hull = shipStats(fs, s.profile).maxHull;
     // Fill the fleet so the drone isn't the next purchase, and fill drone slots.
     for (let i = 0; i < 2; i++) {
       const d = makeShip(s.run, s.profile, 'drone', `Drone-${i}`, { ...s.run.system.station.pos });
       d.slots = [
-        { type: 'cargo', tier: 2 },
-        { type: 'cargo', tier: 2 },
+        { type: 'cargo', variant: 'standard', tier: 2 },
+        { type: 'cargo', variant: 'standard', tier: 2 },
       ];
       s.run.ships.push(d);
     }

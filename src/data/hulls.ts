@@ -2,7 +2,7 @@
 // Flagship hulls replace your command ship (keeping fitted parts); drone hulls
 // are bought as extra autonomous fleet members.
 
-import type { ComponentId, Tier } from './components';
+import type { ComponentId, Tier, VariantId } from './components';
 import type { Cost } from './resources';
 
 export type HullId = 'prospector' | 'excavator' | 'drone' | 'harvester';
@@ -20,7 +20,7 @@ export interface HullDef {
   /** Collision radius in world units. */
   size: number;
   cost: Cost;
-  loadout: ({ type: ComponentId; tier: Tier } | null)[];
+  loadout: ({ type: ComponentId; variant: VariantId; tier: Tier } | null)[];
   color: number;
 }
 
@@ -37,7 +37,7 @@ export const HULLS: Record<HullId, HullDef> = {
     magnet: 70,
     size: 11,
     cost: {},
-    loadout: [{ type: 'laser', tier: 1 }, { type: 'engine', tier: 1 }, null, null],
+    loadout: [{ type: 'laser', variant: 'focused', tier: 1 }, { type: 'engine', variant: 'ion', tier: 1 }, null, null],
     color: 0xffd659,
   },
   excavator: {
@@ -67,7 +67,7 @@ export const HULLS: Record<HullId, HullDef> = {
     magnet: 55,
     size: 8,
     cost: { ore: 80, ice: 25 },
-    loadout: [{ type: 'laser', tier: 1 }, null],
+    loadout: [{ type: 'laser', variant: 'focused', tier: 1 }, null],
     color: 0x59c2ff,
   },
   harvester: {
@@ -82,7 +82,7 @@ export const HULLS: Record<HullId, HullDef> = {
     magnet: 65,
     size: 11,
     cost: { ore: 150, alloy: 50, ice: 120 },
-    loadout: [{ type: 'laser', tier: 1 }, { type: 'cargo', tier: 1 }, null],
+    loadout: [{ type: 'laser', variant: 'focused', tier: 1 }, { type: 'cargo', variant: 'standard', tier: 1 }, null],
     color: 0x7fe0c8,
   },
 };

@@ -68,7 +68,7 @@ describe('command handlers', () => {
     const { s, fs } = fs1();
     s.run.bank.ore = 1000;
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield' });
-    expect(fs.slots[2]).toEqual({ type: 'shield', tier: 1 });
+    expect(fs.slots[2]).toEqual({ type: 'shield', variant: 'standard', tier: 1 });
   });
   it('upgrade', () => {
     const { s, fs } = fs1();

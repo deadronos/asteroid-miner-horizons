@@ -95,10 +95,14 @@ const tierOf = (...slots: Ship['slots']): number => {
 
 describe('laserTier', () => {
   it('reports the best fitted laser tier', () => {
-    expect(tierOf({ type: 'laser', tier: 1 })).toBe(1);
-    expect(tierOf({ type: 'laser', tier: 1 }, { type: 'laser', tier: 1 })).toBe(1);
-    expect(tierOf({ type: 'laser', tier: 2 })).toBe(2);
-    expect(tierOf({ type: 'laser', tier: 1 }, { type: 'laser', tier: 3 })).toBe(3);
+    expect(tierOf({ type: 'laser', variant: 'focused', tier: 1 })).toBe(1);
+    expect(tierOf({ type: 'laser', variant: 'focused', tier: 1 }, { type: 'laser', variant: 'focused', tier: 1 })).toBe(
+      1,
+    );
+    expect(tierOf({ type: 'laser', variant: 'focused', tier: 2 })).toBe(2);
+    expect(tierOf({ type: 'laser', variant: 'focused', tier: 1 }, { type: 'laser', variant: 'focused', tier: 3 })).toBe(
+      3,
+    );
     expect(tierOf()).toBe(0);
   });
 });

@@ -1,7 +1,7 @@
 // Selected-ship panel: hull/shield/cargo bars, stats, dock/repair/scrap and
 // the component slots (install, upgrade, remove).
 
-import { COMPONENTS, COMPONENT_IDS } from '../../data/components';
+import { COMPONENTS, COMPONENT_IDS, defaultVariant, variantDef } from '../../data/components';
 import { HULLS } from '../../data/hulls';
 import { RESOURCES, RESOURCE_INFO, canAfford, formatCost, walletTotal } from '../../data/resources';
 import { halve, investedCost, isDocked, refitBlock, repairCost, upgradeCost } from '../../sim/economy';
@@ -94,7 +94,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       const slotRows = ship0.slots.map((f, i) => {
         const row = h('div', { class: 'slot' });
         if (f) {
-          const def = COMPONENTS[f.type];
+          const def = variantDef(f.type, f.variant);
           row.append(
             h(
               'div',
@@ -108,7 +108,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           const rm = h('button', {
             class: 'icon',
             text: '✕',
-            title: `Remove (refund ${formatCost(halve(investedCost(f.type, f.tier)))})`,
+            title: `Remove (refund ${formatCost(halve(investedCost(f.type, f.variant, f.tier)))})`,
             onclick: () => send({ t: 'remove', shipId: id, slot: i }),
           });
           rm.dataset.title = rm.title;
@@ -136,7 +136,8 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           const sel = h('select');
           sel.append(h('option', { text: 'Install…' }));
           for (const cid of COMPONENT_IDS) {
-            const o = h('option', { text: `${COMPONENTS[cid].name} — ${formatCost(COMPONENTS[cid].cost(1))}` });
+            const cost = formatCost(variantDef(cid, defaultVariant(cid)).cost(1));
+            const o = h('option', { text: `${COMPONENTS[cid].name} — ${cost}` });
             o.value = cid;
             sel.append(o);
           }
@@ -153,7 +154,8 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             sel.disabled = !!rb;
             sel.title = rb ?? '';
             for (const o of Array.from(sel.options).slice(1)) {
-              o.disabled = !canAfford(st().run.bank, COMPONENTS[o.value as (typeof COMPONENT_IDS)[number]].cost(1));
+              const cid = o.value as (typeof COMPONENT_IDS)[number];
+              o.disabled = !canAfford(st().run.bank, variantDef(cid, defaultVariant(cid)).cost(1));
             }
           });
         }

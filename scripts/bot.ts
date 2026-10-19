@@ -21,7 +21,7 @@
 // alloy is smelted from ore.
 
 import { dist, distSq, type Vec2 } from '../src/core/vec';
-import { COMPONENTS, type ComponentId } from '../src/data/components';
+import { defaultVariant, variantDef, type ComponentId } from '../src/data/components';
 import { CONTRACTS } from '../src/data/contracts';
 import { HULLS } from '../src/data/hulls';
 import type { PerkId } from '../src/data/perks';
@@ -243,7 +243,11 @@ function nextPurchase(state: GameState, wc: number): Command | null {
   for (const comp of INSTALL_ORDER) {
     for (const s of docked) {
       const i = s.slots.indexOf(null);
-      if (i >= 0 && ok(COMPONENTS[comp].cost(1)) && !s.slots.some((f) => f?.type === comp && comp !== 'laser'))
+      if (
+        i >= 0 &&
+        ok(variantDef(comp, defaultVariant(comp)).cost(1)) &&
+        !s.slots.some((f) => f?.type === comp && comp !== 'laser')
+      )
         return { t: 'install', shipId: s.id, slot: i, comp };
     }
   }

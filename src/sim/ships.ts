@@ -2,7 +2,7 @@
 
 import { removeItem } from '../core/array';
 import { v, type Vec2 } from '../core/vec';
-import { COMPONENTS, type ShipStatKey } from '../data/components';
+import { variantDef, type ShipStatKey } from '../data/components';
 import { HULLS, type HullId } from '../data/hulls';
 import { emptyWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
@@ -25,6 +25,7 @@ export function emptyStats(): ShipStats {
     cargoCap: 0,
     dmgMul: 0,
     size: 0,
+    splash: 0,
     laserTier: 0,
   };
 }
@@ -47,11 +48,12 @@ export function writeShipStats(out: ShipStats, ship: Ship, profile: Profile): Sh
   out.cargoCap = h.cargo;
   out.dmgMul = 1;
   out.size = h.size;
+  out.splash = 0;
   out.laserTier = 0;
   for (const f of ship.slots) {
     if (!f) continue;
     const tier = f.tier - 1;
-    for (const e of COMPONENTS[f.type].effects) {
+    for (const e of variantDef(f.type, f.variant).effects) {
       const value = e.values[tier]!;
       out[e.stat] =
         e.op === 'add' ? out[e.stat] + value : e.op === 'max' ? Math.max(out[e.stat], value) : out[e.stat] * value;
