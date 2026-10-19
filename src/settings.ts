@@ -3,6 +3,7 @@
 // values on old installs. Subscribers are notified on every change.
 
 import { HAZARD_LEVEL_IDS, type HazardLevel } from './data/hazards';
+import { safeStorage } from './sim/save';
 
 export type Quality = 'low' | 'medium' | 'high';
 export type Shake = 'off' | 'low' | 'full';
@@ -191,16 +192,8 @@ export class SettingsStore {
   value: Settings;
   private subs: ((s: Settings) => void)[] = [];
 
-  constructor(private readonly storage: Storage | null = SettingsStore.defaultStorage()) {
+  constructor(private readonly storage: Storage | null = safeStorage()) {
     this.value = SettingsStore.merge(this.read());
-  }
-
-  private static defaultStorage(): Storage | null {
-    try {
-      return globalThis.localStorage ?? null;
-    } catch {
-      return null;
-    }
   }
 
   private read(): unknown {

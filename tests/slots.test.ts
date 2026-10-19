@@ -1,6 +1,15 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { newGame } from '../src/sim/create';
-import { activeSlot, clearSlot, migrateLegacy, readSlot, serialize, setActiveSlot, writeSlot } from '../src/sim/save';
+import {
+  activeSlot,
+  clearSlot,
+  migrateLegacy,
+  readSlot,
+  safeStorage,
+  serialize,
+  setActiveSlot,
+  writeSlot,
+} from '../src/sim/save';
 import { memStorage } from './memStorage';
 
 beforeEach(() => {
@@ -34,5 +43,21 @@ describe('save slots', () => {
     migrateLegacy();
     expect(readSlot(0)!.state.profile.seed).toBe(5);
     expect(localStorage.getItem('asteroid-miner-horizons/save')).toBeNull();
+  });
+
+  it('safeStorage returns null when localStorage is blocked', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('blocked');
+      },
+    });
+    try {
+      expect(safeStorage()).toBeNull();
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'localStorage', original);
+      else Reflect.deleteProperty(globalThis, 'localStorage');
+    }
   });
 });

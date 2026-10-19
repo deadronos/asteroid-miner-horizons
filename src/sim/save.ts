@@ -36,7 +36,7 @@ export interface SaveRecord {
 }
 
 /** localStorage, or null where it's missing or blocked (private mode, tests). */
-function storage(): Storage | null {
+export function safeStorage(): Storage | null {
   try {
     return globalThis.localStorage ?? null;
   } catch {
@@ -312,7 +312,7 @@ export function parseImport(
 }
 
 export function readSlot(i: number): SaveRecord | null {
-  const raw = storage()?.getItem(slotKey(i));
+  const raw = safeStorage()?.getItem(slotKey(i));
   if (!raw) return null;
   const r = parseImport(raw);
   return r.ok ? r.record : null;
@@ -320,28 +320,28 @@ export function readSlot(i: number): SaveRecord | null {
 
 export function writeSlot(i: number, state: GameState): void {
   try {
-    storage()?.setItem(slotKey(i), recordText(state, Date.now()));
+    safeStorage()?.setItem(slotKey(i), recordText(state, Date.now()));
   } catch {
     // Storage full or blocked: the game keeps running unsaved.
   }
 }
 
 export function clearSlot(i: number): void {
-  storage()?.removeItem(slotKey(i));
+  safeStorage()?.removeItem(slotKey(i));
 }
 
 export function activeSlot(): number {
-  const n = Number(storage()?.getItem(ACTIVE_KEY));
+  const n = Number(safeStorage()?.getItem(ACTIVE_KEY));
   return Number.isInteger(n) && n >= 0 && n < SLOT_COUNT ? n : 0;
 }
 
 export function setActiveSlot(i: number): void {
-  storage()?.setItem(ACTIVE_KEY, String(i));
+  safeStorage()?.setItem(ACTIVE_KEY, String(i));
 }
 
 /** Moves a save from the old single-save key into slot 0 (once). */
 export function migrateLegacy(): void {
-  const s = storage();
+  const s = safeStorage();
   const raw = s?.getItem(LEGACY_KEY);
   if (!s || !raw) return;
   const state = deserialize(raw);

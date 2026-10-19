@@ -122,6 +122,25 @@ describe('settings store', () => {
     a.resetKeys();
     expect(actionFor(a.value.keys, 'KeyW')).toBe('up');
   });
+
+  it('starts with defaults when storage is blocked', () => {
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+    Object.defineProperty(globalThis, 'localStorage', {
+      configurable: true,
+      get() {
+        throw new Error('blocked');
+      },
+    });
+    try {
+      const s = new SettingsStore();
+      expect(s.value.quality).toBe(DEFAULTS.quality);
+      expect(() => s.set({ quality: 'low' })).not.toThrow();
+      expect(s.value.quality).toBe('low');
+    } finally {
+      if (original) Object.defineProperty(globalThis, 'localStorage', original);
+      else Reflect.deleteProperty(globalThis, 'localStorage');
+    }
+  });
 });
 
 describe('assists', () => {
