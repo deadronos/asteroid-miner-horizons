@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULTS, SettingsStore, actionFor } from '../src/settings';
+import {
+  DEFAULTS,
+  LOG_VERBOSITY_IDS,
+  QUALITY,
+  QUALITY_IDS,
+  SHAKE_IDS,
+  SHAKE_SCALE,
+  SettingsStore,
+  actionFor,
+} from '../src/settings';
 import { newGame } from '../src/sim/create';
 import { makeRock } from '../src/sim/generate';
 import { flagship, makeShip } from '../src/sim/ships';
@@ -40,6 +49,58 @@ describe('settings store', () => {
     expect(SettingsStore.merge({ hazards: 'off' }).hazards).toBe('off');
     expect(SettingsStore.merge({ hazards: 'brutal' }).hazards).toBe('normal');
     expect(SettingsStore.merge({ hazards: 3 }).hazards).toBe('normal');
+  });
+
+  it('rejects unknown stored enums and leaves defaults usable', () => {
+    const s = SettingsStore.merge({ quality: 'ultra', shake: 'max', logVerbosity: 'loud' });
+    expect(s.quality).toBe(DEFAULTS.quality);
+    expect(s.shake).toBe(DEFAULTS.shake);
+    expect(s.logVerbosity).toBe(DEFAULTS.logVerbosity);
+    expect(QUALITY[s.quality]).toBeDefined();
+    expect(SHAKE_SCALE[s.shake]).toBeDefined();
+  });
+
+  it('preserves every allowed enum value and autosave interval', () => {
+    for (const quality of QUALITY_IDS) expect(SettingsStore.merge({ quality }).quality).toBe(quality);
+    for (const shake of SHAKE_IDS) expect(SettingsStore.merge({ shake }).shake).toBe(shake);
+    for (const logVerbosity of LOG_VERBOSITY_IDS)
+      expect(SettingsStore.merge({ logVerbosity }).logVerbosity).toBe(logVerbosity);
+    for (const autosaveSec of [0, 10, 30, 60] as const)
+      expect(SettingsStore.merge({ autosaveSec }).autosaveSec).toBe(autosaveSec);
+  });
+
+  it('falls back on non-finite and out-of-range numbers', () => {
+    const s = SettingsStore.merge({
+      hudScale: NaN,
+      zoomSpeed: Infinity,
+      volMaster: 2,
+      volSfx: -1,
+      volMusic: 1.5,
+      autosaveSec: 15,
+    });
+    expect(s.hudScale).toBe(DEFAULTS.hudScale);
+    expect(s.zoomSpeed).toBe(DEFAULTS.zoomSpeed);
+    expect(s.volMaster).toBe(DEFAULTS.volMaster);
+    expect(s.volSfx).toBe(DEFAULTS.volSfx);
+    expect(s.volMusic).toBe(DEFAULTS.volMusic);
+    expect(s.autosaveSec).toBe(DEFAULTS.autosaveSec);
+  });
+
+  it('preserves in-range boundary values', () => {
+    const s = SettingsStore.merge({
+      hudScale: 0.5,
+      zoomSpeed: 4,
+      volMaster: 0,
+      volSfx: 1,
+      volMusic: 0.25,
+      autosaveSec: 60,
+    });
+    expect(s.hudScale).toBe(0.5);
+    expect(s.zoomSpeed).toBe(4);
+    expect(s.volMaster).toBe(0);
+    expect(s.volSfx).toBe(1);
+    expect(s.volMusic).toBe(0.25);
+    expect(s.autosaveSec).toBe(60);
   });
 
   it('persists changes and notifies subscribers', () => {
