@@ -8,7 +8,6 @@ import {
   contractReward,
   describeContract,
   fillBoard,
-  formatTimeLeft,
   newBoard,
   rollContract,
   updateContracts,
@@ -294,13 +293,6 @@ describe('contract payout and timers', () => {
     expect(idsAfter).not.toContain(expiring.id);
     for (const id of idsBefore.filter((oid) => oid !== expiring.id)) expect(idsAfter).toContain(id);
     expect(idsAfter.some((id) => !idsBefore.includes(id))).toBe(true);
-  });
-
-  it('formats time left as m:ss', () => {
-    expect(formatTimeLeft(61.2)).toBe('1:02');
-    expect(formatTimeLeft(-3)).toBe('0:00');
-    expect(formatTimeLeft(0)).toBe('0:00');
-    expect(formatTimeLeft(300)).toBe('5:00');
   });
 
   it('describes a contract from its kind and target', () => {

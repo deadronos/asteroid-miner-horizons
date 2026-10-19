@@ -7,7 +7,7 @@ is; `ls` a directory and read those for the rest.
 
 ```
 src/
-  core/          primitives, no project knowledge (rng, vec, spatialHash, array)
+  core/          primitives, no project knowledge (rng, vec, spatialHash, array, format)
   data/          pure tables and values, no logic
     tuning.ts      every global balance knob
   audio/         Web Audio: AudioEngine.ts owns the AudioContext, sfx.ts / music.ts hold the pure sound rules
@@ -39,15 +39,15 @@ docs/
 
 The layers are enforced by convention and by `import/no-cycle` in `.oxlintrc.json`.
 
-| Directory            | May import                                                    |
-| -------------------- | ------------------------------------------------------------- |
-| `core/`              | other `core/` files only                                      |
-| `data/`              | other `data/` files only, for shared types and tables         |
-| `sim/`               | `core/`, `data/`                                              |
-| `render/`            | `core/`, `data/`, `sim/`, and top-level `settings.ts`         |
-| `ui/`                | `data/`, `sim/`, and top-level `settings.ts` and `session.ts` |
-| `audio/`             | `core/`, `sim/`, and top-level `settings.ts`                  |
-| top-level `src/*.ts` | anything                                                      |
+| Directory            | May import                                                             |
+| -------------------- | ---------------------------------------------------------------------- |
+| `core/`              | other `core/` files only                                               |
+| `data/`              | other `data/` files only, for shared types and tables                  |
+| `sim/`               | `core/`, `data/`                                                       |
+| `render/`            | `core/`, `data/`, `sim/`, and top-level `settings.ts`                  |
+| `ui/`                | `core/`, `data/`, `sim/`, and top-level `settings.ts` and `session.ts` |
+| `audio/`             | `core/`, `sim/`, and top-level `settings.ts`                           |
+| top-level `src/*.ts` | anything                                                               |
 
 The rule that matters most: **`sim/` never imports `render/`, `ui/`, `audio/` or any top-level `src/*.ts`.**
 Presentation reads sim state and talks back only through `Command`s; the sim talks out only through `state.out`

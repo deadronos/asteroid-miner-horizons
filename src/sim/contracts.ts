@@ -123,9 +123,3 @@ export function updateContracts(state: GameState, dt: number): void {
 export function describeContract(c: Contract): string {
   return CONTRACTS[c.kind].describe(c.target);
 }
-
-/** Formats a countdown as `m:ss`, rounding seconds up and clamping at zero. */
-export function formatTimeLeft(sec: number): string {
-  const s = Math.max(0, Math.ceil(sec));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
-}

@@ -1,8 +1,9 @@
 // Contract board: the active contract (goal, progress, timer, Abandon) and the
 // station's open offers (goal, reward, offer timer, Accept).
 
+import { formatCountdown } from '../../core/format';
 import { formatCost } from '../../data/resources';
-import { describeContract, formatTimeLeft } from '../../sim/contracts';
+import { describeContract } from '../../sim/contracts';
 import { Panel, bar, h, setDisabled, setText } from '../dom';
 import type { PanelCtx } from './context';
 
@@ -37,7 +38,7 @@ export function createContractsPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         bind(() => {
           const c = st().run.contracts.active;
           if (!c) return;
-          setText(timer, `⏱ ${formatTimeLeft(c.timeLeft)}`);
+          setText(timer, `⏱ ${formatCountdown(c.timeLeft)}`);
           progress.set(c.progress / c.target, `${Math.floor(c.progress)}/${c.target}`);
         });
       }
@@ -56,7 +57,7 @@ export function createContractsPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           if (!c) return;
           setText(
             meta,
-            `${formatCost(c.reward)}${c.data ? ` +${c.data} ✦` : ''} · expires ${formatTimeLeft(c.timeLeft)}`,
+            `${formatCost(c.reward)}${c.data ? ` +${c.data} ✦` : ''} · expires ${formatCountdown(c.timeLeft)}`,
           );
           setDisabled(accept, !!st().run.contracts.active, ACTIVE_REASON);
         });

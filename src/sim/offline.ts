@@ -4,6 +4,7 @@
 // belts it can reach, and outposts extract at their normal rate. Nothing here
 // draws from an RNG or moves a ship, rock or pickup.
 
+import { formatDuration } from '../core/format';
 import { HULLS } from '../data/hulls';
 import { credit, RAW_RESOURCES, emptyWallet, formatWallet, walletTotal, walletValue } from '../data/resources';
 import type { Wallet } from '../data/resources';
@@ -107,20 +108,10 @@ export function applyOffline(state: GameState, awaySec: number): OfflineGains | 
   return gains;
 }
 
-/** "3h 05m", "12m" or "45s". */
-export function formatAway(sec: number): string {
-  const s = Math.floor(sec);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
-  if (m > 0) return `${m}m`;
-  return `${s}s`;
-}
-
 /** The summary line, also shown as a toast. */
 export function offlineLog(gains: OfflineGains, capped: boolean): LogEntry {
   const parts = formatWallet(gains.bank);
-  const away = formatAway(gains.seconds) + (capped ? ' (cap)' : '');
+  const away = formatDuration(gains.seconds, { seconds: gains.seconds < 60 }) + (capped ? ' (cap)' : '');
   const lines: string[] = [];
   if (parts) lines.push(`fleet banked ${parts}`);
   if (gains.stored >= 0.5) lines.push(`outposts stored ${Math.floor(gains.stored)} units`);
