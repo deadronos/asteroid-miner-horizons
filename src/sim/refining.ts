@@ -12,6 +12,9 @@ import type { GameState, Profile, RefineJob, Refinery, Run } from './types';
 export const cycleTime = (recipe: RecipeId, profile: Profile): number =>
   RECIPES[recipe].time / (1 + TUNING.furnaceSpeedPerLevel * profile.perks.furnace);
 
+/** A job as log text, e.g. "3 × alloy". */
+export const jobLabel = (recipe: RecipeId, count: number): string => `${count} × ${RECIPES[recipe].name.toLowerCase()}`;
+
 /** Batches one refinery cycle finishes from the front job, after the hopper perk. */
 export const batchesPerCycle = (profile: Profile): number => 1 + profile.perks.hopper;
 

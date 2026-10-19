@@ -10,7 +10,7 @@ import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
 import { chainTarget, droneThink, steer, workRock, type TickCtx } from '../src/sim/pilot';
 import { serialize } from '../src/sim/save';
-import { flagship, makeShip } from '../src/sim/ships';
+import { flagship, isHoldFull, makeShip, shipStats } from '../src/sim/ships';
 import type { GameState, Rock, Ship, StarClass } from '../src/sim/types';
 import { tick } from '../src/sim/update';
 
@@ -272,5 +272,18 @@ describe('wide-beam splash', () => {
     expect(a.near.hp).toBeLessThan(a.near.maxHp); // the run really did splash the neighbour
     expect(a.target.hp).toBeLessThan(a.target.maxHp);
     expect(serialize(a.state)).toBe(serialize(b.state));
+  });
+});
+
+describe('isHoldFull', () => {
+  it('trips once free space drops below max(fullHoldMin, cap × fullHoldShare)', () => {
+    const state = newGame(1);
+    const ship = flagship(state.run);
+    const st = shipStats(ship, state.profile);
+    const margin = Math.max(TUNING.fullHoldMin, st.cargoCap * TUNING.fullHoldShare);
+    ship.cargo.ore = st.cargoCap - margin;
+    expect(isHoldFull(ship, st)).toBe(false);
+    ship.cargo.ore = st.cargoCap - margin + 0.5;
+    expect(isHoldFull(ship, st)).toBe(true);
   });
 });

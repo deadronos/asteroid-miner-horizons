@@ -1,11 +1,12 @@
-// Rock trait rolling and trait-derived numbers. Pure: `rollTrait` is a
-// stateless hash, so it draws nothing from an Rng and cannot shift run.rng.
+// Rock trait rolling, trait-derived numbers and the magnetic pull. Pure:
+// `rollTrait` is a stateless hash, so it draws nothing from an Rng and cannot
+// shift run.rng.
 
 import { hash01 } from '../core/rng';
 import { TRAIT_IDS, type RockTrait } from '../data/traits';
 import { TUNING } from '../data/tuning';
-import type { ShipStats } from './ships';
-import type { Rock } from './types';
+import { isAlive, type ShipStats } from './ships';
+import type { Rock, Run } from './types';
 
 /** Seeded trait for a belt rock, or null. Pure hash: never draws from an Rng. */
 export function rollTrait(seed: number, number: number, id: number): RockTrait | null {
@@ -41,4 +42,36 @@ export function volatileBlastRadius(rock: Rock): number {
 /** Distance a ship must keep from a volatile rock to be clear of its blast. */
 export function volatileSafeDistance(rock: Rock): number {
   return volatileBlastRadius(rock) + 16;
+}
+
+/**
+ * Magnetic trait: accelerates `rock` toward the nearest live ship within
+ * `magnetTraitRange`, capped at `magnetTraitMaxSpeed`. Allocation-free.
+ */
+export function magnetPull(run: Run, rock: Rock, dt: number): void {
+  let bestD = -1; // -1 marks "no ship in range"
+  let bestDx = 0;
+  let bestDz = 0;
+  for (let i = 0; i < run.ships.length; i++) {
+    const s = run.ships[i]!;
+    if (!isAlive(s)) continue;
+    const dx = s.pos.x - rock.pos.x;
+    const dz = s.pos.z - rock.pos.z;
+    const sd = Math.hypot(dx, dz);
+    if (sd < TUNING.magnetTraitRange && (bestD < 0 || sd < bestD)) {
+      bestD = sd;
+      bestDx = dx;
+      bestDz = dz;
+    }
+  }
+  // Guard the divide: a rock sitting exactly on its ship must stay finite.
+  if (bestD <= 1e-6) return;
+  rock.vel.x += (bestDx / bestD) * TUNING.magnetTraitAccel * dt;
+  rock.vel.z += (bestDz / bestD) * TUNING.magnetTraitAccel * dt;
+  const speed = Math.hypot(rock.vel.x, rock.vel.z);
+  if (speed > TUNING.magnetTraitMaxSpeed) {
+    const k = TUNING.magnetTraitMaxSpeed / speed;
+    rock.vel.x *= k;
+    rock.vel.z *= k;
+  }
 }

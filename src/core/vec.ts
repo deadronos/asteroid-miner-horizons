@@ -12,6 +12,12 @@ export const distSq = (a: Vec2, b: Vec2): number => (a.x - b.x) ** 2 + (a.z - b.
 export const len = (a: Vec2): number => Math.hypot(a.x, a.z);
 export const fromAngle = (a: number, r = 1): Vec2 => ({ x: Math.cos(a) * r, z: Math.sin(a) * r });
 
+/** One explicit Euler step: advances `body.pos` by `body.vel * dt`. */
+export function integrate(body: { pos: Vec2; vel: Vec2 }, dt: number): void {
+  body.pos.x += body.vel.x * dt;
+  body.pos.z += body.vel.z * dt;
+}
+
 /** Exponential damping factor for a per-second rate, frame-rate independent. */
 export const damp = (ratePerSec: number, dt: number): number => Math.exp(-ratePerSec * dt);
 

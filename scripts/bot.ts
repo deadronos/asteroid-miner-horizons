@@ -32,9 +32,10 @@ import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
 import { isHauler, outpostAt, outpostBlock } from '../src/sim/automation';
+import { findRock } from '../src/sim/generate';
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
-import { cargoFree, flagship, isAlive, isFlagship, shipStats, type ShipStats } from '../src/sim/ships';
+import { flagship, isAlive, isFlagship, isHoldFull, shipStats, type ShipStats } from '../src/sim/ships';
 import { canMine } from '../src/sim/traits';
 import type { GameState, Rock, Run, Ship } from '../src/sim/types';
 
@@ -65,9 +66,6 @@ export interface BotOptions {
   /** Allow the bot to warp (the bench turns this off to stay in one system). */
   warp?: boolean;
 }
-
-/** Hold counts as full below this much free space (matches the drone AI). */
-const isFull = (cap: number, free: number): boolean => free < Math.max(2, cap * 0.04);
 
 export function botCommands(state: GameState, opts: BotOptions = {}): Command[] {
   const { run, profile } = state;
@@ -188,8 +186,7 @@ const unsafe = (run: Run, hz: Hazard, pos: Vec2): boolean =>
 function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number): Command[] {
   const { run } = state;
   const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
-  const free = cargoFree(fs, st);
-  const full = isFull(st.cargoCap, free);
+  const full = isHoldFull(fs, st);
 
   if (cometPathEscape(run, hz.comets, fs.pos, TUNING.cometDodgePad + st.size, hz.out)) {
     const to = { x: fs.pos.x + hz.out.x * COMET_STEP, z: fs.pos.z + hz.out.z * COMET_STEP };
@@ -208,7 +205,7 @@ function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number): C
   // A mine order stands unless its rock has drifted into danger.
   let stale = false;
   if (o?.kind === 'mine') {
-    const target = run.rocks.find((r) => r.id === o.rockId);
+    const target = findRock(run, o.rockId);
     if (!target || !unsafe(run, hz, target.pos)) return [];
     stale = true;
   }
