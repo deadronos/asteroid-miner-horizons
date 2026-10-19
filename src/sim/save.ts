@@ -208,15 +208,17 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!isProfile(profile)) return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
+  if (!isRng(run.rng) || !finite(run.nextId) || !finite(run.time) || !finite(run.runValue)) return null;
+  if (!Array.isArray(run.system.belts) || !isObj(run.system.station) || !isVec(run.system.station.pos)) return null;
   // A trait the sim doesn't know would drive behaviour no rock can roll.
   if (!run.rocks.every(isTrait)) return null;
   if (!isModifierList(run.system.modifiers)) return null;
   // A wallet missing a resource column (e.g. alloy) would poison every later
   // read with NaN, so the bank and each ship's cargo must be complete.
-  if (!isWallet(run.bank) || !run.ships.every((s) => isWallet(s.cargo))) return null;
+  if (!isWallet(run.bank) || !run.ships.every((s) => isObj(s) && isWallet(s.cargo))) return null;
   // The tick derives each ship's stats from its fitted slots, so every one must
   // name a known component variant at a real tier.
-  if (!run.ships.every(isShipSlots)) return null;
+  if (!run.ships.every((s) => isObj(s) && isVec(s.pos) && isVec(s.vel) && isShipSlots(s))) return null;
   if (!isBoard(run.contracts)) return null;
   if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
   if (!isRefinery(run.refinery)) return null;

@@ -186,6 +186,36 @@ describe('load through the production registry', () => {
     expect(deserialize(JSON.stringify(saveCurrent({ contracts: undefined })))).toBeNull();
   });
 
+  it('rejects malformed tick-critical run fields before any tick reads them', () => {
+    const ship = currentRun().ships[0];
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['missing run.system.belts', { system: { ...currentRun().system, belts: undefined } }],
+      ['missing run.system.station', { system: { ...currentRun().system, station: undefined } }],
+      [
+        'corrupt run.system.station.pos (z undefined)',
+        { system: { ...currentRun().system, station: { pos: { x: 0, y: 0, z: undefined } } } },
+      ],
+      ['missing run.rng', { rng: undefined }],
+      ['missing run.nextId', { nextId: undefined }],
+      ['missing run.time', { time: undefined }],
+      ['missing run.runValue', { runValue: undefined }],
+      ['corrupt run.rng', { rng: { s: Number.NaN } }],
+      ['corrupt run.nextId', { nextId: Number.POSITIVE_INFINITY }],
+      ['corrupt run.time', { time: Number.NaN }],
+      ['corrupt run.runValue', { runValue: Number.POSITIVE_INFINITY }],
+      ['missing ship.vel', { ships: [{ ...ship, vel: undefined }] }],
+      ['corrupt ship.vel', { ships: [{ ...ship, vel: { x: 0 } }] }],
+      ['missing ship.pos', { ships: [{ ...ship, pos: undefined }] }],
+      ['corrupt ship.pos', { ships: [{ ...ship, pos: { x: 0 } }] }],
+    ];
+    for (const [label, patch] of cases) {
+      expect(parseImport(JSON.stringify(saveCurrent(patch))), `case: ${label}`).toEqual({
+        ok: false,
+        error: 'This is not an Asteroid Miner Horizons save.',
+      });
+    }
+  });
+
   it('rejects a current save whose contract board has no offers array', () => {
     expect(deserialize(JSON.stringify(saveCurrent({ contracts: {} })))).toBeNull();
   });
