@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { SPLASH_RADIUS } from '../src/data/components';
 import { FLARES } from '../src/data/hazards';
 import { TUNING } from '../src/data/tuning';
 import { DEFAULT_ASSISTS } from '../src/sim/assists';
@@ -7,9 +8,10 @@ import { isDocked } from '../src/sim/economy';
 import { cometPathEscape } from '../src/sim/hazards';
 import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
-import { chainTarget, droneThink, steer, type TickCtx } from '../src/sim/pilot';
+import { chainTarget, droneThink, steer, workRock, type TickCtx } from '../src/sim/pilot';
+import { serialize } from '../src/sim/save';
 import { flagship, makeShip } from '../src/sim/ships';
-import type { GameState, Ship, StarClass } from '../src/sim/types';
+import type { GameState, Rock, Ship, StarClass } from '../src/sim/types';
 import { tick } from '../src/sim/update';
 
 const DT = 1 / 60;
@@ -187,5 +189,88 @@ describe('droneThink dense targets', () => {
     const ctx = ctxFor(state);
     droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
     expect(drone.aiTargetId).toBe(plain.id);
+  });
+});
+
+/** A flagship fitted with one tier-1 Wide Beam and an empty system to build a rock field in. */
+function wideSetup(seed = 1) {
+  const state = newGame(seed);
+  const ship = state.run.ships[0]!;
+  ship.slots = [{ type: 'laser', variant: 'wide', tier: 1 }];
+  state.run.rocks = [];
+  state.run.pickups = [];
+  const ctx = ctxFor(state);
+  return { state, ship, ctx, st: ctx.index.stats.get(ship.id)! };
+}
+
+/** A wide-beam flagship in the given system with a target rock and a near neighbour, ordered to mine the target. */
+function wideField(seed: number): { state: GameState; target: Rock; near: Rock } {
+  const state = newGame(seed);
+  const ship = flagship(state.run);
+  ship.pos = { x: 600, z: 0 }; // clear of the star's heat
+  ship.vel = { x: 0, z: 0 };
+  ship.slots = [{ type: 'laser', variant: 'wide', tier: 1 }];
+  state.run.rocks = [];
+  state.run.pickups = [];
+  const target = makeRock(state.run, 'ore', 0, { x: 700, z: 0 }, 30, 0);
+  const near = makeRock(state.run, 'ore', 0, { x: 765, z: 0 }, 30, 0);
+  state.run.rocks.push(target, near);
+  ship.order = { kind: 'mine', rockId: target.id };
+  return { state, target, near };
+}
+
+describe('wide-beam splash', () => {
+  it('splashes damage onto a rock near the target but not one outside the radius', () => {
+    const { state, ship, ctx, st } = wideSetup();
+    expect(st.splash).toBe(SPLASH_RADIUS[0]);
+
+    const target = makeRock(state.run, 'ore', 0, { x: ship.pos.x + 100, z: ship.pos.z }, 30, 0);
+    // Centres one unit inside / outside the exact reach `splash + radius`, so both
+    // fall in the broad phase and only the exact test can separate them.
+    const near = makeRock(state.run, 'ore', 0, { x: target.pos.x, z: target.pos.z }, 30, 0);
+    near.pos.x = target.pos.x + st.splash + near.radius - 1;
+    const far = makeRock(state.run, 'ore', 0, { x: target.pos.x, z: target.pos.z }, 30, 0);
+    far.pos.x = target.pos.x + st.splash + far.radius + 1;
+    state.run.rocks.push(target, near, far);
+    ctx.index.rebuild(state);
+
+    const before = { target: target.hp, near: near.hp, far: far.hp };
+    expect(workRock(ctx, ship, st, target)).toBeNull(); // nothing shattered yet
+
+    const dmg = st.dps * DT;
+    expect(before.target - target.hp).toBeCloseTo(dmg, 6); // full hit, not doubled
+    expect(before.near - near.hp).toBeCloseTo(dmg * TUNING.splashMul, 6);
+    expect(far.hp).toBe(before.far);
+  });
+
+  it('chains to a fragment shattered by splash', () => {
+    const { state, ship, ctx, st } = wideSetup();
+    const target = makeRock(state.run, 'ore', 0, { x: ship.pos.x + 100, z: ship.pos.z }, 30, 0);
+    const neighbour = makeRock(state.run, 'ore', 0, { x: target.pos.x, z: target.pos.z }, 30, 0);
+    neighbour.pos.x = target.pos.x + st.splash + neighbour.radius - 1;
+    neighbour.hp = st.dps * DT * TUNING.splashMul * 0.5; // one splash volley finishes it
+    state.run.rocks.push(target, neighbour);
+    const before = state.run.rocks.length;
+    ctx.index.rebuild(state);
+
+    const frags = workRock(ctx, ship, st, target);
+
+    expect(frags).not.toBeNull();
+    expect(frags!.every((f) => f.size === 1)).toBe(true); // the neighbour's children, not the target's
+    expect(state.run.rocks).not.toContain(neighbour);
+    expect(ctx.index.rockById.has(neighbour.id)).toBe(false); // skipped by every later query this tick
+    expect(state.run.rocks.length).toBe(before - 1 + 3); // the neighbour is replaced by its children
+    // The same list feeds `runOrder`'s chain-target: the nearest fragment is in reach.
+    expect(frags!.map((f) => f.id)).toContain(chainTarget(ctx, ship, st, frags!));
+  });
+
+  it('is deterministic', () => {
+    const a = wideField(42);
+    const b = wideField(42);
+    run(a.state, 8);
+    run(b.state, 8);
+    expect(a.near.hp).toBeLessThan(a.near.maxHp); // the run really did splash the neighbour
+    expect(a.target.hp).toBeLessThan(a.target.maxHp);
+    expect(serialize(a.state)).toBe(serialize(b.state));
   });
 });

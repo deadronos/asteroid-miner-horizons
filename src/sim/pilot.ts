@@ -154,8 +154,21 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
   const k = damp(3, ctx.dt);
   ship.vel.x = rock.vel.x + (ship.vel.x - rock.vel.x) * k;
   ship.vel.z = rock.vel.z + (ship.vel.z - rock.vel.z) * k;
-  const frags = laserRock(ctx.state, rock, st.dps * ctx.dt, st.laserTier);
+  let frags = laserRock(ctx.state, rock, st.dps * ctx.dt, st.laserTier);
   if (frags) ctx.index.rockById.delete(rock.id);
+  if (st.splash > 0) {
+    // Wide Beam: the same beam also grazes every other live rock inside the splash radius.
+    const dmg = st.dps * ctx.dt * TUNING.splashMul;
+    ctx.index.rockHash.query(rock.pos, st.splash + 60, (n) => {
+      if (n.id === rock.id || !ctx.index.rockById.has(n.id)) return;
+      if (dist(n.pos, rock.pos) > st.splash + n.radius) return;
+      const nf = laserRock(ctx.state, n, dmg, st.laserTier);
+      if (nf) {
+        ctx.index.rockById.delete(n.id);
+        (frags ??= []).push(...nf);
+      }
+    });
+  }
   return frags;
 }
 
