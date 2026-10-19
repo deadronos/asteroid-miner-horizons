@@ -4,10 +4,12 @@
 
 import { removeItem } from '../core/array';
 import { range } from '../core/rng';
-import { fromAngle, type Vec2 } from '../core/vec';
+import { distSq, fromAngle, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import { contractProgress } from './contracts';
 import { makeRock } from './generate';
+import { damageShip, isAlive } from './ships';
+import { volatileBlastRadius } from './traits';
 import type { GameState, Rock, RockSize } from './types';
 
 /** Fragments spawned per size class when a rock of that size cracks. */
@@ -43,6 +45,19 @@ export function destroyRock(state: GameState, rock: Rock): Rock[] {
   removeItem(run.rocks, rock);
   state.out.fx.push({ t: 'crack', pos: { ...rock.pos }, kind: rock.kind, radius: rock.radius });
   contractProgress(state, { t: 'break', size: rock.size });
+
+  // Volatile rocks detonate: flat damage to alive ships in range, ships only.
+  if (rock.trait === 'volatile') {
+    state.out.fx.push({ t: 'explode', pos: { ...rock.pos } });
+    const blast = volatileBlastRadius(rock);
+    const blastSq = blast * blast;
+    const dmg = TUNING.volatileBlastDamage * (rock.radius / 40);
+    // Backwards: damageShip may remove a wrecked drone from run.ships.
+    for (let i = run.ships.length - 1; i >= 0; i--) {
+      const ship = run.ships[i]!;
+      if (isAlive(ship) && distSq(ship.pos, rock.pos) <= blastSq) damageShip(state, ship, dmg);
+    }
+  }
 
   const kids = CHILDREN[rock.size];
   const spawned: Rock[] = [];

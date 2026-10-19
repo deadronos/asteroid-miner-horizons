@@ -2,12 +2,17 @@ import { describe, expect, it } from 'vitest';
 import { makeRng } from '../src/core/rng';
 import { TRAITS, TRAIT_IDS, type RockTrait } from '../src/data/traits';
 import { TUNING } from '../src/data/tuning';
+import { DEFAULT_ASSISTS } from '../src/sim/assists';
 import { newGame, newProfile, newRun } from '../src/sim/create';
 import { makeRock } from '../src/sim/generate';
+import { SimIndex } from '../src/sim/index';
 import { destroyRock, laserRock } from '../src/sim/mining';
-import { emptyStats, shipStats, type ShipStats } from '../src/sim/ships';
-import { canMine, rollTrait, traitYield } from '../src/sim/traits';
+import { workRock, type TickCtx } from '../src/sim/pilot';
+import { emptyStats, makeShip, shipStats, type ShipStats } from '../src/sim/ships';
+import { canMine, rollTrait, traitYield, volatileBlastRadius, volatileSafeDistance } from '../src/sim/traits';
 import type { GameState, Rock, Run, Ship } from '../src/sim/types';
+
+const DT = 1 / 60;
 
 const layout = (rocks: Rock[]) => rocks.map((r) => [r.id, r.kind, r.pos.x, r.pos.z, r.radius, r.hp] as const);
 
@@ -135,5 +140,66 @@ describe('trait yield multipliers', () => {
     const share = Math.floor((parent.units * TUNING.crackChildShare) / kids.length);
     expect(share).toBeGreaterThan(0);
     for (const kid of kids) expect(kid.units).toBe(share);
+  });
+});
+
+describe('volatile blast', () => {
+  it('damages an alive ship inside the blast and not one outside', () => {
+    const state = newGame(7);
+    const rock = makeRock(state.run, 'ore', 0, { x: 5000, z: 5000 }, 30, 0, 'volatile');
+    state.run.rocks.push(rock);
+    const blast = volatileBlastRadius(rock);
+    const inner = makeShip(state.run, state.profile, 'drone', 'Inner', { x: 5000 + blast - 1, z: 5000 });
+    const outer = makeShip(state.run, state.profile, 'drone', 'Outer', { x: 5000 + blast + 1, z: 5000 });
+    inner.hull = 200;
+    outer.hull = 200;
+    state.run.ships.push(inner, outer);
+
+    destroyRock(state, rock);
+
+    expect(inner.hull).toBeLessThan(200);
+    expect(outer.hull).toBe(200);
+  });
+
+  it('pushes an explode fx and damages no rocks', () => {
+    const state = newGame(7);
+    const rock = makeRock(state.run, 'ore', 0, { x: 500, z: 0 }, 30, 0, 'volatile');
+    const neighbour = makeRock(state.run, 'ore', 0, { x: 520, z: 0 }, 30, 0);
+    state.run.rocks.push(rock, neighbour);
+    const hp = neighbour.hp;
+
+    destroyRock(state, rock);
+
+    expect(state.out.fx).toContainEqual({ t: 'explode', pos: { x: 500, z: 0 } });
+    expect(neighbour.hp).toBe(hp);
+  });
+});
+
+describe('volatile stand-off', () => {
+  it('workRock holds a volatile target at the safe stand distance, inside firing range', () => {
+    const state = newGame(7);
+    const ship = state.run.ships[0]!;
+    const rock = makeRock(state.run, 'ore', 0, { x: ship.pos.x + 400, z: ship.pos.z }, 30, 0, 'volatile');
+    state.run.rocks = [rock];
+    const index = new SimIndex();
+    index.rebuild(state);
+    const ctx: TickCtx = { state, index, dt: DT, assists: DEFAULT_ASSISTS, hazards: 'off' };
+    const st = index.stats.get(ship.id)!;
+
+    const reach = st.range + rock.radius;
+    const stand = Math.max(st.range * 0.8, volatileSafeDistance(rock));
+    expect(stand).toBeLessThan(reach);
+
+    // Park at rest just outside firing range. One workRock call steers in, and
+    // arrive's throttle reveals the stand distance it chose as its target.
+    const d0 = reach + 2;
+    ship.pos = { x: rock.pos.x - d0, z: rock.pos.z };
+    ship.vel = { x: 0, z: 0 };
+    workRock(ctx, ship, st, rock);
+
+    const brake = (st.speed * st.speed) / (2 * st.accel) + 20;
+    const throttle = Math.min(1, (d0 - stand) / brake + 0.08);
+    expect(throttle).toBeLessThan(1); // saturated here would hide the stand-off
+    expect(Math.hypot(ship.vel.x, ship.vel.z)).toBeCloseTo(throttle * st.accel * DT, 6);
   });
 });

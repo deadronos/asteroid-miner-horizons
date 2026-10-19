@@ -32,3 +32,13 @@ export function traitYield(trait: RockTrait | undefined): number {
 export function canMine(stats: ShipStats, rock: Rock): boolean {
   return !(rock.trait === 'dense' && stats.laserTier < TUNING.denseMinLaserTier);
 }
+
+/** Radius of a volatile rock's break blast: its own radius plus the pad. */
+export function volatileBlastRadius(rock: Rock): number {
+  return rock.radius + TUNING.volatileBlastPad;
+}
+
+/** Distance a ship must keep from a volatile rock to be clear of its blast. */
+export function volatileSafeDistance(rock: Rock): number {
+  return volatileBlastRadius(rock) + 16;
+}

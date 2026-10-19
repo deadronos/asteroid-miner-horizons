@@ -10,7 +10,7 @@ import { cometPathEscape, flareShelter, inFlareZone } from './hazards';
 import type { SimIndex } from './index';
 import { laserRock } from './mining';
 import { cargoFree, flagship, isAlive, type ShipStats } from './ships';
-import { canMine } from './traits';
+import { canMine, volatileSafeDistance } from './traits';
 import type { GameState, Rock, Ship } from './types';
 
 export interface TickCtx {
@@ -139,7 +139,12 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
   const d = dist(ship.pos, rock.pos);
   const reach = st.range + rock.radius;
   if (d > reach) {
-    arrive(ctx, ship, st, rock.pos, reach * 0.8, rock.id);
+    // Volatile rocks need a wider berth, but never past firing range.
+    const stand = Math.min(
+      rock.trait === 'volatile' ? Math.max(reach * 0.8, volatileSafeDistance(rock)) : reach * 0.8,
+      reach,
+    );
+    arrive(ctx, ship, st, rock.pos, stand, rock.id);
     return null;
   }
   ship.beamOn = true;
