@@ -1,13 +1,14 @@
 // Top-down Three.js renderer. The sim's { x, z } plane is the ground plane;
 // an orthographic camera looks straight down (screen right = +x, up = −z).
-// Owns the view state (zoom, pan, follow) and turns sim fx into particles.
+// Composes the scene views; the camera rig (camera.ts) owns the view state
+// (zoom, pan, follow) and FxView (fxView.ts) turns sim fx into particles.
 
 import * as THREE from 'three';
 import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-import { clamp, damp, type Vec2 } from '../core/vec';
+import { damp, type Vec2 } from '../core/vec';
 import { HULLS } from '../data/hulls';
 import { RESOURCE_INFO } from '../data/resources';
 import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
@@ -15,14 +16,13 @@ import { findRock } from '../sim/generate';
 import { findShip, isAlive, selectedShip } from '../sim/ships';
 import type { GameState, Rock, StarSystem } from '../sim/types';
 import { Backdrop } from './backdrop';
+import { CameraRig } from './camera';
 import type { ViewRect } from './cull';
-import { Debris } from './debris';
-import { FloatingText } from './floatingText';
+import { FxView } from './fxView';
 import { HazardView } from './hazardView';
 import { type Box, MapLabels } from './labels';
 import { OutpostView } from './outpostView';
-import { Particles } from './particles';
-import { ROCK_TINT, RockView } from './rocks';
+import { RockView } from './rocks';
 import { ShipView } from './shipView';
 import { SystemView } from './systemView';
 import { additive, flat } from './util';
@@ -49,33 +49,27 @@ void main() {
 }`,
 };
 
-export const ZOOM_MIN = 90;
-export const ZOOM_MAX = 3200;
-
 export type HoverTarget = { kind: 'rock'; rock: Rock } | { kind: 'station' } | { kind: 'ship'; id: number } | null;
 
 export class Renderer {
   readonly canvas: HTMLCanvasElement;
   private gl: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
-  private camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 1, 4000);
+  private cam: CameraRig;
   private backdrop = new Backdrop();
   private system = new SystemView();
   private rocks = new RockView();
   private ships = new ShipView();
   private hazardView = new HazardView();
   private outpostView = new OutpostView();
-  private particles = new Particles();
+  private fx: FxView;
   /** 0..1 star-glow boost, eased toward 1 while a solar flare is active. */
   private flareGlow = 0;
-  private debris = new Debris();
-  private floaters: FloatingText;
   private labels: MapLabels;
   /** Client rectangles map labels must not cover; main.ts points this at the HUD panels. */
   labelBlockers: () => Box[] = () => [];
   private hoverRing: THREE.Mesh;
   private moveMarker: THREE.Mesh;
-  private shake = 0;
   /** Bloom post-processing; created the first time a quality preset wants it. */
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
@@ -88,13 +82,7 @@ export class Renderer {
   /** The camera's world rectangle this frame (shake included), reused for culling. */
   private readonly cullView: ViewRect = { x: 0, z: 0, halfW: 0, halfH: 0 };
 
-  /** View state. `follow` keeps the camera on the selected ship. */
-  center: Vec2 = { x: 0, z: 0 };
-  halfH = 420;
-  targetHalfH = 420;
-  follow = true;
   hover: HoverTarget = null;
-  private snapped = false;
   private shakeScale = 1;
   private alwaysBars = false;
 
@@ -108,10 +96,10 @@ export class Renderer {
     this.msaa = settings.antialias ? 4 : 0;
     this.canvas = this.gl.domElement;
     container.appendChild(this.canvas);
+    this.cam = new CameraRig(container, this.canvas);
     this.labels = new MapLabels(container, () => this.labelBlockers());
-    this.floaters = new FloatingText(container);
+    this.fx = new FxView(container, this.ships);
 
-    this.camera.up.set(0, 0, -1);
     this.scene.add(new THREE.AmbientLight(0x8090b0, 0.55));
     this.scene.add(
       this.backdrop.group,
@@ -120,8 +108,8 @@ export class Renderer {
       this.outpostView.group,
       this.ships.group,
       this.hazardView.line,
-      this.particles.points,
-      this.debris.mesh,
+      this.fx.particles.points,
+      this.fx.debris.mesh,
       this.streaks.lines,
     );
 
@@ -144,8 +132,7 @@ export class Renderer {
     this.rocks.glow = this.ships.glow = this.bloomOn ? 1.8 : 1;
     this.resize();
     this.backdrop.configure(q.stars, s.nebula);
-    this.particles.density = q.particles;
-    this.debris.density = q.particles;
+    this.fx.density = q.particles;
     this.shakeScale = SHAKE_SCALE[s.shake];
     this.alwaysBars = s.alwaysShowBars;
   }
@@ -164,7 +151,7 @@ export class Renderer {
       this.composer = new EffectComposer(this.gl, target);
       for (const t of [this.composer.renderTarget1, this.composer.renderTarget2])
         Object.assign(t, { isXRRenderTarget: true });
-      this.composer.addPass(new RenderPass(this.scene, this.camera));
+      this.composer.addPass(new RenderPass(this.scene, this.cam.camera));
       // Threshold keeps lit rocks and hulls crisp; only bright additive light glows.
       this.bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.9, 0.35, 0.96);
       this.composer.addPass(this.bloom);
@@ -185,72 +172,46 @@ export class Renderer {
     this.canvas.style.height = '100%';
   }
 
-  private get aspect(): number {
-    return this.container.clientWidth / Math.max(1, this.container.clientHeight);
+  /** Keeps the camera on the selected ship; panning or the system map turns it off. */
+  get follow(): boolean {
+    return this.cam.follow;
+  }
+
+  set follow(on: boolean) {
+    this.cam.follow = on;
   }
 
   /** The visible world rectangle (center + half extents), for audio falloff. */
   get view(): { center: Vec2; halfW: number; halfH: number } {
-    return { center: this.center, halfW: this.halfH * this.aspect, halfH: this.halfH };
+    return this.cam.view;
   }
 
   /** World units per CSS pixel at the current zoom. */
   get wpp(): number {
-    return (this.halfH * 2) / Math.max(1, this.container.clientHeight);
+    return this.cam.wpp;
   }
 
   screenToWorld(clientX: number, clientY: number): Vec2 {
-    const r = this.canvas.getBoundingClientRect();
-    const nx = ((clientX - r.left) / r.width) * 2 - 1;
-    const ny = ((clientY - r.top) / r.height) * 2 - 1;
-    return { x: this.center.x + nx * this.halfH * this.aspect, z: this.center.z + ny * this.halfH };
+    return this.cam.screenToWorld(clientX, clientY);
   }
 
   /** World point → CSS pixels relative to the scene container. */
   worldToScreen(p: Vec2): { x: number; y: number } {
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
-    return {
-      x: ((p.x - this.center.x) / (this.halfH * this.aspect) + 1) * 0.5 * w,
-      y: ((p.z - this.center.z) / this.halfH + 1) * 0.5 * h,
-    };
+    return this.cam.worldToScreen(p);
   }
 
   /** Zooms by `factor`, keeping the world point under the cursor fixed (unless following). */
   zoomAt(factor: number, clientX: number, clientY: number): void {
-    const next = clamp(this.targetHalfH * factor, ZOOM_MIN, ZOOM_MAX);
-    if (!this.follow) {
-      const p = this.screenToWorld(clientX, clientY);
-      const k = next / this.halfH;
-      this.center = { x: p.x + (this.center.x - p.x) * k, z: p.z + (this.center.z - p.z) * k };
-      this.halfH = next;
-    }
-    this.targetHalfH = next;
+    this.cam.zoomAt(factor, clientX, clientY);
   }
 
   panPixels(dx: number, dy: number): void {
-    this.follow = false;
-    this.center.x -= dx * this.wpp;
-    this.center.z -= dy * this.wpp;
+    this.cam.panPixels(dx, dy);
   }
 
   /** Toggle between a whole-system overview and the previous zoom. */
-  private mapReturn = 420;
   toggleMap(sys: StarSystem): void {
-    const fit = clamp(
-      Math.max(...sys.planets.map((p) => p.orbitR), ...sys.belts.map((b) => b.outer)) * 1.08,
-      ZOOM_MIN,
-      ZOOM_MAX,
-    );
-    if (Math.abs(this.targetHalfH - fit) > 1) {
-      this.mapReturn = this.targetHalfH;
-      this.follow = false;
-      this.center = { x: 0, z: 0 };
-      this.targetHalfH = fit;
-    } else {
-      this.targetHalfH = this.mapReturn;
-      this.follow = true;
-    }
+    this.cam.toggleMap(sys);
   }
 
   render(state: GameState, dt: number, moveMark: Vec2 | null): void {
@@ -261,7 +222,7 @@ export class Renderer {
       this.system.build(sys);
       this.flareGlow = 0;
       this.backdrop.setSystem(state.profile.seed + sys.number);
-      this.snapped = false;
+      this.cam.resetSnap();
     }
 
     // The warp sequence runs on frame time, so it never holds up the sim or input.
@@ -270,55 +231,31 @@ export class Renderer {
     for (const fx of state.out.fx) if (fx.t === 'warp') this.warpT = 0;
     const w = warpFrame(this.warpT, this.warp);
 
-    // Camera: smooth zoom, follow the selected ship.
-    this.halfH += (this.targetHalfH - this.halfH) * (1 - damp(12, dt));
+    // Camera: smooth zoom, follow the selected ship, then shake.
     const sel = selectedShip(run);
-    if (this.follow && sel) {
-      const focus = isAlive(sel) ? sel.pos : sys.station.pos;
-      const k = this.snapped ? 1 - damp(6, dt) : 1;
-      this.center.x += (focus.x - this.center.x) * k;
-      this.center.z += (focus.z - this.center.z) * k;
-      this.snapped = true;
-    }
-    this.shake = Math.max(0, this.shake - dt * 25);
-    const amp = (this.shake + w.shudder * 8) * this.shakeScale * this.wpp;
+    this.cam.ease(dt, sel ? (isAlive(sel) ? sel.pos : sys.station.pos) : null);
+    this.fx.decayShake(dt);
+    const amp = (this.fx.shake + w.shudder * 8) * this.shakeScale * this.wpp;
     const sx = (Math.random() - 0.5) * amp;
     const sz = (Math.random() - 0.5) * amp;
-    const cx = this.center.x + sx;
-    const cz = this.center.z + sz;
-    const a = this.aspect;
-    // The warp's zoom is applied to the view only, so the player's zoom target is untouched.
-    const vh = this.halfH * w.zoom;
-    this.camera.left = -vh * a;
-    this.camera.right = vh * a;
-    this.camera.top = vh;
-    this.camera.bottom = -vh;
-    this.camera.position.set(cx, 1000, cz);
-    this.camera.lookAt(cx, 0, cz);
-    this.camera.updateProjectionMatrix();
+    const v = this.cam.place(sx, sz, w.zoom, this.cullView);
 
-    this.backdrop.update(cx, cz, vh, 1 - w.stretch);
-    this.streaks.update(w.stretch, cx, cz, vh * a, vh);
+    this.backdrop.update(v.x, v.z, v.halfH, 1 - w.stretch);
+    this.streaks.update(w.stretch, v.x, v.z, v.halfW, v.halfH);
     this.flareGlow += ((run.hazards.flare?.phase === 'active' ? 1 : 0) - this.flareGlow) * (1 - damp(4, dt));
     this.system.update(sys, run.time, this.flareGlow);
-    const v = this.cullView;
-    v.x = cx;
-    v.z = cz;
-    v.halfW = vh * a;
-    v.halfH = vh;
     this.rocks.update(run.rocks, run.pickups, run.time, v);
     this.outpostView.update(run.automation.outposts, (id) => findRock(run, id), run.time);
     const wpp = this.wpp;
     const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars);
     this.hazardView.update(run.hazards, run.time, wpp);
 
-    this.consumeFx(state, hits, dt);
-    this.particles.update(dt);
-    this.debris.update(dt);
+    if (this.fx.consume(state, hits, dt, (p) => this.cam.onScreen(p))) this.follow = true;
+    this.fx.update(dt);
     this.updateMarkers(state, moveMark, wpp);
     this.setPlayfieldVisible(!w.hidden);
-    this.labels.update(sys, w.hidden ? 0 : this.halfH, this.wpp, dt, (p) => this.worldToScreen(p));
-    this.floaters.update(
+    this.labels.update(sys, w.hidden ? 0 : this.cam.halfH, this.wpp, dt, (p) => this.worldToScreen(p));
+    this.fx.updateText(
       dt,
       (p) => this.worldToScreen(p),
       (id) => {
@@ -328,11 +265,7 @@ export class Renderer {
     );
 
     if (this.bloomOn && this.composer) this.composer.render(dt);
-    else this.gl.render(this.scene, this.camera);
-  }
-
-  private onScreen(p: Vec2): boolean {
-    return Math.abs(p.x - this.center.x) < this.halfH * this.aspect && Math.abs(p.z - this.center.z) < this.halfH;
+    else this.gl.render(this.scene, this.cam.camera);
   }
 
   /** 0..1 white-out intensity during the warp transition, for the HUD overlay. */
@@ -347,80 +280,8 @@ export class Renderer {
   private setPlayfieldVisible(on: boolean): void {
     this.system.group.visible = this.rocks.group.visible = this.ships.group.visible = on;
     this.outpostView.group.visible = on;
-    this.particles.points.visible = this.debris.mesh.visible = on;
+    this.fx.setVisible(on);
     if (!on) this.hazardView.line.visible = this.hoverRing.visible = this.moveMarker.visible = false;
-  }
-
-  private consumeFx(
-    state: GameState,
-    hits: { x: number; z: number; ship: { id: number; thrusting: boolean } }[],
-    dt: number,
-  ): void {
-    const P = this.particles;
-    const col = new THREE.Color();
-    for (const fx of state.out.fx) {
-      switch (fx.t) {
-        case 'crack': {
-          col.setHex(RESOURCE_INFO[fx.kind].color);
-          P.emit(fx.pos.x, fx.pos.z, col, Math.round(fx.radius * 1.6), fx.radius * 3.5, 1.1);
-          P.emit(fx.pos.x, fx.pos.z, col.setHex(0x8a8070), Math.round(fx.radius), fx.radius * 1.5, 1.8, { drag: 0.8 });
-          this.debris.burst(fx.pos.x, fx.pos.z, fx.radius, ROCK_TINT[fx.kind]);
-          // Only cracks the player can see shake the camera; big rocks hit harder.
-          if (this.onScreen(fx.pos)) this.shake = Math.min(14, this.shake + Math.min(7, 1 + fx.radius / 5));
-          break;
-        }
-        case 'collect':
-          P.emit(fx.pos.x, fx.pos.z, col.setHex(RESOURCE_INFO[fx.kind].color), 4, 60, 0.35);
-          this.floaters.add(fx.shipId, fx.kind, fx.amount, fx.pos);
-          break;
-        case 'dock':
-          break;
-        case 'impact':
-          P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffd0a0), 14, 120, 0.4);
-          this.ships.flashNear(fx.pos);
-          if (this.onScreen(fx.pos)) this.shake = Math.min(14, this.shake + 5);
-          break;
-        case 'explode':
-          P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffa040), 140, 220, 1.4);
-          P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffffff), 40, 120, 0.6);
-          this.shake = 16;
-          break;
-        case 'warp':
-          this.follow = true;
-          break;
-        case 'hazard':
-          if (fx.phase !== 'start') break;
-          if (fx.kind === 'comet' && fx.pos) P.emit(fx.pos.x, fx.pos.z, col.setHex(0xa8dcff), 30, 160, 1);
-          else if (fx.kind === 'flare') this.shake = Math.max(this.shake, 12);
-          break;
-      }
-    }
-    state.out.fx.length = 0;
-
-    for (const h of hits) {
-      if (Math.random() < dt * 40) P.emit(h.x, h.z, col.setHex(0xffc080), 1, 90, 0.35);
-    }
-    // Comets trail a pale tail opposite their velocity.
-    for (const r of state.run.rocks) {
-      if (!r.comet) continue;
-      P.emit(r.pos.x, r.pos.z, col.setHex(0x9fd4ff), dt * 90, 60, 1.2, {
-        dir: Math.atan2(-r.vel.z, -r.vel.x),
-        spread: 0.35,
-        drag: 1,
-      });
-    }
-    for (const s of state.run.ships) {
-      if (!s.thrusting || !isAlive(s)) continue;
-      const back = s.angle + Math.PI;
-      const size = HULLS[s.hullId].size;
-      if (Math.random() < dt * 45) {
-        P.emit(s.pos.x + Math.cos(back) * size, s.pos.z + Math.sin(back) * size, col.setHex(0xff7a30), 1, 70, 0.5, {
-          dir: back,
-          spread: 0.5,
-          drag: 3,
-        });
-      }
-    }
   }
 
   private updateMarkers(state: GameState, moveMark: Vec2 | null, wpp: number): void {

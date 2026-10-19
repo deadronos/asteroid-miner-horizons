@@ -20,7 +20,7 @@ src/
     index.ts       SimIndex: per-session derived state, rebuilt per tick
     save.ts        save slots, import/export format and validation
     migrations.ts  versioned save upgrades
-  render/        three.js; Renderer.ts owns camera, zoom and fx
+  render/        three.js; Renderer.ts composes the views, camera.ts the view state, fxView.ts the fx
   ui/            DOM HUD; Hud.ts composes panels/, Menu.ts is the ⚙ modal over menu/
   input.ts       keyboard/pointer -> Commands; world-space picking
   settings.ts    preferences store, separate from saves
