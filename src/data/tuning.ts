@@ -25,7 +25,7 @@ export const TUNING = {
   flagshipRespawn: 4,
   repairOrePerHull: 0.3,
 
-  baseFleetCap: 2,
+  baseFleetCap: 5,
   droneLeash: 700,
 
   // Prestige.
