@@ -131,5 +131,15 @@ export const TUNING = {
   /** Units an outpost can hold before it stalls waiting for pickup. */
   outpostCapacity: 100,
 
+  // Offline progress (#41).
+  /** Longest absence credited, in seconds. */
+  offlineCapSec: 8 * 60 * 60,
+  /** Absences shorter than this (a reload) credit nothing. */
+  offlineMinSec: 60,
+  /** Units a drone delivers per second per point of laser dps in active play (measured headless, ≈0.03). */
+  offlineUnitsPerDps: 0.03,
+  /** Share of that rate credited while away: no flagship, no contracts, no supervision. */
+  offlineEfficiency: 0.1,
+
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;

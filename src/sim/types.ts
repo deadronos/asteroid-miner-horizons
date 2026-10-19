@@ -264,6 +264,8 @@ export interface LogEntry {
   text: string;
   /** Set on an achievement unlock, which the HUD also shows as a toast. */
   achievement?: AchievementId;
+  /** Any other line the HUD also shows as a toast (the offline-progress summary). */
+  toast?: { kicker: string; title: string; detail: string };
 }
 
 export interface Outbox {
