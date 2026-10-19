@@ -252,6 +252,14 @@ describe('balance bot hazard reflexes', () => {
     expect(cometPathEscape(s.run, [], to, TUNING.cometDodgePad, { x: 0, z: 0 })).toBe(false);
   });
 
+  it('skips a dense rock its tier-1 laser cannot cut, and mines a plain one', () => {
+    const s = orderOnly();
+    const fs = flagship(s.run);
+    fs.pos = { x: 0, z: 0 };
+    s.run.rocks = [{ ...rock(500, 'ore', 100, 0), trait: 'dense' }, rock(501, 'ore', 0, 200)];
+    expect(only(botCommands(s))).toEqual({ t: 'mine', shipId: fs.id, rockId: 501 });
+  });
+
   it('skips a rock in a comet path, and drops a mine order on one', () => {
     const s = orderOnly();
     const fs = flagship(s.run);

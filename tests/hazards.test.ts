@@ -188,8 +188,11 @@ describe('hazards off', () => {
       [2, -811.5486710370128, -402.5501882204829],
       [3, 114.99408001282642, -861.6577792254508],
     ]);
-    expect(f.pos).toEqual({ x: 39737.77081867497, z: -54411.30083316223 });
-    expect(f.hull).toBe(1.7524576248181472);
+    // Re-captured after magnetic drift (#48): rock generation is untouched (rng,
+    // nextId, count and the leading rocks all match); only the flagship's path
+    // moved, because magnetic rocks now drift into it.
+    expect(f.pos).toEqual({ x: 38798.08863238614, z: -53314.58155080999 });
+    expect(f.hull).toBe(100);
   });
 
   it('is identical to a tick without the feature over 20000 ticks', () => {

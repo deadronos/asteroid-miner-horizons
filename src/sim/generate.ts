@@ -4,8 +4,10 @@
 import { chance, int, makeRng, next, pick, range, type Rng } from '../core/rng';
 import { fromAngle, type Vec2 } from '../core/vec';
 import type { RawResource } from '../data/resources';
+import type { RockTrait } from '../data/traits';
 import { TUNING } from '../data/tuning';
 import { applyBeltModifiers, rollModifiers } from './modifiers';
+import { rollTrait, traitYield } from './traits';
 import type { Belt, Planet, Rock, RockSize, Run, StarClass, StarSystem } from './types';
 
 const SYL = ['ka', 've', 'lor', 'tha', 'zen', 'mi', 'dra', 'os', 'qu', 'rel', 'syn', 'tar', 'ul', 'ix', 'no', 'pha'];
@@ -114,6 +116,7 @@ export function makeRock(
   pos: Vec2,
   units: number | null,
   belt: number,
+  trait: RockTrait | null = null,
 ): Rock {
   const [lo, hi] = ROCK_RADII[size];
   const radius = range(run.rng, lo, hi);
@@ -128,25 +131,27 @@ export function makeRock(
     radius,
     hp,
     maxHp: hp,
-    units: units ?? Math.max(1, Math.round(baseUnits)),
+    units: units ?? Math.max(1, Math.round(baseUnits * traitYield(trait ?? undefined))),
     belt,
+    trait: trait ?? undefined,
   };
 }
 
-export function spawnBeltRock(run: Run, beltIndex: number, sizeOverride?: RockSize): Rock {
+export function spawnBeltRock(run: Run, seed: number, beltIndex: number, sizeOverride?: RockSize): Rock {
   const r = run.rng;
   const belt = run.system.belts[beltIndex]!;
   const roll = next(r);
   const size: RockSize = sizeOverride ?? (roll < 0.22 ? 0 : roll < 0.6 ? 1 : 2);
   const pos = fromAngle(range(r, 0, Math.PI * 2), range(r, belt.inner, belt.outer));
-  const rock = makeRock(run, rollKind(r, belt.mix), size, pos, null, beltIndex);
+  const trait = rollTrait(seed, run.system.number, run.nextId);
+  const rock = makeRock(run, rollKind(r, belt.mix), size, pos, null, beltIndex, trait);
   run.rocks.push(rock);
   return rock;
 }
 
-export function populateBelts(run: Run): void {
+export function populateBelts(run: Run, seed: number): void {
   run.rocks = [];
   run.system.belts.forEach((b, i) => {
-    for (let n = 0; n < b.initialCount; n++) spawnBeltRock(run, i);
+    for (let n = 0; n < b.initialCount; n++) spawnBeltRock(run, seed, i);
   });
 }

@@ -4,10 +4,12 @@
 
 import { removeItem } from '../core/array';
 import { range } from '../core/rng';
-import { fromAngle, type Vec2 } from '../core/vec';
+import { distSq, fromAngle, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import { contractProgress } from './contracts';
 import { makeRock } from './generate';
+import { damageShip, isAlive } from './ships';
+import { volatileBlastRadius } from './traits';
 import type { GameState, Rock, RockSize } from './types';
 
 /** Fragments spawned per size class when a rock of that size cracks. */
@@ -44,6 +46,19 @@ export function destroyRock(state: GameState, rock: Rock): Rock[] {
   state.out.fx.push({ t: 'crack', pos: { ...rock.pos }, kind: rock.kind, radius: rock.radius });
   contractProgress(state, { t: 'break', size: rock.size });
 
+  // Volatile rocks detonate: flat damage to alive ships in range, ships only.
+  if (rock.trait === 'volatile') {
+    state.out.fx.push({ t: 'explode', pos: { ...rock.pos } });
+    const blast = volatileBlastRadius(rock);
+    const blastSq = blast * blast;
+    const dmg = TUNING.volatileBlastDamage * (rock.radius / 40);
+    // Backwards: damageShip may remove a wrecked drone from run.ships.
+    for (let i = run.ships.length - 1; i >= 0; i--) {
+      const ship = run.ships[i]!;
+      if (isAlive(ship) && distSq(ship.pos, rock.pos) <= blastSq) damageShip(state, ship, dmg);
+    }
+  }
+
   const kids = CHILDREN[rock.size];
   const spawned: Rock[] = [];
   let childUnits = 0;
@@ -68,8 +83,9 @@ export function destroyRock(state: GameState, rock: Rock): Rock[] {
   return spawned;
 }
 
-/** Applies laser damage; returns fragments if the rock broke this tick. */
-export function laserRock(state: GameState, rock: Rock, dmg: number): Rock[] | null {
+/** Applies laser damage; returns fragments if the rock broke this tick. A dense rock takes nothing below its laser tier. */
+export function laserRock(state: GameState, rock: Rock, dmg: number, laserTier: number): Rock[] | null {
+  if (rock.trait === 'dense' && laserTier < TUNING.denseMinLaserTier) return null;
   rock.hp -= dmg;
   return rock.hp <= 0 ? destroyRock(state, rock) : null;
 }

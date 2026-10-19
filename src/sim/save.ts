@@ -8,6 +8,7 @@
 import { MODIFIERS } from '../data/modifiers';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
 import { RESOURCES } from '../data/resources';
+import { TRAITS } from '../data/traits';
 import { SAVE_VERSION } from './create';
 import { chainCovers, type MigrateOptions, migrate } from './migrations';
 import type { GameState, Profile, Run } from './types';
@@ -79,6 +80,14 @@ function isQueue(queue: unknown[]): boolean {
 const finite = (n: unknown): boolean => typeof n === 'number' && Number.isFinite(n);
 const isVec = (p: unknown): boolean => !!p && finite((p as { x?: unknown }).x) && finite((p as { z?: unknown }).z);
 
+/** True when a rock carries no trait, or one the sim can actually run. */
+function isTrait(r: unknown): boolean {
+  // A corrupt save can put a non-object (e.g. `null`) in the rocks array.
+  if (!r || typeof r !== 'object') return false;
+  const trait = (r as { trait?: unknown }).trait;
+  return trait === undefined || (typeof trait === 'string' && Object.hasOwn(TRAITS, trait));
+}
+
 /** True when `h` has what the hazard tick reads: an RNG state, finite timers, and well-formed pending hazards. */
 function isHazards(h: unknown): boolean {
   if (!h || typeof h !== 'object') return false;
@@ -114,6 +123,8 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!profile || typeof profile.seed !== 'number' || typeof profile.perks !== 'object') return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
+  // A trait the sim doesn't know would drive behaviour no rock can roll.
+  if (!run.rocks.every(isTrait)) return null;
   // The tick indexes MODIFIERS by key, so every entry must be a known modifier;
   // a duplicate would apply its effect twice.
   const mods = run.system.modifiers as unknown;

@@ -3,7 +3,6 @@
 // tooltip, warp flash, pause banner and FPS counter. All actions go out as sim
 // Commands via `send`.
 
-import { RESOURCE_INFO } from '../data/resources';
 import type { SaveActions } from '../session';
 import type { Command } from '../sim/commands';
 import { keyLabel, type SettingsStore } from '../settings';
@@ -18,6 +17,7 @@ import { createRefineryPanel } from './panels/RefineryPanel';
 import { ResearchPanel } from './panels/ResearchPanel';
 import { createShipPanel } from './panels/ShipPanel';
 import { createTopBar } from './panels/TopBar';
+import { rockTooltip } from './rockTooltip';
 
 const MAX_LOG = 60;
 
@@ -161,9 +161,7 @@ export class Hud {
       this.tooltip.style.display = 'none';
       return;
     }
-    const text = rock
-      ? `${['Large', 'Medium', 'Small'][rock.size]} ${RESOURCE_INFO[rock.kind].name.toLowerCase()} asteroid · ${rock.units} units · ${Math.max(0, Math.ceil((rock.hp / rock.maxHp) * 100))}%`
-      : label!;
+    const text = rock ? rockTooltip(rock) : label!;
     setText(this.tooltip, text);
     this.tooltip.style.display = 'block';
     this.tooltip.style.transform = `translate(${x + 14}px, ${y + 14}px)`;

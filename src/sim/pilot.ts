@@ -10,6 +10,7 @@ import { cometPathEscape, flareShelter, inFlareZone } from './hazards';
 import type { SimIndex } from './index';
 import { laserRock } from './mining';
 import { cargoFree, flagship, isAlive, type ShipStats } from './ships';
+import { canMine, volatileSafeDistance } from './traits';
 import type { GameState, Rock, Ship } from './types';
 
 export interface TickCtx {
@@ -138,7 +139,12 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
   const d = dist(ship.pos, rock.pos);
   const reach = st.range + rock.radius;
   if (d > reach) {
-    arrive(ctx, ship, st, rock.pos, reach * 0.8, rock.id);
+    // Volatile rocks need a wider berth, but never past firing range.
+    const stand = Math.min(
+      rock.trait === 'volatile' ? Math.max(reach * 0.8, volatileSafeDistance(rock)) : reach * 0.8,
+      reach,
+    );
+    arrive(ctx, ship, st, rock.pos, stand, rock.id);
     return null;
   }
   ship.beamOn = true;
@@ -148,7 +154,7 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
   const k = damp(3, ctx.dt);
   ship.vel.x = rock.vel.x + (ship.vel.x - rock.vel.x) * k;
   ship.vel.z = rock.vel.z + (ship.vel.z - rock.vel.z) * k;
-  const frags = laserRock(ctx.state, rock, st.dps * ctx.dt);
+  const frags = laserRock(ctx.state, rock, st.dps * ctx.dt, st.laserTier);
   if (frags) ctx.index.rockById.delete(rock.id);
   return frags;
 }
@@ -179,7 +185,7 @@ export function chainTarget(ctx: TickCtx, ship: Ship, st: ShipStats, frags: Rock
     }
   }
   if (best) return best.id;
-  return nearestRock(ctx, ship.pos, st.range * 1.2, () => true)?.id ?? null;
+  return nearestRock(ctx, ship.pos, st.range * 1.2, (r) => canMine(st, r))?.id ?? null;
 }
 
 /** Executes a ship's manual order. Returns false if it has none. */
@@ -278,15 +284,21 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   if (st.dps > 0) {
     let rock = ship.aiTargetId != null ? ctx.index.rockById.get(ship.aiTargetId) : undefined;
-    if (rock && (dist(rock.pos, anchor) > TUNING.droneLeash || unsafe(ctx, rock.pos))) rock = undefined;
+    if (rock && (!canMine(st, rock) || dist(rock.pos, anchor) > TUNING.droneLeash || unsafe(ctx, rock.pos)))
+      rock = undefined;
     if (!rock && ship.aiMode === 'assist' && fs.order?.kind === 'mine') {
       rock = ctx.index.rockById.get(fs.order.rockId);
-      if (rock && unsafe(ctx, rock.pos)) rock = undefined;
+      if (rock && (!canMine(st, rock) || unsafe(ctx, rock.pos))) rock = undefined;
     }
     if (!rock) {
       rock =
-        nearestRock(ctx, ship.pos, 500, (r) => dist(r.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, r.pos)) ??
-        nearestRock(ctx, anchor, TUNING.droneLeash, (r) => !unsafe(ctx, r.pos)) ??
+        nearestRock(
+          ctx,
+          ship.pos,
+          500,
+          (r) => canMine(st, r) && dist(r.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, r.pos),
+        ) ??
+        nearestRock(ctx, anchor, TUNING.droneLeash, (r) => canMine(st, r) && !unsafe(ctx, r.pos)) ??
         undefined;
     }
     if (rock) {

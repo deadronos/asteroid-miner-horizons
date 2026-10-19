@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { describe, expect, it, vi } from 'vitest';
-import { RockView, ROCK_POOLS, rockMaterial, rockShapeIndex, rockStyleOf } from '../src/render/rocks';
+import { RockView, ROCK_POOLS, rockMaterial, rockShapeIndex, rockStyleOf, traitIndex } from '../src/render/rocks';
 import { rockGeometry } from '../src/render/util';
 import type { RawResource } from '../src/data/resources';
+import type { RockTrait } from '../src/data/traits';
 import type { Rock } from '../src/sim/types';
 
 // `util.ts` builds `glowTexture` at import time, which needs a canvas. Vitest
@@ -116,6 +117,23 @@ describe('per-kind rock materials', () => {
       expect(stub.vertexShader).toContain('aDamage');
     }
   });
+
+  it('declares the trait attribute and varies it to the fragment stage', () => {
+    const stub = compile(rockMaterial('ore'));
+    expect(stub.vertexShader).toContain('aTrait');
+    expect(stub.vertexShader).toContain('vTrait');
+    expect(stub.vertexShader).toContain('vTrait = aTrait;');
+    expect(stub.fragmentShader).toContain('vTrait');
+  });
+});
+
+describe('traitIndex', () => {
+  it('maps each trait to its shader index and a plain rock to zero', () => {
+    expect(traitIndex(undefined)).toBe(0);
+    expect(traitIndex('volatile')).toBe(1);
+    expect(traitIndex('dense')).toBe(2);
+    expect(traitIndex('magnetic')).toBe(3);
+  });
 });
 
 describe('RockView pools are built per kind', () => {
@@ -134,7 +152,7 @@ describe('RockView pools are built per kind', () => {
 });
 
 const VIEW = { x: 0, z: 0, halfW: 1e9, halfH: 1e9 };
-const rock = (id: number, kind: RawResource): Rock => ({
+const rock = (id: number, kind: RawResource, trait?: RockTrait): Rock => ({
   id,
   kind,
   size: 0,
@@ -145,6 +163,7 @@ const rock = (id: number, kind: RawResource): Rock => ({
   maxHp: 1,
   units: 1,
   belt: 0,
+  trait,
 });
 
 /** Which of the six rock pools received the only rock, or -1. */
@@ -154,6 +173,14 @@ const usedPool = (view: RockView): number =>
     .map((m, i) => ({ i, count: (m as THREE.InstancedMesh).count }))
     .filter((p) => p.count > 0)
     .map((p) => p.i)[0] ?? -1;
+
+/** `aTrait` of the first instance written for a lone rock. */
+const firstTrait = (r: Rock): number => {
+  const view = new RockView();
+  view.update([r], [], 0, VIEW);
+  const geo = (view.group.children[usedPool(view)] as THREE.InstancedMesh).geometry;
+  return (geo.getAttribute('aTrait') as THREE.BufferAttribute).getX(0);
+};
 
 describe('RockView bucketing', () => {
   it('sends rocks to their kind pools even when `id % 6` would not', () => {
@@ -171,5 +198,14 @@ describe('RockView bucketing', () => {
     const view = new RockView();
     view.update([rock(0, 'ore'), rock(1, 'ice'), rock(2, 'crystal'), rock(3, 'ore')], [], 0, VIEW);
     expect(view.group.children).toHaveLength(7);
+  });
+});
+
+describe('RockView trait attribute', () => {
+  it('writes the trait index per rock and 0 for a plain rock', () => {
+    expect(firstTrait(rock(0, 'ore'))).toBe(0);
+    expect(firstTrait(rock(0, 'ore', 'volatile'))).toBe(1);
+    expect(firstTrait(rock(0, 'ore', 'dense'))).toBe(2);
+    expect(firstTrait(rock(0, 'ore', 'magnetic'))).toBe(3);
   });
 });

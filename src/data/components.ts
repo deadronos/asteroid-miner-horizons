@@ -18,7 +18,8 @@ export type ShipStatKey =
   | 'magnet'
   | 'cargoCap'
   | 'dmgMul'
-  | 'size';
+  | 'size'
+  | 'laserTier';
 
 export type EffectOp = 'add' | 'max' | 'mul';
 
@@ -87,6 +88,7 @@ export const COMPONENTS: Record<ComponentId, ComponentDef> = {
     effects: [
       { stat: 'dps', op: 'add', values: LASER_DPS },
       { stat: 'range', op: 'max', values: LASER_RANGE },
+      { stat: 'laserTier', op: 'max', values: [1, 2, 3] as const },
     ],
   },
   engine: {

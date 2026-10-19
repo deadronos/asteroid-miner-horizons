@@ -58,6 +58,37 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     const tz = (r.pos.x / d) * TUNING.rockOrbitSpeed;
     r.vel.x += (tx - r.vel.x) * settle;
     r.vel.z += (tz - r.vel.z) * settle;
+
+    // Magnetic rocks drift toward the nearest live ship in range.
+    if (r.trait === 'magnetic') {
+      let bestD = -1; // -1 marks "no ship in range"
+      let bestDx = 0;
+      let bestDz = 0;
+      for (let i = 0; i < run.ships.length; i++) {
+        const s = run.ships[i]!;
+        if (!isAlive(s)) continue;
+        const dx = s.pos.x - r.pos.x;
+        const dz = s.pos.z - r.pos.z;
+        const sd = Math.hypot(dx, dz);
+        if (sd < TUNING.magnetTraitRange && (bestD < 0 || sd < bestD)) {
+          bestD = sd;
+          bestDx = dx;
+          bestDz = dz;
+        }
+      }
+      // Guard the divide: a rock sitting exactly on its ship must stay finite.
+      if (bestD > 1e-6) {
+        r.vel.x += (bestDx / bestD) * TUNING.magnetTraitAccel * dt;
+        r.vel.z += (bestDz / bestD) * TUNING.magnetTraitAccel * dt;
+        const speed = Math.hypot(r.vel.x, r.vel.z);
+        if (speed > TUNING.magnetTraitMaxSpeed) {
+          const k = TUNING.magnetTraitMaxSpeed / speed;
+          r.vel.x *= k;
+          r.vel.z *= k;
+        }
+      }
+    }
+
     r.pos.x += r.vel.x * dt;
     r.pos.z += r.vel.z * dt;
   }
@@ -74,12 +105,18 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   };
 
   // Index-based so a ship removed in `updateShip` (an in-place `removeItem`)
-  // does not shift the next ship into an already-visited slot: after a removal
-  // the element at `i` is a ship we have not seen, so do not advance.
+  // does not shift the next ship into an already-visited slot. A volatile blast
+  // can remove several ships in one call, so a removal rewinds the scan and
+  // `updatedShipIds` keeps an already-ticked ship from running twice.
+  const updated = index.updatedShipIds;
+  updated.length = 0;
   for (let i = 0; i < run.ships.length; i++) {
     const ship = run.ships[i]!;
+    if (updated.includes(ship.id)) continue;
+    updated.push(ship.id);
+    const before = run.ships.length;
     updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
-    if (run.ships[i] !== ship) i--;
+    if (run.ships.length !== before) i = -1;
   }
 
   updatePickups(state, index, dt);
@@ -266,7 +303,7 @@ function regrowBelts(state: GameState, dt: number): void {
     if (counts[i]! >= b.initialCount * TUNING.beltRegrowTarget) return;
     // Spawn out of sight of every ship so rocks don't pop in on screen.
     for (let tries = 0; tries < 6; tries++) {
-      const rock = spawnBeltRock(run, i, range(run.rng, 0, 1) < 0.5 ? 0 : 1);
+      const rock = spawnBeltRock(run, state.profile.seed, i, range(run.rng, 0, 1) < 0.5 ? 0 : 1);
       if (run.ships.every((s) => dist(s.pos, rock.pos) > 900)) return;
       run.rocks.pop();
     }

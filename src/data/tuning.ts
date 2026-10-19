@@ -85,5 +85,21 @@ export const TUNING = {
   /** AI: clearance either side of a comet's body that counts as its path (plus the ship's own size). */
   cometDodgePad: 40,
 
+  // Rock traits (#48).
+  /** Chance a freshly spawned belt rock rolls a trait. */
+  traitChance: 0.22,
+  /** Volatile: blast radius past the rock's own radius, and damage at radius 40. */
+  volatileBlastPad: 120,
+  volatileBlastDamage: 40,
+  volatileYieldMul: 1.5,
+  /** Dense: the laser tier that can cut it, and its yield bonus. */
+  denseMinLaserTier: 2,
+  denseYieldMul: 1.6,
+  /** Magnetic: range it notices ships, its acceleration and its speed cap. */
+  magnetTraitRange: 180,
+  magnetTraitAccel: 6,
+  magnetTraitMaxSpeed: 24,
+  magnetTraitYieldMul: 1.3,
+
   startWallet: { ore: 40, ice: 10, crystal: 0 },
 } as const;

@@ -147,3 +147,45 @@ describe('droneThink hazard reflexes', () => {
     expect(drone.aiTargetId).toBe(clear.id);
   });
 });
+
+/**
+ * A tier-1 assist drone and a parked flagship at the origin, with no pickups
+ * and no rocks.
+ */
+function droneGame(): { state: GameState; drone: Ship } {
+  const state = newGame(1);
+  state.run.pickups = [];
+  state.run.rocks = [];
+  const fs = flagship(state.run);
+  fs.pos = { x: 0, z: 0 };
+  fs.order = null;
+  const drone = makeShip(state.run, state.profile, 'drone', 'Drone-1', { x: 0, z: 0 });
+  drone.aiMode = 'assist';
+  state.run.ships.push(drone);
+  return { state, drone };
+}
+
+describe('droneThink dense targets', () => {
+  it('drops a reused aiTargetId it cannot cut and retargets a plain rock', () => {
+    const { state, drone } = droneGame();
+    const dense = makeRock(state.run, 'ore', 0, { x: 60, z: 0 }, 30, 0, 'dense');
+    const plain = makeRock(state.run, 'ore', 0, { x: 200, z: 0 }, 30, 0);
+    state.run.rocks.push(dense, plain);
+    drone.aiTargetId = dense.id;
+    const ctx = ctxFor(state);
+    droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
+    expect(drone.aiTargetId).toBe(plain.id);
+    expect(drone.beamTargetId).not.toBe(dense.id);
+  });
+
+  it('does not adopt a flagship mine order on a dense rock it cannot cut', () => {
+    const { state, drone } = droneGame();
+    const dense = makeRock(state.run, 'ore', 0, { x: 60, z: 0 }, 30, 0, 'dense');
+    const plain = makeRock(state.run, 'ore', 0, { x: 200, z: 0 }, 30, 0);
+    state.run.rocks.push(dense, plain);
+    flagship(state.run).order = { kind: 'mine', rockId: dense.id };
+    const ctx = ctxFor(state);
+    droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
+    expect(drone.aiTargetId).toBe(plain.id);
+  });
+});

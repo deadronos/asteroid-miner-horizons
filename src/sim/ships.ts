@@ -25,6 +25,7 @@ export function emptyStats(): ShipStats {
     cargoCap: 0,
     dmgMul: 0,
     size: 0,
+    laserTier: 0,
   };
 }
 
@@ -46,6 +47,7 @@ export function writeShipStats(out: ShipStats, ship: Ship, profile: Profile): Sh
   out.cargoCap = h.cargo;
   out.dmgMul = 1;
   out.size = h.size;
+  out.laserTier = 0;
   for (const f of ship.slots) {
     if (!f) continue;
     const tier = f.tier - 1;
