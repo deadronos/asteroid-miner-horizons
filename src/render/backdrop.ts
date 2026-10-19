@@ -90,9 +90,12 @@ export class Backdrop {
     mat.needsUpdate = true;
   }
 
-  /** `halfH` is the current view half-height; stars thin out when zoomed far out. */
-  update(camX: number, camZ: number, halfH: number): void {
-    const fade = Math.min(1, Math.max(0.15, 700 / halfH));
+  /**
+   * `halfH` is the current view half-height; stars thin out when zoomed far out.
+   * `dim` (0..1) scales star opacity, so the warp streaks can take over from them.
+   */
+  update(camX: number, camZ: number, halfH: number, dim = 1): void {
+    const fade = Math.min(1, Math.max(0.15, 700 / halfH)) * dim;
     for (const l of this.layers) {
       l.pts.position.set(camX * l.follow, 0, camZ * l.follow);
       (l.pts.material as THREE.PointsMaterial).opacity = fade;

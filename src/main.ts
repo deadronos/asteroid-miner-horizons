@@ -106,16 +106,16 @@ function frame(now: number): void {
   audio.updateContinuous(state, renderer.view, pauseAudio(paused));
   audio.updateMusic(state);
   renderer.render(state, dt, input.moveMark);
-  hud.frame(dt);
+  hud.frame(dt, renderer.flash);
   hudAcc += dt;
   if (hudAcc >= 0.1) {
     hudAcc = 0;
     audio.consumeLog(state.out.log);
-    hud.refresh(renderer.flash);
+    hud.refresh();
   }
   requestAnimationFrame(frame);
 }
-hud.refresh(0);
+hud.refresh();
 requestAnimationFrame(frame);
 
 // Debug hook for automated checks in the browser console.

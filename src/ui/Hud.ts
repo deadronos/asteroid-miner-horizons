@@ -103,7 +103,10 @@ export class Hud {
   }
 
   /** Called every rendered frame to update the FPS counter. */
-  frame(dt: number): void {
+  /** Per-frame HUD work: the warp white-out (which needs every frame to look smooth) and the FPS counter. */
+  frame(dt: number, warpFlash: number): void {
+    const opacity = warpFlash.toFixed(3);
+    if (this.flash.style.opacity !== opacity) this.flash.style.opacity = opacity;
     if (!this.settings.value.showFps) return;
     this.fpsFrames++;
     this.fpsTime += dt;
@@ -137,7 +140,7 @@ export class Hud {
     this.research.toggle(force);
   }
 
-  refresh(warpFlash: number): void {
+  refresh(): void {
     const state = this.getState();
     for (const line of state.out.log.splice(0)) this.pushLog(line);
     for (const p of this.panels) p.refresh();
@@ -146,7 +149,6 @@ export class Hud {
     this.hazard.classList.toggle('hidden', !banner);
     this.hazard.classList.toggle('active', state.run.hazards.flare?.phase === 'active');
     if (banner) setText(this.hazard, banner);
-    this.flash.style.opacity = warpFlash.toFixed(3);
   }
 
   private pushLog(entry: LogEntry): void {
