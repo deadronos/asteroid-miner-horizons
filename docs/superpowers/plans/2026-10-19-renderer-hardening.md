@@ -147,19 +147,19 @@ Most-likely mistakes first, each with the task that guards it.
 - Test: `tests/renderPerf.test.ts` (or a new file)
 
 **Build:**
-- [ ] An exported helper that forces a list of objects visible, runs a callback, and restores each object's
+- [x] An exported helper that forces a list of objects visible, runs a callback, and restores each object's
       previous `visible` in a `finally`.
-- [ ] In `render()`, when `system.key` changes and after `SystemView.build`, call
+- [x] In `render()`, when `system.key` changes and after `SystemView.build`, call
       `this.gl.compileAsync(this.scene, this.cam.camera)` inside that helper with the playfield groups (system,
       rocks, outposts, ships, fx particles/debris) forced visible. Only the synchronous part needs the visibility;
       restore straight after the call returns. Swallow the promise's rejection (`.catch(() => {})`) so it is never
       unhandled.
-- [ ] Program parameters match: three keys `outputColorSpace` off the target (null target → `outputColorSpace`;
+- [x] Program parameters match: three keys `outputColorSpace` off the target (null target → `outputColorSpace`;
       an `isXRRenderTarget` sRGB target → the same sRGB), so programs compiled for the canvas are the ones the
       composer uses. Confirm, don't assume.
 
 **Tests:**
-- [ ] The helper makes hidden objects visible during the callback and restores both previously hidden and
+- [x] The helper makes hidden objects visible during the callback and restores both previously hidden and
       previously visible objects afterwards, including when the callback throws.
 
 **Done when:** `npm run check` is green. Manual check: `__amh.info().programs` does not grow on the first frame the

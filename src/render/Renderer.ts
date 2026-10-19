@@ -28,6 +28,7 @@ import { RockView } from './rocks';
 import { ShipView } from './shipView';
 import { SystemView } from './systemView';
 import { additive, flat } from './util';
+import { withVisible } from './warmup';
 import { WARP_REST, WARP_TOTAL, type WarpFrame, WarpStreaks, warpFrame } from './warpFx';
 
 /**
@@ -83,6 +84,8 @@ export class Renderer {
   private warpT = WARP_TOTAL;
   private readonly warp: WarpFrame = { ...WARP_REST };
   private streaks = new WarpStreaks();
+  /** Set when a new system is built; the next frame compiles its shaders while the warp plays. */
+  private warmup = false;
   /** The camera's world rectangle this frame (shake included), reused for culling. */
   private readonly cullView: ViewRect = { x: 0, z: 0, halfW: 0, halfH: 0 };
 
@@ -228,6 +231,7 @@ export class Renderer {
     const key = `${sys.name}#${sys.number}`;
     if (this.system.key !== key) {
       this.system.build(sys);
+      this.warmup = true;
       this.flareGlow = 0;
       this.backdrop.setSystem(state.profile.seed + sys.number);
       this.cam.resetSnap();
@@ -272,8 +276,26 @@ export class Renderer {
       },
     );
 
+    if (this.warmup) {
+      this.warmup = false;
+      this.warmShaders();
+    }
+
     if (this.bloomOn && this.composer) this.composer.render(dt);
     else this.gl.render(this.scene, this.cam.camera);
+  }
+
+  /**
+   * Compiles the scene's programs before the playfield is shown, so the first visible frame of a new
+   * system does not stall. Materials are found by a full traverse, but lights are gathered only from
+   * visible objects, and the warp hides system.group, which holds the star's PointLight. Forcing that group
+   * visible gives the programs the same light-count key as the real render. compileAsync's promise is only
+   * polled; `.catch` keeps it from ever rejecting unhandled.
+   */
+  private warmShaders(): void {
+    withVisible([this.system.group], () => {
+      void this.gl.compileAsync(this.scene, this.cam.camera).catch(() => {});
+    });
   }
 
   /**
