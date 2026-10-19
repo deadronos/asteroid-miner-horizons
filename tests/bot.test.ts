@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { botCommands } from '../scripts/bot';
 import { runBot } from '../scripts/harness';
 import { contractReward } from '../src/sim/contracts';
+import { isVariant } from '../src/data/components';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
 import { cometPathEscape, inFlareZone } from '../src/sim/hazards';
@@ -53,6 +54,33 @@ describe('balance bot', () => {
     expect(tiers()).toBeGreaterThan(start);
     expect(at).toBeGreaterThanOrEqual(0);
     expect(at).toBeLessThanOrEqual(5);
+  });
+
+  it('installs the default variant into the one empty slot', () => {
+    const s = newGame(1000);
+    const fs = flagship(s.run);
+    fs.pos = { ...s.run.system.station.pos };
+    fs.order = null;
+    fs.hullId = 'excavator'; // six slots, so every install but the laser is filled
+    fs.slots = [
+      { type: 'cargo', variant: 'standard', tier: 1 },
+      { type: 'sensor', variant: 'standard', tier: 1 },
+      { type: 'engine', variant: 'ion', tier: 1 },
+      { type: 'armor', variant: 'standard', tier: 1 },
+      { type: 'shield', variant: 'standard', tier: 1 },
+      null,
+    ];
+    fs.hull = shipStats(fs, s.profile).maxHull;
+    s.run.contracts.active = null;
+    s.run.contracts.offers = [];
+    s.run.pickups = [];
+    // Funded for the install (31 ore) but not for the 80-ore drone it would buy first.
+    s.run.bank = { ore: 40, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+
+    const cmd = only(botCommands(s, { warp: false }));
+    expect(cmd).toEqual({ t: 'install', shipId: fs.id, slot: 5, comp: 'laser', variant: 'focused' });
+    if (cmd.t !== 'install') throw new Error(`expected an install, got ${cmd.t}`);
+    expect(isVariant(cmd.comp, cmd.variant)).toBe(true);
   });
 
   it('refines fuel without skipping the flagship order', () => {
