@@ -16,7 +16,20 @@ import { tick } from '../src/sim/update';
 
 const DT = 1 / 60;
 
-const layout = (rocks: Rock[]) => rocks.map((r) => [r.id, r.kind, r.pos.x, r.pos.z, r.radius, r.hp] as const);
+/** A comparable layout row: id, kind, x, z, radius, hp. */
+type LayoutRow = readonly [number, string, number, number, number, number];
+
+/**
+ * libm's `sin`/`pow` differ by an ulp between platforms (macOS vs Linux CI), so
+ * positions and hp are compared at 1e-6 — far tighter than any gameplay effect.
+ */
+const round6 = (n: number): number => Math.round(n * 1e6) / 1e6;
+
+const normalize = (rows: readonly LayoutRow[]): readonly LayoutRow[] =>
+  rows.map(([id, kind, x, z, radius, hp]) => [id, kind, round6(x), round6(z), round6(radius), round6(hp)] as const);
+
+const layout = (rocks: Rock[]): readonly LayoutRow[] =>
+  normalize(rocks.map((r) => [r.id, r.kind, r.pos.x, r.pos.z, r.radius, r.hp] as const));
 
 describe('trait data', () => {
   it('has three distinct known traits with colours', () => {
@@ -59,7 +72,7 @@ describe('trait rolling leaves the run untouched', () => {
   it('does not draw from run.rng and keeps the rock layout', () => {
     const run = newRun(newProfile(99));
     expect(run.rng.s).toBe(BASE_RNG_S);
-    expect(layout(run.rocks)).toEqual(BASE_LAYOUT);
+    expect(layout(run.rocks)).toEqual(normalize(BASE_LAYOUT as readonly LayoutRow[]));
   });
 
   it('is deterministic across two runs of one profile', () => {
