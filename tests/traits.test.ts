@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { makeRng } from '../src/core/rng';
+import type { Vec2 } from '../src/core/vec';
 import { TRAITS, TRAIT_IDS, type RockTrait } from '../src/data/traits';
 import { TUNING } from '../src/data/tuning';
 import { DEFAULT_ASSISTS } from '../src/sim/assists';
@@ -11,6 +12,7 @@ import { workRock, type TickCtx } from '../src/sim/pilot';
 import { emptyStats, makeShip, shipStats, type ShipStats } from '../src/sim/ships';
 import { canMine, rollTrait, traitYield, volatileBlastRadius, volatileSafeDistance } from '../src/sim/traits';
 import type { GameState, Rock, Run, Ship } from '../src/sim/types';
+import { tick } from '../src/sim/update';
 
 const DT = 1 / 60;
 
@@ -201,5 +203,61 @@ describe('volatile stand-off', () => {
     const throttle = Math.min(1, (d0 - stand) / brake + 0.08);
     expect(throttle).toBeLessThan(1); // saturated here would hide the stand-off
     expect(Math.hypot(ship.vel.x, ship.vel.z)).toBeCloseTo(throttle * st.accel * DT, 6);
+  });
+});
+
+/** One rock at the origin plus one alive ship at `shipPos`, with every belt rock cleared. */
+function magnetSetup(trait: RockTrait | null, shipPos: Vec2) {
+  const state = newGame(7);
+  const { run } = state;
+  run.rng = makeRng(4242); // fixed radius for both traits
+  const rock = makeRock(run, 'ore', 1, { x: 0, z: 0 }, null, 0, trait);
+  run.rocks = [rock];
+  const ship = run.ships[0]!;
+  ship.pos = { ...shipPos };
+  ship.vel = { x: 0, z: 0 };
+  ship.respawn = 0;
+  return { state, rock };
+}
+
+/** One no-input tick, which drives the rock loop. */
+function traitTick(state: GameState, dt = DT): void {
+  tick(state, dt, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+}
+
+describe('magnetic drift', () => {
+  it('pulls a magnetic rock toward a ship within range', () => {
+    const { state, rock } = magnetSetup('magnetic', { x: 100, z: 0 });
+    traitTick(state);
+    // Orbit is tangential only at the origin, so the whole velocity is the pull.
+    expect(rock.vel.x).toBeCloseTo(TUNING.magnetTraitAccel * DT, 6);
+    expect(rock.vel.z).toBeCloseTo(0, 6);
+    expect(rock.vel.x).toBeGreaterThan(0);
+  });
+
+  it('caps a magnetic rock at magnetTraitMaxSpeed', () => {
+    const { state, rock } = magnetSetup('magnetic', { x: 100, z: 0 });
+    rock.vel = { x: 1000, z: 0 };
+    traitTick(state);
+    expect(Math.hypot(rock.vel.x, rock.vel.z)).toBeCloseTo(TUNING.magnetTraitMaxSpeed, 6);
+  });
+
+  it('leaves a plain rock and a distant ship alone', () => {
+    const plain = magnetSetup(null, { x: 100, z: 0 });
+    traitTick(plain.state);
+    expect(plain.rock.vel).toEqual({ x: 0, z: 0 });
+
+    // Beyond range there is no pull, and an existing speed is not clamped either.
+    const far = magnetSetup('magnetic', { x: TUNING.magnetTraitRange + 100, z: 0 });
+    far.rock.vel = { x: 1000, z: 0 };
+    traitTick(far.state);
+    expect(far.rock.vel.x).toBeGreaterThan(TUNING.magnetTraitMaxSpeed);
+  });
+
+  it('does not NaN when the rock sits on the ship', () => {
+    const { state, rock } = magnetSetup('magnetic', { x: 0, z: 0 });
+    traitTick(state);
+    expect(Number.isFinite(rock.vel.x)).toBe(true);
+    expect(Number.isFinite(rock.vel.z)).toBe(true);
   });
 });

@@ -58,6 +58,37 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     const tz = (r.pos.x / d) * TUNING.rockOrbitSpeed;
     r.vel.x += (tx - r.vel.x) * settle;
     r.vel.z += (tz - r.vel.z) * settle;
+
+    // Magnetic rocks drift toward the nearest live ship in range.
+    if (r.trait === 'magnetic') {
+      let bestD = -1; // -1 marks "no ship in range"
+      let bestDx = 0;
+      let bestDz = 0;
+      for (let i = 0; i < run.ships.length; i++) {
+        const s = run.ships[i]!;
+        if (!isAlive(s)) continue;
+        const dx = s.pos.x - r.pos.x;
+        const dz = s.pos.z - r.pos.z;
+        const sd = Math.hypot(dx, dz);
+        if (sd < TUNING.magnetTraitRange && (bestD < 0 || sd < bestD)) {
+          bestD = sd;
+          bestDx = dx;
+          bestDz = dz;
+        }
+      }
+      // Guard the divide: a rock sitting exactly on its ship must stay finite.
+      if (bestD > 1e-6) {
+        r.vel.x += (bestDx / bestD) * TUNING.magnetTraitAccel * dt;
+        r.vel.z += (bestDz / bestD) * TUNING.magnetTraitAccel * dt;
+        const speed = Math.hypot(r.vel.x, r.vel.z);
+        if (speed > TUNING.magnetTraitMaxSpeed) {
+          const k = TUNING.magnetTraitMaxSpeed / speed;
+          r.vel.x *= k;
+          r.vel.z *= k;
+        }
+      }
+    }
+
     r.pos.x += r.vel.x * dt;
     r.pos.z += r.vel.z * dt;
   }

@@ -96,8 +96,8 @@ export const TUNING = {
   denseMinLaserTier: 2,
   denseYieldMul: 1.6,
   /** Magnetic: range it notices ships, its acceleration and its speed cap. */
-  magnetTraitRange: 300,
-  magnetTraitAccel: 10,
+  magnetTraitRange: 180,
+  magnetTraitAccel: 6,
   magnetTraitMaxSpeed: 24,
   magnetTraitYieldMul: 1.3,
 
