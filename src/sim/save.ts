@@ -57,102 +57,86 @@ export function deserialize(json: string, opts?: MigrateOptions): GameState | nu
   }
 }
 
+/** True for any non-null object (arrays included); narrows so fields can be read as `unknown`. */
+const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object';
+const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
+const isVec = (p: unknown): boolean => isObj(p) && finite(p.x) && finite(p.z);
+/** True when `r` is a serialised `Rng`: an object with a numeric state. */
+const isRng = (r: unknown): boolean => isObj(r) && typeof r.s === 'number';
+
 /** True when `w` is an object with a number under every `RESOURCES` key. */
 function isWallet(w: unknown): boolean {
-  return !!w && typeof w === 'object' && RESOURCES.every((r) => typeof (w as Record<string, unknown>)[r] === 'number');
+  return isObj(w) && RESOURCES.every((r) => typeof w[r] === 'number');
 }
 
 /** True when every entry is a refine job the tick can process: a known recipe and sane numeric counters. */
 function isQueue(queue: unknown[]): boolean {
-  return queue.every((j) => {
-    const job = j as { id?: unknown; recipe?: unknown; count?: unknown; total?: unknown; progress?: unknown };
-    return (
-      !!job &&
-      typeof job === 'object' &&
-      typeof job.id === 'number' &&
-      Number.isFinite(job.id) &&
+  return queue.every(
+    (job) =>
+      isObj(job) &&
+      finite(job.id) &&
       typeof job.recipe === 'string' &&
       Object.hasOwn(RECIPES, job.recipe) &&
-      typeof job.count === 'number' &&
-      Number.isFinite(job.count) &&
+      finite(job.count) &&
       job.count >= 1 &&
-      typeof job.total === 'number' &&
-      Number.isFinite(job.total) &&
+      finite(job.total) &&
       job.total >= job.count &&
-      typeof job.progress === 'number' &&
-      Number.isFinite(job.progress) &&
-      job.progress >= 0
-    );
-  });
+      finite(job.progress) &&
+      job.progress >= 0,
+  );
 }
-
-const finite = (n: unknown): boolean => typeof n === 'number' && Number.isFinite(n);
-const isVec = (p: unknown): boolean => !!p && finite((p as { x?: unknown }).x) && finite((p as { z?: unknown }).z);
 
 /** True when a rock carries no trait, or one the sim can actually run. */
 function isTrait(r: unknown): boolean {
   // A corrupt save can put a non-object (e.g. `null`) in the rocks array.
-  if (!r || typeof r !== 'object') return false;
-  const trait = (r as { trait?: unknown }).trait;
+  if (!isObj(r)) return false;
+  const trait = r.trait;
   return trait === undefined || (typeof trait === 'string' && Object.hasOwn(TRAITS, trait));
 }
 
 /** True when one slot is empty, or a component variant at a real tier. */
 function isFitted(f: unknown): boolean {
   if (f === null) return true;
-  if (!f || typeof f !== 'object') return false;
-  const slot = f as { type?: unknown; variant?: unknown; tier?: unknown };
+  if (!isObj(f)) return false;
   return (
-    typeof slot.type === 'string' &&
-    Object.hasOwn(COMPONENTS, slot.type) &&
-    isVariant(slot.type as ComponentId, slot.variant) &&
-    (slot.tier === 1 || slot.tier === 2 || slot.tier === 3)
+    typeof f.type === 'string' &&
+    Object.hasOwn(COMPONENTS, f.type) &&
+    isVariant(f.type as ComponentId, f.variant) &&
+    (f.tier === 1 || f.tier === 2 || f.tier === 3)
   );
 }
 
 /** True when `s` is a ship whose slot list the tick can derive stats from. */
 function isShipSlots(s: unknown): boolean {
-  if (!s || typeof s !== 'object') return false;
-  const slots = (s as { slots?: unknown }).slots;
-  return Array.isArray(slots) && slots.every(isFitted);
+  return isObj(s) && Array.isArray(s.slots) && s.slots.every(isFitted);
 }
 
 /** True when `h` has what the hazard tick reads: an RNG state, finite timers, and well-formed pending hazards. */
 function isHazards(h: unknown): boolean {
-  if (!h || typeof h !== 'object') return false;
-  const x = h as Record<string, unknown>;
-  const rng = x.rng as { s?: unknown } | null;
-  const comet = x.comet as { from?: unknown; vel?: unknown; belt?: unknown; timeLeft?: unknown } | null;
-  const flare = x.flare as { phase?: unknown; timeLeft?: unknown } | null;
+  if (!isObj(h)) return false;
+  const { comet, flare } = h;
   return (
-    !!rng &&
-    typeof rng === 'object' &&
-    typeof rng.s === 'number' &&
-    finite(x.cometTimer) &&
-    finite(x.flareTimer) &&
-    finite(x.comets) &&
-    finite(x.flares) &&
+    isRng(h.rng) &&
+    finite(h.cometTimer) &&
+    finite(h.flareTimer) &&
+    finite(h.comets) &&
+    finite(h.flares) &&
     (comet === null ||
-      (typeof comet === 'object' &&
-        isVec(comet.from) &&
-        isVec(comet.vel) &&
-        finite(comet.belt) &&
-        finite(comet.timeLeft))) &&
+      (isObj(comet) && isVec(comet.from) && isVec(comet.vel) && finite(comet.belt) && finite(comet.timeLeft))) &&
     (flare === null ||
-      (typeof flare === 'object' && (flare.phase === 'warning' || flare.phase === 'active') && finite(flare.timeLeft)))
+      (isObj(flare) && (flare.phase === 'warning' || flare.phase === 'active') && finite(flare.timeLeft)))
   );
 }
 
 /** True when `a` has what the outpost tick reads, and every outpost sits on a distinct rock of this run. */
 function isAutomation(a: unknown, rocks: unknown[]): boolean {
-  if (!a || typeof a !== 'object') return false;
-  const x = a as { outposts?: unknown; extracted?: unknown };
-  if (!Array.isArray(x.outposts) || !finite(x.extracted)) return false;
+  if (!isObj(a)) return false;
+  const { outposts } = a;
+  if (!Array.isArray(outposts) || !finite(a.extracted)) return false;
   const ids = new Set(rocks.map((r) => (r as { id?: unknown }).id));
   const hosts = new Set<unknown>();
-  return x.outposts.every((o) => {
-    if (!o || typeof o !== 'object') return false;
-    const op = o as { rockId?: unknown; kind?: unknown; pos?: unknown; stored?: unknown; reserve?: unknown };
+  return outposts.every((op) => {
+    if (!isObj(op)) return false;
     if (!ids.has(op.rockId) || hosts.has(op.rockId)) return false;
     hosts.add(op.rockId);
     return (
@@ -167,13 +151,51 @@ function isAutomation(a: unknown, rocks: unknown[]): boolean {
 
 /** True when `p` has a finite number under every stat key and a duplicate-free list of known achievements. */
 function isLifetime(p: Profile): boolean {
-  const stats = p.stats as Record<string, unknown> | null | undefined;
-  if (!stats || typeof stats !== 'object' || !STAT_KEYS.every((k) => finite(stats[k]))) return false;
+  const stats = p.stats as unknown;
+  if (!isObj(stats) || !STAT_KEYS.every((k) => finite(stats[k]))) return false;
   const got = p.achievements as unknown;
   return (
     Array.isArray(got) &&
     got.every((a) => typeof a === 'string' && Object.hasOwn(ACHIEVEMENTS, a)) &&
     new Set(got).size === got.length
+  );
+}
+
+/** True when `p` has a seed, a finite level for every perk, and well-formed lifetime stats. */
+function isProfile(p: Profile | undefined): p is Profile {
+  if (!p || typeof p.seed !== 'number' || !isObj(p.perks)) return false;
+  // Stats, costs and the refinery read every perk level, so each must be a finite number.
+  if (!PERK_IDS.every((k) => finite(p.perks[k]))) return false;
+  // The tick adds to every stat and the Stats tab looks up every unlocked achievement.
+  return isLifetime(p);
+}
+
+/** True when the contract board has everything the tick walks: offers, the id counter and the RNG state. */
+function isBoard(b: unknown): boolean {
+  return isObj(b) && Array.isArray(b.offers) && typeof b.nextId === 'number' && isRng(b.rng);
+}
+
+/**
+ * True when the refinery's queue can be processed and its `produced` totals read (by the HUD and balance report),
+ * and no queued job's id could be reused.
+ */
+function isRefinery(r: unknown): boolean {
+  if (!isObj(r) || Array.isArray(r) || !Array.isArray(r.queue)) return false;
+  const produced = r.produced;
+  if (!isObj(produced) || Array.isArray(produced)) return false;
+  if (RECIPE_IDS.some((id) => typeof produced[id] !== 'number')) return false;
+  if (!isQueue(r.queue)) return false;
+  // New jobs must not reuse a queued job's id, or a cancel could hit the wrong one.
+  const { nextId } = r;
+  return finite(nextId) && !(r.queue as { id: number }[]).some((j) => j.id >= nextId);
+}
+
+/** True when the tick indexes MODIFIERS by every entry: all known, none duplicated (a duplicate applies twice). */
+function isModifierList(mods: unknown): boolean {
+  return (
+    Array.isArray(mods) &&
+    mods.every((m) => typeof m === 'string' && Object.hasOwn(MODIFIERS, m)) &&
+    new Set(mods).size === mods.length
   );
 }
 
@@ -183,53 +205,21 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!migrated) return null;
   // migrate() only guarantees the version envelope; validate the payload shape.
   const { profile, run } = migrated as { profile?: Profile; run?: Run };
-  if (!profile || typeof profile.seed !== 'number' || !profile.perks || typeof profile.perks !== 'object') return null;
-  // Stats, costs and the refinery read every perk level, so each must be a finite number.
-  if (!PERK_IDS.every((p) => finite(profile.perks[p]))) return null;
-  // The tick adds to every stat and the Stats tab looks up every unlocked achievement.
-  if (!isLifetime(profile)) return null;
+  if (!isProfile(profile)) return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
   // A trait the sim doesn't know would drive behaviour no rock can roll.
   if (!run.rocks.every(isTrait)) return null;
-  // The tick indexes MODIFIERS by key, so every entry must be a known modifier;
-  // a duplicate would apply its effect twice.
-  const mods = run.system.modifiers as unknown;
-  if (!Array.isArray(mods) || !mods.every((m) => typeof m === 'string' && Object.hasOwn(MODIFIERS, m))) return null;
-  if (new Set(mods).size !== mods.length) return null;
+  if (!isModifierList(run.system.modifiers)) return null;
   // A wallet missing a resource column (e.g. alloy) would poison every later
   // read with NaN, so the bank and each ship's cargo must be complete.
   if (!isWallet(run.bank) || !run.ships.every((s) => isWallet(s.cargo))) return null;
   // The tick derives each ship's stats from its fitted slots, so every one must
   // name a known component variant at a real tier.
   if (!run.ships.every(isShipSlots)) return null;
-  // The tick walks the board, so reject anything it cannot handle: offers, the
-  // id counter and the RNG state must all be present.
-  const board = run.contracts as { offers?: unknown; nextId?: unknown; rng?: { s?: unknown } | null };
-  if (
-    !board ||
-    typeof board !== 'object' ||
-    !Array.isArray(board.offers) ||
-    typeof board.nextId !== 'number' ||
-    typeof board.rng !== 'object' ||
-    !board.rng ||
-    typeof board.rng.s !== 'number'
-  )
-    return null;
+  if (!isBoard(run.contracts)) return null;
   if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
-  // The tick will process the queue, and the HUD and balance report read
-  // `produced`, so both must be well-formed before the run is accepted.
-  const refinery = run.refinery as { queue?: unknown; nextId?: unknown; produced?: unknown };
-  if (!refinery || typeof refinery !== 'object' || Array.isArray(refinery) || !Array.isArray(refinery.queue))
-    return null;
-  const produced = refinery.produced as Record<string, unknown> | null;
-  if (!produced || typeof produced !== 'object' || Array.isArray(produced)) return null;
-  if (RECIPE_IDS.some((r) => typeof produced[r] !== 'number')) return null;
-  if (!isQueue(refinery.queue)) return null;
-  // New jobs must not reuse a queued job's id, or a cancel could hit the wrong one.
-  const { nextId } = refinery;
-  if (typeof nextId !== 'number' || !Number.isFinite(nextId)) return null;
-  if ((refinery.queue as { id: number }[]).some((j) => j.id >= nextId)) return null;
+  if (!isRefinery(run.refinery)) return null;
   if (!isHazards(run.hazards)) return null;
   if (!isAutomation(run.automation, run.rocks)) return null;
   return { version: migrated.version, profile, run, out: { fx: [], log: [] } };
@@ -300,7 +290,7 @@ export function parseImport(
     return { ok: false, error: 'Not valid JSON.' };
   }
   const rec = data as { format?: string; savedAt?: number; state?: unknown };
-  const isRecord = rec && typeof rec === 'object' && rec.format === FORMAT;
+  const isRecord = isObj(rec) && rec.format === FORMAT;
   const payload = isRecord ? rec.state : data;
   const state = fromData(payload, opts);
   if (!state) {
