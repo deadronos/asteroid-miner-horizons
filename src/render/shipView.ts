@@ -111,6 +111,18 @@ export class ShipView {
   private visuals = new Map<number, Visual>();
   private geos = new Map<HullId, THREE.BufferGeometry>();
   private hullMats = new Map<HullId, THREE.MeshLambertMaterial>();
+  /**
+   * Shared by every ship: each would write the same `glow`-scaled colour, so
+   * `update` writes it once per frame instead. Never disposed, like `hullMats`.
+   */
+  private flameMat = additive(0xff8a3a, 0.9);
+  private beamMat = additive(0xff6a4a, 0.95);
+  private tipMat = new THREE.SpriteMaterial({
+    map: glowTexture,
+    color: 0xffb070,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
   /** HDR boost for flames and beams while bloom is on (1 = as authored). */
   glow = 1;
   /** Per-frame scratch, reused so `update` allocates no collections. */
@@ -141,7 +153,7 @@ export class ShipView {
     const root = new THREE.Group();
     const body = new THREE.Group();
     body.add(new THREE.Mesh(this.geo(ship.hullId), this.hullMat(ship.hullId)));
-    const flame = new THREE.Mesh(flameGeo, additive(0xff8a3a, 0.9));
+    const flame = new THREE.Mesh(flameGeo, this.flameMat);
     flame.position.set(-h.size * 0.6, 1, 0);
     body.add(flame);
     const layout = fitLayout(ship.slots, h.size);
@@ -163,16 +175,9 @@ export class ShipView {
       root.add(b);
     }
 
-    const beam = new THREE.Mesh(unitPlane, additive(0xff6a4a, 0.95));
+    const beam = new THREE.Mesh(unitPlane, this.beamMat);
     const beamGlow = new THREE.Mesh(unitPlane, beamGlowMat);
-    const tip = new THREE.Sprite(
-      new THREE.SpriteMaterial({
-        map: glowTexture,
-        color: 0xffb070,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }),
-    );
+    const tip = new THREE.Sprite(this.tipMat);
     for (const o of [beam, beamGlow, tip]) {
       o.visible = false;
       o.renderOrder = 15;
@@ -216,7 +221,7 @@ export class ShipView {
   private remove(id: number, v: Visual): void {
     this.group.remove(v.root, v.beam, v.beamGlow, v.tip);
     this.visuals.delete(id);
-    for (const o of [v.flame, v.shield, v.select, v.hpBar, v.beam, v.tip]) (o.material as THREE.Material).dispose();
+    for (const o of [v.shield, v.select, v.hpBar]) (o.material as THREE.Material).dispose();
   }
 
   /** Flashes the shield bubble of the ship closest to an impact point. */
@@ -250,6 +255,9 @@ export class ShipView {
     const rockById = this.rockById;
     rockById.clear();
     if (run.ships.some((s) => s.beamOn && s.beamTargetId != null)) for (const r of run.rocks) rockById.set(r.id, r);
+    this.flameMat.color.setHex(0xff8a3a).multiplyScalar(this.glow);
+    this.beamMat.color.setHex(0xff6a4a).multiplyScalar(this.glow);
+    this.tipMat.color.setHex(0xffb070).multiplyScalar(this.glow);
 
     for (const ship of run.ships) {
       seen.add(ship.id);
@@ -277,7 +285,6 @@ export class ShipView {
 
       const flick = 0.75 + Math.random() * 0.5;
       v.flame.visible = ship.thrusting;
-      (v.flame.material as THREE.MeshBasicMaterial).color.setHex(0xff8a3a).multiplyScalar(this.glow);
       v.flame.scale.set(flick * v.layout.flameLength, 1, (0.8 + Math.random() * 0.3) * v.layout.flameWidth);
 
       if (ship.shield < v.shieldPrev - 0.5) v.hitFlash = 1;
@@ -333,8 +340,6 @@ export class ShipView {
         v.beamGlow.scale.set(L, 1, Math.max(5, 8 * wpp) * pulse);
         v.tip.position.set(tx, 22, tz);
         v.tip.scale.setScalar(Math.max(18, 26 * wpp) * (0.8 + Math.random() * 0.4));
-        (v.beam.material as THREE.MeshBasicMaterial).color.setHex(0xff6a4a).multiplyScalar(this.glow);
-        (v.tip.material as THREE.SpriteMaterial).color.setHex(0xffb070).multiplyScalar(this.glow);
         v.beam.visible = v.beamGlow.visible = v.tip.visible = true;
         hits.push({ x: tx, z: tz, ship });
       } else {

@@ -48,9 +48,23 @@ const meshesIn = (g: THREE.Object3D): THREE.Mesh[] => {
 
 const materialOf = (o: THREE.Object3D): THREE.Material => (o as THREE.Mesh).material as THREE.Material;
 
-/** The six materials `ShipView.remove` must dispose for a ship. */
-const perShipMats = (p: Parts): THREE.Material[] =>
-  [p.flame, p.shield, p.select, p.hpBar, p.beam, p.tip].map((o) => materialOf(o));
+/** The three materials `ShipView.remove` must dispose for a ship. */
+const perShipMats = (p: Parts): THREE.Material[] => [p.shield, p.select, p.hpBar].map((o) => materialOf(o));
+
+/** Materials every ship shares, so none of them is ever disposed on removal. */
+const sharedMatsOf = (p: Parts): THREE.Material[] =>
+  [p.barBg, p.cargoBar, p.beamGlow, p.flame, p.beam, p.tip].map((o) => materialOf(o));
+
+const colorOf = (o: THREE.Object3D): THREE.Color => (materialOf(o) as THREE.MeshBasicMaterial).color;
+
+/** Distinct materials under the view's group. */
+const materialCount = (view: ShipView): number => {
+  const mats = new Set<THREE.Material>();
+  view.group.traverse((o) => {
+    if (o instanceof THREE.Mesh || o instanceof THREE.Sprite) mats.add(o.material as THREE.Material);
+  });
+  return mats.size;
+};
 
 /** A game with the flagship plus two drones, one laser each, after a first frame. */
 function setup(): { state: GameState; view: ShipView; a: Ship; b: Ship } {
@@ -72,7 +86,7 @@ describe('ShipView GPU disposal', () => {
 
     const perShip = perShipMats(pa);
     const hull = pa.body.children[0] as THREE.Mesh;
-    const sharedMats = [pa.barBg, pa.cargoBar, pa.beamGlow].map((o) => materialOf(o));
+    const sharedMats = sharedMatsOf(pa);
     sharedMats.push(hull.material as THREE.Material);
     const sharedGeos = [
       hull.geometry,
@@ -114,7 +128,7 @@ describe('ShipView GPU disposal', () => {
       ...perShip,
       ...fitting.map((m) => m.geometry),
       ...fitting.map((m) => materialOf(m)),
-      ...[before.barBg, before.cargoBar, before.beamGlow].map((o) => materialOf(o)),
+      ...sharedMatsOf(before),
     ].map((o) => vi.spyOn(o, 'dispose'));
 
     a.slots[0] = null;
@@ -130,6 +144,7 @@ describe('ShipView GPU disposal', () => {
     const before = partsOf(view, a.id);
     const hullMat = materialOf(before.body.children[0]!);
     const hullSpy = vi.spyOn(hullMat, 'dispose');
+    const sharedSpies = sharedMatsOf(before).map((m) => vi.spyOn(m, 'dispose'));
     const perShipSpies = perShipMats(before).map((m) => vi.spyOn(m, 'dispose'));
 
     a.hullId = 'hauler';
@@ -139,9 +154,10 @@ describe('ShipView GPU disposal', () => {
     expect(after).not.toBe(before);
     for (const spy of perShipSpies) expect(spy).toHaveBeenCalledTimes(1);
     expect(hullSpy).not.toHaveBeenCalled();
+    for (const spy of sharedSpies) expect(spy).not.toHaveBeenCalled();
   });
 
-  it('shares the hoisted geometries and never-written materials between ships', () => {
+  it('shares the hoisted geometries and the shared materials between ships', () => {
     const { view, a, b } = setup();
     const pa = partsOf(view, a.id);
     const pb = partsOf(view, b.id);
@@ -153,8 +169,31 @@ describe('ShipView GPU disposal', () => {
     expect(pa.barBg.material).toBe(pb.barBg.material);
     expect(pa.cargoBar.material).toBe(pb.cargoBar.material);
     expect(pa.beamGlow.material).toBe(pb.beamGlow.material);
+    expect(pa.flame.material).toBe(pb.flame.material);
+    expect(pa.beam.material).toBe(pb.beam.material);
+    expect(pa.tip.material).toBe(pb.tip.material);
     expect((pa.body.children[0] as THREE.Mesh).material).toBe((pb.body.children[0] as THREE.Mesh).material);
-    expect(pa.flame.material).not.toBe(pb.flame.material);
+    expect(pa.shield.material).not.toBe(pb.shield.material);
+    expect(pa.select.material).not.toBe(pb.select.material);
     expect(pa.hpBar.material).not.toBe(pb.hpBar.material);
+  });
+
+  it('adds three materials per extra ship', () => {
+    const { state, view } = setup();
+    const before = materialCount(view);
+    for (let i = 0; i < 4; i++)
+      state.run.ships.push(makeShip(state.run, state.profile, 'drone', `D${i}`, { x: 0, z: 0 }));
+    view.update(state, 0, DT, 1, false);
+    expect(materialCount(view) - before).toBe(4 * 3);
+  });
+
+  it('writes the glow-scaled colour to the shared materials even with no ship firing or thrusting', () => {
+    const { state, view, a } = setup();
+    const p = partsOf(view, a.id);
+    view.glow = 2;
+    view.update(state, 0, DT, 1, false);
+    expect(colorOf(p.flame).equals(new THREE.Color(0xff8a3a).multiplyScalar(2))).toBe(true);
+    expect(colorOf(p.beam).equals(new THREE.Color(0xff6a4a).multiplyScalar(2))).toBe(true);
+    expect(colorOf(p.tip).equals(new THREE.Color(0xffb070).multiplyScalar(2))).toBe(true);
   });
 });
