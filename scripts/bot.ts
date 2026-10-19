@@ -33,7 +33,7 @@ import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
 import { isHauler, outpostAt, outpostBlock } from '../src/sim/automation';
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
-import { batchCost, queuedOutput, refineBlock } from '../src/sim/refining';
+import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
 import { cargoFree, flagship, isAlive, isFlagship, shipStats, type ShipStats } from '../src/sim/ships';
 import { canMine } from '../src/sim/traits';
 import type { GameState, Rock, Run, Ship } from '../src/sim/types';
@@ -229,10 +229,21 @@ function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number): C
   return stale ? [{ t: 'stop', shipId: fs.id }] : [];
 }
 
+/** Refinery perks are researched only while the next warp's fuel would take longer than this to refine. */
+const REFINE_SLOW_SEC = 60;
+const REFINERY_PERKS: ReadonlySet<PerkId> = new Set(['furnace', 'hopper']);
+
+/** Seconds the refinery needs to crack the next warp's fuel at the current perk levels. */
+const warpRefineSec = (state: GameState): number =>
+  (warpCost(state) / batchesPerCycle(state.profile)) * cycleTime('fuel', state.profile);
+
+/** Cheapest affordable perk; refinery perks only once refining the warp's fuel has become slow. */
 function nextPerk(state: GameState): PerkId | null {
+  const refineSlow = warpRefineSec(state) > REFINE_SLOW_SEC;
   let pick: PerkId | null = null;
   let pickCost = Infinity;
   for (const p of PERK_ORDER) {
+    if (!refineSlow && REFINERY_PERKS.has(p)) continue;
     const c = perkCost(state, p);
     if (c != null && c <= state.profile.data && c < pickCost) {
       pick = p;
