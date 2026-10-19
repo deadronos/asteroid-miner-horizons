@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { newStats } from '../src/sim/achievements';
 import { newAutomation } from '../src/sim/automation';
 import { defaultVariant } from '../src/data/components';
 import { RESOURCES } from '../src/data/resources';
@@ -11,7 +12,7 @@ import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
-// Real saves frozen at versions 2 to 9 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 10 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
@@ -21,6 +22,7 @@ import V6_FIXTURE from './fixtures/save-v6.json?raw';
 import V7_FIXTURE from './fixtures/save-v7.json?raw';
 import V8_FIXTURE from './fixtures/save-v8.json?raw';
 import V9_FIXTURE from './fixtures/save-v9.json?raw';
+import V10_FIXTURE from './fixtures/save-v10.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -56,7 +58,12 @@ const currentRun = () => {
 /** A valid current-version save, with the given run overrides applied on top. */
 const saveCurrent = (run: Record<string, unknown> = {}): SaveData => {
   const fixture = v3FixtureState();
-  const profile = { ...fixture.profile, perks: { ...fixture.profile.perks, furnace: 0, hopper: 0 } };
+  const profile = {
+    ...fixture.profile,
+    perks: { ...fixture.profile.perks, furnace: 0, hopper: 0 },
+    stats: newStats(),
+    achievements: [],
+  };
   return { ...fixture, profile, version: SAVE_VERSION, run: { ...currentRun(), ...run } } as unknown as SaveData;
 };
 
@@ -632,5 +639,68 @@ describe('refinery perks migration to v10', () => {
       const profile = { ...loaded.profile, perks: { ...loaded.profile.perks, furnace } };
       expect(parseImport(JSON.stringify({ version: SAVE_VERSION, profile, run: loaded.run })).ok).toBe(false);
     }
+  });
+});
+
+describe('lifetime stats migration to v11', () => {
+  it.each([
+    ['v2', FIXTURE],
+    ['v9', V9_FIXTURE],
+    ['v10', V10_FIXTURE],
+  ])('loads the %s fixture with complete stats and no achievements', (_label, raw) => {
+    const state = loadFrozen(raw);
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(Object.keys(state.profile.stats)).toEqual(Object.keys(newStats()));
+    expect(state.profile.achievements).toEqual([]);
+  });
+
+  it('seeds the stats from what the v10 save already records', () => {
+    const before = JSON.parse(V10_FIXTURE).state;
+    const { stats } = loadFrozen(V10_FIXTURE).profile;
+    expect(stats).toEqual({
+      ...newStats(),
+      time: before.run.time,
+      warps: 2,
+      perks: 4,
+      contracts: 3,
+      refined: 58,
+      comets: 4,
+    });
+  });
+
+  it('keeps the v10 fixture otherwise unchanged', () => {
+    const before = JSON.parse(V10_FIXTURE).state;
+    const loaded = loadFrozen(V10_FIXTURE);
+    // toEqual treats an undefined field as absent, so this compares everything else.
+    expect({ ...loaded.profile, stats: undefined, achievements: undefined }).toEqual(before.profile);
+    expect(loaded.run).toEqual(before.run);
+  });
+
+  it('unlocks what the seeded stats already reach on the first tick', () => {
+    const state = loadFrozen(V10_FIXTURE);
+    const commands: Command[] = [];
+    tick(state, 1 / 60, { thrust: { x: 0, z: 0 }, commands }, new SimIndex());
+    expect(state.profile.achievements).toEqual(['firstJump', 'contractor']);
+  });
+
+  it('rejects malformed stats or achievements', () => {
+    const loaded = loadFrozen(V10_FIXTURE);
+    const bad = [
+      { stats: undefined },
+      { stats: null },
+      { stats: { ...loaded.profile.stats, warps: 'x' } },
+      { stats: { ...loaded.profile.stats, rocksBroken: Infinity } },
+      { stats: { ...loaded.profile.stats, time: undefined } },
+      { achievements: undefined },
+      { achievements: ['notAnAchievement'] },
+      { achievements: ['firstJump', 'firstJump'] },
+      { achievements: [7] },
+    ];
+    for (const patch of bad) {
+      const profile = { ...loaded.profile, ...patch };
+      expect(parseImport(JSON.stringify({ version: SAVE_VERSION, profile, run: loaded.run })).ok).toBe(false);
+    }
+    const good = { ...loaded.profile, achievements: ['firstJump'] };
+    expect(parseImport(JSON.stringify({ version: SAVE_VERSION, profile: good, run: loaded.run })).ok).toBe(true);
   });
 });

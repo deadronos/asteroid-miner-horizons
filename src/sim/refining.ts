@@ -134,6 +134,7 @@ export function updateRefinery(state: GameState, dt: number): void {
       const done = Math.min(perCycle, job.count);
       run.bank[job.recipe] += def.output * done;
       run.refinery.produced[job.recipe] += def.output * done;
+      profile.stats.refined += def.output * done;
       job.count -= done;
       job.progress = 0;
       if (job.count === 0) {

@@ -1,12 +1,13 @@
 // The fixed-step simulation tick. Order of operations:
 // commands → orbits → rocks → hazards → outposts → ships (pilot, collide, heat, dock) → pickups → belt regrowth →
-// contracts → refinery.
+// contracts → refinery → achievements.
 
 import { range } from '../core/rng';
 import { damp, dist, type Vec2 } from '../core/vec';
 import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
 import { walletValue, RESOURCES, RESOURCE_INFO, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
+import { updateAchievements } from './achievements';
 import { DEFAULT_ASSISTS, type Assists } from './assists';
 import { haulerThink, isHauler, updateOutposts } from './automation';
 import { applyCommand, type Command } from './commands';
@@ -41,6 +42,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
 
   const { run } = state;
   run.time += dt;
+  state.profile.stats.time += dt;
 
   for (const p of run.system.planets) {
     p.angle += p.speed * dt;
@@ -126,6 +128,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   regrowBelts(state, dt);
   updateContracts(state, dt);
   updateRefinery(state, dt);
+  updateAchievements(state);
 }
 
 function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void {
@@ -283,6 +286,7 @@ function updatePickups(state: GameState, index: SimIndex, dt: number): void {
       if (bestD < TUNING.pickupCollectRadius + st.size) {
         const take = Math.min(cargoFree(best, st), p.amount);
         best.cargo[p.kind] += take;
+        state.profile.stats.unitsMined += take;
         p.amount -= take;
         state.out.fx.push({ t: 'collect', pos: { ...best.pos }, kind: p.kind, amount: take, shipId: best.id });
         if (p.amount <= 1e-6) continue; // consumed: dropped

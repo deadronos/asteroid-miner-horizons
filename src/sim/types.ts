@@ -4,6 +4,7 @@
 
 import type { Rng } from '../core/rng';
 import type { Vec2 } from '../core/vec';
+import type { AchievementId, LifetimeStats } from '../data/achievements';
 import type { ComponentId, Tier, VariantId } from '../data/components';
 import type { ContractKind } from '../data/contracts';
 import type { HullId } from '../data/hulls';
@@ -242,6 +243,10 @@ export interface Profile {
   data: number;
   dataEarned: number;
   perks: Record<PerkId, number>;
+  /** Lifetime counters for this save; they survive warps. */
+  stats: LifetimeStats;
+  /** Unlocked achievements, in unlock order. */
+  achievements: AchievementId[];
 }
 
 export type Fx =
@@ -257,6 +262,8 @@ export interface LogEntry {
   /** info: routine · warn: rejected command / danger · major: milestones and losses */
   level: 'info' | 'warn' | 'major';
   text: string;
+  /** Set on an achievement unlock, which the HUD also shows as a toast. */
+  achievement?: AchievementId;
 }
 
 export interface Outbox {

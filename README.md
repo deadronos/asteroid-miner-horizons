@@ -48,7 +48,7 @@ Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 | `M`                        | System map toggle; the station and planets are labelled when zoomed out                          |
 | `O` over a large asteroid  | Deploy a mining outpost there (the flagship must be beside it)                                   |
 | `R`                        | Research (prestige) panel · `P` pause · `H` hides help · `Esc` closes menus, else stops the ship |
-| ⚙ button                   | Menu: save slots, settings, key rebinding                                                        |
+| ⚙ button                   | Menu: save slots, stats & achievements, settings, key rebinding                                  |
 
 All keys can be rebound in ⚙ → Controls.
 
@@ -101,6 +101,10 @@ All keys can be rebound in ⚙ → Controls.
   **Horizon Data** = ⌊√(value delivered this run / 60)⌋. Research spends it on permanent
   perks: yield, laser damage, speed, fleet capacity, a starter kit, cheaper warps, a faster
   refinery (Catalytic Furnace) and more batches per refinery cycle (Bulk Hoppers).
+- **Stats & achievements**: each save keeps lifetime stats that survive warps (time played,
+  asteroids broken, units mined, warps, contracts, refined units, outposts, launches,
+  research, comets and ships lost) and 21 achievements unlocked from them. An unlock shows
+  a toast and a log line; ⚙ → Stats lists the stats and each achievement's progress.
 - **Saves**: the ⚙ menu has three save slots in `localStorage`. The running game
   autosaves to its slot every 10 s (in the browser's next idle moment) and when the tab is
   hidden or closed. Filled slots can be loaded, exported as compact text (to copy) or

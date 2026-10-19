@@ -813,3 +813,44 @@ button.bind.capturing {
     opacity: 0.55;
   }
 }
+
+/* Achievement toasts: stacked under the hazard banner's slot, newest last */
+.toasts {
+  position: fixed;
+  top: 146px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  pointer-events: none;
+  z-index: 26;
+}
+.toast {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+  padding: 7px 18px;
+  border-radius: 8px;
+  background: rgba(89, 255, 160, 0.12);
+  border: 1px solid rgba(89, 255, 160, 0.55);
+  animation: toast-in 0.3s ease-out;
+}
+.toast small {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+.setting.locked .lbl > span {
+  color: var(--dim);
+}

@@ -128,6 +128,7 @@ export function damageShip(state: GameState, ship: Ship, raw: number): void {
   if (ship.hull > 0) return;
 
   out.fx.push({ t: 'explode', pos: { ...ship.pos } });
+  profile.stats.shipsLost += 1;
   if (isFlagship(ship)) {
     out.log.push({ level: 'major', text: `${ship.name} destroyed! Cargo lost. Rebuilding at the station…` });
     ship.hull = 0;

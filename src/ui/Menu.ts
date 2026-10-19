@@ -4,17 +4,20 @@
 
 import type { SaveActions } from '../session';
 import type { SettingsStore } from '../settings';
+import type { GameState } from '../sim/types';
 import { h } from './dom';
 import { renderAudio } from './menu/AudioTab';
 import type { MenuCtx } from './menu/context';
 import { ControlsTab } from './menu/ControlsTab';
 import { SavesTab } from './menu/SavesTab';
 import { renderGameplay, renderGraphics, renderInterface } from './menu/SettingsTabs';
+import { renderStats } from './menu/StatsTab';
 
-type Tab = 'saves' | 'gameplay' | 'graphics' | 'interface' | 'controls' | 'audio';
+type Tab = 'saves' | 'stats' | 'gameplay' | 'graphics' | 'interface' | 'controls' | 'audio';
 
 const TABS: [Tab, string][] = [
   ['saves', 'Saves'],
+  ['stats', 'Stats'],
   ['gameplay', 'Gameplay'],
   ['graphics', 'Graphics'],
   ['interface', 'Interface'],
@@ -35,7 +38,7 @@ export class Menu {
   private render: Record<Tab, () => Node[]>;
   private controls: ControlsTab;
 
-  constructor(root: HTMLElement, saves: SaveActions, settings: SettingsStore) {
+  constructor(root: HTMLElement, saves: SaveActions, settings: SettingsStore, getState: () => GameState) {
     const ctx: MenuCtx = {
       settings,
       rerender: () => this.rerender(),
@@ -47,6 +50,7 @@ export class Menu {
     this.controls = new ControlsTab(ctx);
     this.render = {
       saves: () => savesTab.render(),
+      stats: () => renderStats(getState().profile),
       gameplay: () => renderGameplay(settings),
       graphics: () => renderGraphics(settings),
       interface: () => renderInterface(settings),

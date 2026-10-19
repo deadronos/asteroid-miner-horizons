@@ -1,8 +1,9 @@
 // DOM HUD composer: places the panels (top bar, fleet, contracts, selected
 // ship, refinery, research) and owns the small overlays — event log, help, hover
-// tooltip, warp flash, pause banner and FPS counter. All actions go out as sim
+// tooltip, warp flash, pause banner, achievement toasts and FPS counter. All actions go out as sim
 // Commands via `send`.
 
+import { ACHIEVEMENTS, type AchievementId } from '../data/achievements';
 import type { SaveActions } from '../session';
 import type { Command } from '../sim/commands';
 import { keyLabel, type SettingsStore } from '../settings';
@@ -20,6 +21,8 @@ import { createTopBar } from './panels/TopBar';
 import { rockTooltip } from './rockTooltip';
 
 const MAX_LOG = 60;
+/** How long an achievement toast stays up, in ms. */
+const TOAST_MS = 6000;
 
 export interface HudActions {
   send: (cmd: Command) => void;
@@ -38,6 +41,7 @@ export class Hud {
   private paused = h('div', { class: 'paused hidden' });
   private hazard = h('div', { class: 'hazard hidden' });
   private fps = h('div', { class: 'fps hidden' });
+  private toasts = h('div', { class: 'toasts' });
   private fpsFrames = 0;
   private fpsTime = 0;
   private fpsWorst = 0;
@@ -74,8 +78,8 @@ export class Hud {
 
     this.help = mk('help');
 
-    this.menu = new Menu(root, actions.saves, settings);
-    root.append(this.tooltip, this.flash, this.paused, this.hazard, this.fps);
+    this.menu = new Menu(root, actions.saves, settings, getState);
+    root.append(this.tooltip, this.flash, this.paused, this.hazard, this.fps, this.toasts);
     settings.onChange(() => this.applySettings());
     this.applySettings();
   }
@@ -163,10 +167,24 @@ export class Hud {
   }
 
   private pushLog(entry: LogEntry): void {
+    if (entry.achievement) this.toast(entry.achievement);
     if (entry.level === 'info' && this.settings.value.logVerbosity === 'important') return;
     const row = h('div', { class: entry.level, text: entry.level === 'warn' ? `⚠ ${entry.text}` : entry.text });
     this.log.prepend(row);
     while (this.log.childElementCount > MAX_LOG) this.log.lastElementChild?.remove();
+  }
+
+  private toast(id: AchievementId): void {
+    const a = ACHIEVEMENTS[id];
+    const el = h(
+      'div',
+      { class: 'toast' },
+      h('small', { text: 'Achievement unlocked' }),
+      h('b', { text: a.name }),
+      h('span', { class: 'dim', text: a.desc }),
+    );
+    this.toasts.append(el);
+    setTimeout(() => el.remove(), TOAST_MS);
   }
 
   showTooltip(x: number, y: number, rock: Rock | null, label: string | null, outpost?: Outpost): void {

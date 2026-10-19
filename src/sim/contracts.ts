@@ -100,6 +100,7 @@ export function updateContracts(state: GameState, dt: number): void {
     profile.data += c.data;
     profile.dataEarned += c.data;
     board.completed++;
+    profile.stats.contracts += 1;
     board.rewardValue += walletValue(c.reward);
     const hd = c.data > 0 ? ` +${c.data} HD` : '';
     state.out.log.push({
