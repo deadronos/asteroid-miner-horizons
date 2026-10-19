@@ -94,11 +94,23 @@ interface Visual {
 
 const unitPlane = flat(new THREE.PlaneGeometry(1, 1));
 const barPlane = flat(new THREE.PlaneGeometry(1, 1).translate(0.5, 0, 0));
+const flameGeo = flat(
+  new THREE.ShapeGeometry(
+    new THREE.Shape([new THREE.Vector2(0, 4), new THREE.Vector2(-14, 0), new THREE.Vector2(0, -4)]),
+  ),
+);
+const shieldGeo = flat(new THREE.CircleGeometry(1, 40));
+const selectGeo = flat(new THREE.RingGeometry(0.92, 1, 48));
+// Never written after creation, so every ship shares them and none disposes them.
+const barBgMat = new THREE.MeshBasicMaterial({ color: 0x0b1424, transparent: true, opacity: 0.8, depthWrite: false });
+const cargoBarMat = new THREE.MeshBasicMaterial({ color: 0xffa040, depthWrite: false });
+const beamGlowMat = additive(0xff3a2a, 0.35);
 
 export class ShipView {
   readonly group = new THREE.Group();
   private visuals = new Map<number, Visual>();
   private geos = new Map<HullId, THREE.BufferGeometry>();
+  private hullMats = new Map<HullId, THREE.MeshLambertMaterial>();
   /** HDR boost for flames and beams while bloom is on (1 = as authored). */
   glow = 1;
   /** Per-frame scratch, reused so `update` allocates no collections. */
@@ -111,23 +123,25 @@ export class ShipView {
     return g;
   }
 
+  /** One hull material per hull id; `update` never writes to it, so ships of a kind share it. */
+  private hullMat(id: HullId): THREE.MeshLambertMaterial {
+    let m = this.hullMats.get(id);
+    if (!m) {
+      const color = HULLS[id].color;
+      this.hullMats.set(
+        id,
+        (m = new THREE.MeshLambertMaterial({ color, emissive: color, emissiveIntensity: 0.25, flatShading: true })),
+      );
+    }
+    return m;
+  }
+
   private build(ship: Ship): Visual {
     const h = HULLS[ship.hullId];
     const root = new THREE.Group();
     const body = new THREE.Group();
-    body.add(
-      new THREE.Mesh(
-        this.geo(ship.hullId),
-        new THREE.MeshLambertMaterial({
-          color: h.color,
-          emissive: h.color,
-          emissiveIntensity: 0.25,
-          flatShading: true,
-        }),
-      ),
-    );
-    const flameShape = new THREE.Shape([new THREE.Vector2(0, 4), new THREE.Vector2(-14, 0), new THREE.Vector2(0, -4)]);
-    const flame = new THREE.Mesh(flat(new THREE.ShapeGeometry(flameShape)), additive(0xff8a3a, 0.9));
+    body.add(new THREE.Mesh(this.geo(ship.hullId), this.hullMat(ship.hullId)));
+    const flame = new THREE.Mesh(flameGeo, additive(0xff8a3a, 0.9));
     flame.position.set(-h.size * 0.6, 1, 0);
     body.add(flame);
     const layout = fitLayout(ship.slots, h.size);
@@ -135,25 +149,22 @@ export class ShipView {
     body.add(fittings);
     root.add(body);
 
-    const shield = new THREE.Mesh(flat(new THREE.CircleGeometry(1, 40)), additive(0x4db8ff, 0.2, null));
+    const shield = new THREE.Mesh(shieldGeo, additive(0x4db8ff, 0.2, null));
     shield.scale.setScalar(h.size * 1.9);
     root.add(shield);
-    const select = new THREE.Mesh(flat(new THREE.RingGeometry(0.92, 1, 48)), additive(0x59ffa0, 0.9));
+    const select = new THREE.Mesh(selectGeo, additive(0x59ffa0, 0.9));
     root.add(select);
 
-    const barBg = new THREE.Mesh(
-      barPlane,
-      new THREE.MeshBasicMaterial({ color: 0x0b1424, transparent: true, opacity: 0.8, depthWrite: false }),
-    );
+    const barBg = new THREE.Mesh(barPlane, barBgMat);
     const hpBar = new THREE.Mesh(barPlane, new THREE.MeshBasicMaterial({ color: 0x59ffa0, depthWrite: false }));
-    const cargoBar = new THREE.Mesh(barPlane, new THREE.MeshBasicMaterial({ color: 0xffa040, depthWrite: false }));
+    const cargoBar = new THREE.Mesh(barPlane, cargoBarMat);
     for (const b of [barBg, hpBar, cargoBar]) {
       b.renderOrder = 20;
       root.add(b);
     }
 
     const beam = new THREE.Mesh(unitPlane, additive(0xff6a4a, 0.95));
-    const beamGlow = new THREE.Mesh(unitPlane, additive(0xff3a2a, 0.35));
+    const beamGlow = new THREE.Mesh(unitPlane, beamGlowMat);
     const tip = new THREE.Sprite(
       new THREE.SpriteMaterial({
         map: glowTexture,
@@ -198,9 +209,14 @@ export class ShipView {
     v.body.add(v.fittings);
   }
 
+  /**
+   * Detaches a ship and frees its per-ship materials. Geometry, the shared and
+   * hull materials, and `v.fittings` (cached in `fittings.ts`) are left alive.
+   */
   private remove(id: number, v: Visual): void {
     this.group.remove(v.root, v.beam, v.beamGlow, v.tip);
     this.visuals.delete(id);
+    for (const o of [v.flame, v.shield, v.select, v.hpBar, v.beam, v.tip]) (o.material as THREE.Material).dispose();
   }
 
   /** Flashes the shield bubble of the ship closest to an impact point. */

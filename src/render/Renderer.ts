@@ -15,17 +15,21 @@ import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
 import { findRock } from '../sim/generate';
 import { findShip, isAlive, selectedShip } from '../sim/ships';
 import type { GameState, Rock, StarSystem } from '../sim/types';
+import { contextAntialias, useComposer } from './aa';
 import { Backdrop } from './backdrop';
 import { CameraRig } from './camera';
+import { watchContextLoss } from './contextLoss';
 import type { ViewRect } from './cull';
 import { FxView } from './fxView';
 import { HazardView } from './hazardView';
 import { type Box, MapLabels } from './labels';
 import { OutpostView } from './outpostView';
+import { type InfoSnapshot, infoSnapshot } from './renderInfo';
 import { RockView } from './rocks';
 import { ShipView } from './shipView';
 import { SystemView } from './systemView';
 import { additive, flat } from './util';
+import { withVisible } from './warmup';
 import { WARP_REST, WARP_TOTAL, type WarpFrame, WarpStreaks, warpFrame } from './warpFx';
 
 /**
@@ -68,17 +72,25 @@ export class Renderer {
   private labels: MapLabels;
   /** Client rectangles map labels must not cover; main.ts points this at the HUD panels. */
   labelBlockers: () => Box[] = () => [];
+  /** Called once when the WebGL context is lost; main.ts points this at the session save and reload. */
+  onContextLost: () => void = () => {};
   private hoverRing: THREE.Mesh;
   private moveMarker: THREE.Mesh;
   /** Bloom post-processing; created the first time a quality preset wants it. */
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
   private bloomOn = false;
+  /** Whether this frame renders through the composer; set by applySettings. */
+  private viaComposer = false;
+  /** Whether the WebGL context was created with `antialias`; fixed for its lifetime. */
+  private readonly contextAA: boolean;
   private readonly msaa: number;
   /** Seconds since the last warp; the transition plays while it is below WARP_TOTAL. */
   private warpT = WARP_TOTAL;
   private readonly warp: WarpFrame = { ...WARP_REST };
   private streaks = new WarpStreaks();
+  /** Set when a new system is built; the next frame compiles its shaders while the warp plays. */
+  private warmup = false;
   /** The camera's world rectangle this frame (shake included), reused for culling. */
   private readonly cullView: ViewRect = { x: 0, z: 0, halfW: 0, halfH: 0 };
 
@@ -86,16 +98,24 @@ export class Renderer {
   private shakeScale = 1;
   private alwaysBars = false;
 
-  /** `antialias` is fixed for the WebGL context's lifetime; it applies on reload. */
+  /**
+   * `antialias` is fixed for the WebGL context's lifetime; it applies on reload. The context gets it only when
+   * the startup preset has no bloom. Otherwise the composer's MSAA target carries it, and a later switch to a
+   * no-bloom preset renders through that target until reload.
+   */
   constructor(
     private container: HTMLElement,
     settings: Settings,
   ) {
-    this.gl = new THREE.WebGLRenderer({ antialias: settings.antialias, powerPreference: 'high-performance' });
+    this.contextAA = contextAntialias(settings.antialias, QUALITY[settings.quality].bloom);
+    this.gl = new THREE.WebGLRenderer({ antialias: this.contextAA, powerPreference: 'high-performance' });
     this.gl.setClearColor(0x03060d);
+    // Counters span the whole frame: every composer pass adds to them, and render() resets them once.
+    this.gl.info.autoReset = false;
     this.msaa = settings.antialias ? 4 : 0;
     this.canvas = this.gl.domElement;
     container.appendChild(this.canvas);
+    watchContextLoss(this.canvas, () => this.onContextLost());
     this.cam = new CameraRig(container, this.canvas);
     this.labels = new MapLabels(container, () => this.labelBlockers());
     this.fx = new FxView(container, this.ships);
@@ -128,7 +148,15 @@ export class Renderer {
     const q = QUALITY[s.quality];
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatioCap));
     this.bloomOn = q.bloom > 0;
-    if (this.bloomOn) this.ensureComposer().bloom.strength = q.bloom;
+    this.viaComposer = useComposer(this.bloomOn, this.msaa > 0, this.contextAA);
+    // Bloom off but still via the composer (runtime fallback, until reload): close to the canvas look, not identical.
+    // The half-float buffer does not clamp per blend and PRESENT keeps hue above 1. The disabled bloom pass keeps
+    // its targets allocated, which is deliberate for a state that lasts only until reload.
+    if (this.viaComposer) {
+      const { bloom } = this.ensureComposer();
+      bloom.enabled = this.bloomOn;
+      if (this.bloomOn) bloom.strength = q.bloom;
+    }
     this.rocks.glow = this.ships.glow = this.bloomOn ? 1.8 : 1;
     this.resize();
     this.backdrop.configure(q.stars, s.nebula);
@@ -144,8 +172,8 @@ export class Renderer {
       // space, which lifts those layers into a grey-blue fog, so the composer's
       // buffers take the XR-target path: shaders write sRGB-encoded values into a
       // half-float buffer and blend exactly as on screen; PRESENT_SHADER shows
-      // it with no second encode. MSAA on the target replaces the context's
-      // antialiasing, which post-processing bypasses.
+      // it with no second encode. The context is created without antialias whenever
+      // the startup preset has bloom, because this target's MSAA carries it.
       const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: this.msaa });
       target.texture.colorSpace = THREE.SRGBColorSpace;
       this.composer = new EffectComposer(this.gl, target);
@@ -215,11 +243,13 @@ export class Renderer {
   }
 
   render(state: GameState, dt: number, moveMark: Vec2 | null): void {
+    this.gl.info.reset();
     const { run } = state;
     const sys = run.system;
     const key = `${sys.name}#${sys.number}`;
     if (this.system.key !== key) {
       this.system.build(sys);
+      this.warmup = true;
       this.flareGlow = 0;
       this.backdrop.setSystem(state.profile.seed + sys.number);
       this.cam.resetSnap();
@@ -264,8 +294,34 @@ export class Renderer {
       },
     );
 
-    if (this.bloomOn && this.composer) this.composer.render(dt);
+    if (this.warmup) {
+      this.warmup = false;
+      this.warmShaders();
+    }
+
+    if (this.viaComposer && this.composer) this.composer.render(dt);
     else this.gl.render(this.scene, this.cam.camera);
+  }
+
+  /**
+   * Compiles the scene's programs before the playfield is shown, so the first visible frame of a new
+   * system does not stall. Materials are found by a full traverse, but lights are gathered only from
+   * visible objects, and the warp hides system.group, which holds the star's PointLight. Forcing that group
+   * visible gives the programs the same light-count key as the real render. compileAsync's promise is only
+   * polled; `.catch` keeps it from ever rejecting unhandled.
+   */
+  private warmShaders(): void {
+    withVisible([this.system.group], () => {
+      void this.gl.compileAsync(this.scene, this.cam.camera).catch(() => {});
+    });
+  }
+
+  /**
+   * Draw counters for the last whole frame (every pass, bloom composer included, since autoReset
+   * is off and render() resets once per frame), plus live memory and program totals.
+   */
+  get info(): InfoSnapshot {
+    return infoSnapshot(this.gl.info);
   }
 
   /** 0..1 white-out intensity during the warp transition, for the HUD overlay. */

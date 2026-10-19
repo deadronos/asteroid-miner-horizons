@@ -71,8 +71,11 @@ const STEP = 1 / TUNING.simHz;
 let last = performance.now();
 let acc = 0;
 let hudAcc = 0;
+let contextLost = false;
 
 function frame(now: number): void {
+  // Lost context: stop ticking and stop scheduling frames; the reload follows.
+  if (contextLost) return;
   const state = session.state;
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
@@ -116,8 +119,17 @@ function frame(now: number): void {
   }
   requestAnimationFrame(frame);
 }
+// A lost WebGL context leaves a black canvas: save, say so, and reload into the same game.
+renderer.onContextLost = () => {
+  contextLost = true;
+  session.saveNow();
+  hud.showNotice('Graphics reset — reloading…');
+  setTimeout(() => location.reload(), 1500);
+};
 hud.refresh();
 requestAnimationFrame(frame);
 
 // Debug hook for automated checks in the browser console.
-Object.assign(window, { __amh: { state: () => session.state, send, settings, renderer, audio } });
+Object.assign(window, {
+  __amh: { state: () => session.state, send, settings, renderer, audio, info: () => renderer.info },
+});

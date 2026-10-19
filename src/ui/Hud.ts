@@ -45,6 +45,8 @@ export class Hud {
   private fpsFrames = 0;
   private fpsTime = 0;
   private fpsWorst = 0;
+  /** Set by showNotice; while true, setPaused no longer changes the banner. */
+  private noticeShown = false;
   readonly menu: Menu;
 
   constructor(
@@ -103,8 +105,19 @@ export class Hud {
 
   /** Shows the pause banner with the reason (manual, menu, unfocused). */
   setPaused(reason: string | null): void {
+    if (this.noticeShown) return;
     this.paused.classList.toggle('hidden', !reason);
     if (reason) setText(this.paused, reason);
+  }
+
+  /** Shows `text` in the banner for the rest of the session, replacing the pause reason. */
+  showNotice(text: string): void {
+    this.noticeShown = true;
+    this.paused.classList.remove('hidden');
+    this.paused.classList.add('gfx-reset');
+    setText(this.paused, text);
+    // The frame loop may have stopped, so a warp flash would otherwise stay frozen over the notice.
+    this.flash.style.opacity = '0';
   }
 
   /** Called every rendered frame to update the FPS counter. */
