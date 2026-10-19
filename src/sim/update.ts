@@ -3,7 +3,7 @@
 // contracts → refinery → achievements.
 
 import { range } from '../core/rng';
-import { damp, dist, integrate, type Vec2 } from '../core/vec';
+import { damp, dist, integrate, len, type Vec2 } from '../core/vec';
 import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
 import { walletValue, RESOURCES, formatWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
@@ -57,7 +57,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
       integrate(r, dt);
       continue;
     }
-    const d = Math.hypot(r.pos.x, r.pos.z) || 1;
+    const d = len(r.pos) || 1;
     const tx = (-r.pos.z / d) * TUNING.rockOrbitSpeed;
     const tz = (r.pos.x / d) * TUNING.rockOrbitSpeed;
     r.vel.x += (tx - r.vel.x) * settle;
@@ -138,7 +138,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
   ship.vel.x *= drag;
   ship.vel.z *= drag;
   integrate(ship, dt);
-  if (!ship.beamOn && Math.hypot(ship.vel.x, ship.vel.z) > 6) {
+  if (!ship.beamOn && len(ship.vel) > 6) {
     const target = Math.atan2(ship.vel.z, ship.vel.x);
     let da = target - ship.angle;
     da = Math.atan2(Math.sin(da), Math.cos(da));
@@ -150,7 +150,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
 
   // Star heat ramps up toward the photosphere.
   const sys = run.system;
-  const dStar = Math.hypot(ship.pos.x, ship.pos.z);
+  const dStar = len(ship.pos);
   if (dStar < sys.heatRadius) {
     const k = 1 - (dStar - sys.starRadius) / (sys.heatRadius - sys.starRadius);
     damageShip(state, ship, TUNING.starHeatDps * Math.max(0.2, k) * dt);

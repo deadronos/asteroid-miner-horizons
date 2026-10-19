@@ -209,8 +209,8 @@ describe('multiple games', () => {
       tick(a1, DT, input, i1);
       tick(a2, DT, input, i2);
     }
-    for (let t = 0; t < 10; t += DT) tick(b1, DT, input, j1);
-    for (let t = 0; t < 10; t += DT) tick(b2, DT, input, j2);
+    runFor(b1, 10, { index: j1 });
+    runFor(b2, 10, { index: j2 });
     expect(serialize(a1)).toEqual(serialize(b1));
     expect(serialize(a2)).toEqual(serialize(b2));
     // Distinct instances: a shared index would still pass the equality checks

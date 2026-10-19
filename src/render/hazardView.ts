@@ -3,6 +3,7 @@
 // lengths follow world-units-per-pixel so it stays crisp at every zoom.
 
 import * as THREE from 'three';
+import { len } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import type { Hazards } from '../sim/types';
 
@@ -38,7 +39,7 @@ export class HazardView {
     const c = hz.comet;
     this.line.visible = !!c;
     if (!c) return;
-    const speed = Math.hypot(c.vel.x, c.vel.z) || 1;
+    const speed = len(c.vel) || 1;
     this.line.position.x = c.from.x;
     this.line.position.z = c.from.z;
     this.line.rotation.y = -Math.atan2(c.vel.z / speed, c.vel.x / speed);

@@ -5,6 +5,7 @@
 // draws from an RNG or moves a ship, rock or pickup.
 
 import { formatDuration } from '../core/format';
+import { len } from '../core/vec';
 import { credit, RAW_RESOURCES, emptyWallet, formatWallet, walletTotal, walletValue } from '../data/resources';
 import type { Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
@@ -30,7 +31,7 @@ export interface OfflineGains {
 /** The share of drone income each raw resource gets: the belts within leash range of the station, by rock count. */
 export function droneMix(state: GameState): Record<(typeof RAW_RESOURCES)[number], number> {
   const { system } = state.run;
-  const stationR = Math.hypot(system.station.pos.x, system.station.pos.z);
+  const stationR = len(system.station.pos);
   const mix = { ore: 0, ice: 0, crystal: 0 };
   let weight = 0;
   for (const b of system.belts) {
