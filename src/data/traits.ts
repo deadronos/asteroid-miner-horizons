@@ -17,4 +17,4 @@ export const TRAITS: Record<RockTrait, TraitDef> = {
   magnetic: { id: 'magnetic', name: 'Magnetic', icon: '⌖', blurb: 'drifts toward ships', color: 0x5ad1ff },
 };
 
-export const TRAIT_IDS = Object.keys(TRAITS) as RockTrait[];
+export const TRAIT_IDS: readonly RockTrait[] = Object.keys(TRAITS) as RockTrait[];

@@ -23,6 +23,8 @@ export class SimIndex {
   readonly home: Vec2 = { x: 0, z: 0 };
   /** Scratch for hazard escape vectors and flee points in `pilot`; never read without writing first. */
   readonly escape: Vec2 = { x: 0, z: 0 };
+  /** Scratch for the ship loop: ids updated this tick, so a rewind does not tick one twice. */
+  readonly updatedShipIds: number[] = [];
   /** Live comet rocks, collected in `rebuild`. */
   readonly comets: Rock[] = [];
   /** Ids seen in the last `rebuild`, so the next one can prune the departed. */

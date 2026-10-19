@@ -82,6 +82,8 @@ const isVec = (p: unknown): boolean => !!p && finite((p as { x?: unknown }).x) &
 
 /** True when a rock carries no trait, or one the sim can actually run. */
 function isTrait(r: unknown): boolean {
+  // A corrupt save can put a non-object (e.g. `null`) in the rocks array.
+  if (!r || typeof r !== 'object') return false;
   const trait = (r as { trait?: unknown }).trait;
   return trait === undefined || (typeof trait === 'string' && Object.hasOwn(TRAITS, trait));
 }

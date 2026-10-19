@@ -141,7 +141,10 @@ describe('trait yield multipliers', () => {
     expect(kids).toHaveLength(2);
     const share = Math.floor((parent.units * TUNING.crackChildShare) / kids.length);
     expect(share).toBeGreaterThan(0);
-    for (const kid of kids) expect(kid.units).toBe(share);
+    for (const kid of kids) {
+      expect(kid.units).toBe(share);
+      expect(kid.trait).toBeUndefined();
+    }
   });
 });
 
@@ -155,12 +158,30 @@ describe('volatile blast', () => {
     const outer = makeShip(state.run, state.profile, 'drone', 'Outer', { x: 5000 + blast + 1, z: 5000 });
     inner.hull = 200;
     outer.hull = 200;
+    const shield = inner.shield;
     state.run.ships.push(inner, outer);
 
     destroyRock(state, rock);
 
-    expect(inner.hull).toBeLessThan(200);
+    // damageShip lets shields eat first; a stock drone has none.
+    const dmg = TUNING.volatileBlastDamage * (rock.radius / 40);
+    expect(inner.hull).toBe(200 - (dmg - Math.min(shield, dmg)));
     expect(outer.hull).toBe(200);
+  });
+
+  it('does not damage a dead ship inside the blast', () => {
+    const state = newGame(7);
+    const rock = makeRock(state.run, 'ore', 0, { x: 5000, z: 5000 }, 30, 0, 'volatile');
+    state.run.rocks.push(rock);
+    const dead = makeShip(state.run, state.profile, 'drone', 'Dead', { x: 5000, z: 5000 });
+    dead.hull = 10;
+    dead.respawn = 5;
+    state.run.ships.push(dead);
+
+    destroyRock(state, rock);
+
+    expect(dead.hull).toBe(10);
+    expect(dead.respawn).toBe(5);
   });
 
   it('pushes an explode fx and damages no rocks', () => {

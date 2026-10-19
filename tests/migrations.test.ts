@@ -462,6 +462,12 @@ describe('rock traits migration to v7', () => {
     expect(parseImport(JSON.stringify({ version: 7, profile: loadFrozen(V6_FIXTURE).profile, run })).ok).toBe(false);
   });
 
+  it('rejects a null rock element without throwing', () => {
+    const loaded = loadFrozen(V6_FIXTURE);
+    const run = { ...loaded.run, rocks: [null] };
+    expect(parseImport(JSON.stringify({ version: 7, profile: loaded.profile, run })).ok).toBe(false);
+  });
+
   it('keeps a known trait through a round-trip', () => {
     const run = loadFrozen(V6_FIXTURE).run;
     run.rocks[0]!.trait = 'volatile';

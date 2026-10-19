@@ -105,12 +105,18 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   };
 
   // Index-based so a ship removed in `updateShip` (an in-place `removeItem`)
-  // does not shift the next ship into an already-visited slot: after a removal
-  // the element at `i` is a ship we have not seen, so do not advance.
+  // does not shift the next ship into an already-visited slot. A volatile blast
+  // can remove several ships in one call, so a removal rewinds the scan and
+  // `updatedShipIds` keeps an already-ticked ship from running twice.
+  const updated = index.updatedShipIds;
+  updated.length = 0;
   for (let i = 0; i < run.ships.length; i++) {
     const ship = run.ships[i]!;
+    if (updated.includes(ship.id)) continue;
+    updated.push(ship.id);
+    const before = run.ships.length;
     updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
-    if (run.ships[i] !== ship) i--;
+    if (run.ships.length !== before) i = -1;
   }
 
   updatePickups(state, index, dt);

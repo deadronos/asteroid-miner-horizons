@@ -122,6 +122,7 @@ describe('per-kind rock materials', () => {
     const stub = compile(rockMaterial('ore'));
     expect(stub.vertexShader).toContain('aTrait');
     expect(stub.vertexShader).toContain('vTrait');
+    expect(stub.vertexShader).toContain('vTrait = aTrait;');
     expect(stub.fragmentShader).toContain('vTrait');
   });
 });

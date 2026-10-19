@@ -129,7 +129,7 @@ export const TRAITS: Record<RockTrait, TraitDef> = {
 export const TRAIT_IDS = Object.keys(TRAITS) as RockTrait[];
 ```
 
-Add the `// Rock traits (#48).` block to `TUNING` with the exact values from the spec §1 (`traitChance: 0.22`, `volatileBlastPad: 120`, `volatileBlastDamage: 40`, `volatileYieldMul: 1.5`, `denseMinLaserTier: 2`, `denseYieldMul: 1.6`, `magnetTraitRange: 300`, `magnetTraitAccel: 10`, `magnetTraitMaxSpeed: 24`, `magnetTraitYieldMul: 1.3`).
+Add the `// Rock traits (#48).` block to `TUNING` with the exact values from the spec §1 (`traitChance: 0.22`, `volatileBlastPad: 120`, `volatileBlastDamage: 40`, `volatileYieldMul: 1.5`, `denseMinLaserTier: 2`, `denseYieldMul: 1.6`, `magnetTraitRange: 180`, `magnetTraitAccel: 6`, `magnetTraitMaxSpeed: 24`, `magnetTraitYieldMul: 1.3`).
 
 `src/sim/traits.ts` (new): `rollTrait`, `traitYield` per spec §2. `rollTrait` uses `hash01((seed ^ (number * 0x9e3779b1) ^ (id * 0x85ebca6b)) | 0)`; `traitYield` maps volatile/dense/magnetic to their `TUNING` multipliers and everything else to 1.
 

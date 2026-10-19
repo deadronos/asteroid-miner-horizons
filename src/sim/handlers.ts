@@ -9,6 +9,7 @@ import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
 import { RECIPES } from '../data/refining';
 import { RESOURCES, formatCost, pay, type Cost } from '../data/resources';
+import { TUNING } from '../data/tuning';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
 import { describeContract, fillBoard } from './contracts';
 import { newRun } from './create';
@@ -182,7 +183,7 @@ export const handlers: Handlers = {
     if (st.dps <= 0) return fail(state, `${ship.name} has no mining laser fitted.`);
     const rock = state.run.rocks.find((r) => r.id === cmd.rockId);
     if (!rock) return;
-    if (!canMine(st, rock)) return fail(state, 'Dense rock — needs a tier-2 laser.');
+    if (!canMine(st, rock)) return fail(state, `Dense rock — needs a tier-${TUNING.denseMinLaserTier} laser.`);
     ship.order = { kind: 'mine', rockId: cmd.rockId };
   }),
 

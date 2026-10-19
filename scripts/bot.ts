@@ -286,9 +286,10 @@ function pickRock(state: GameState, fs: Ship, wc: number, hz: Hazard): Rock | nu
   const bonusCrystal = !active || breakLarge;
   let best: Rock | null = null;
   let bestScore = Infinity;
+  const st = shipStats(fs, state.profile);
   for (const r of state.run.rocks) {
     if (unsafe(state.run, hz, r.pos)) continue;
-    if (!canMine(shipStats(fs, state.profile), r)) continue;
+    if (!canMine(st, r)) continue;
     let score = dist(fs.pos, r.pos) * (r.kind === want || (bonusCrystal && r.kind === 'crystal') ? 0.5 : 1);
     if (breakLarge && r.size === 0) score *= 0.5;
     if (score < bestScore) {
