@@ -37,7 +37,9 @@ docs/
 
 ## What may import what
 
-The layers are enforced by convention and by `import/no-cycle` in `.oxlintrc.json`.
+The direction of imports is enforced by `tests/layers.test.ts`, which encodes this table; change both together.
+`import/no-cycle` in `.oxlintrc.json` only catches cycles. Of npm packages, only `render/` may import one
+(`three`); `core/`, `data/` and `sim/` import none.
 
 | Directory            | May import                                                             |
 | -------------------- | ---------------------------------------------------------------------- |
