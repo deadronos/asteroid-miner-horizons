@@ -1,8 +1,8 @@
 // Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
 
-exports[`shipStats > matches the committed snapshot for every component and tier 1`] = `
+exports[`shipStats > matches the committed snapshot for every component, variant and tier 1`] = `
 {
-  "armor T1": {
+  "armor standard T1": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 0.9,
@@ -15,8 +15,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "armor T2": {
+  "armor standard T2": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 0.8,
@@ -29,8 +30,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "armor T3": {
+  "armor standard T3": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 0.68,
@@ -43,8 +45,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "cargo T1": {
+  "cargo standard T1": {
     "accel": 340,
     "cargoCap": 130,
     "dmgMul": 1,
@@ -57,8 +60,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "cargo T2": {
+  "cargo standard T2": {
     "accel": 340,
     "cargoCap": 200,
     "dmgMul": 1,
@@ -71,8 +75,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "cargo T3": {
+  "cargo standard T3": {
     "accel": 340,
     "cargoCap": 320,
     "dmgMul": 1,
@@ -85,8 +90,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "engine T1": {
+  "engine ion T1": {
     "accel": 430,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -99,8 +105,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 135,
+    "splash": 0,
   },
-  "engine T2": {
+  "engine ion T2": {
     "accel": 520,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -113,8 +120,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 165,
+    "splash": 0,
   },
-  "engine T3": {
+  "engine ion T3": {
     "accel": 625,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -127,8 +135,54 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 200,
+    "splash": 0,
   },
-  "laser T1": {
+  "engine thruster T1": {
+    "accel": 460,
+    "cargoCap": 80,
+    "dmgMul": 1,
+    "dps": 0,
+    "laserTier": 0,
+    "magnet": 70,
+    "maxHull": 100,
+    "maxShield": 0,
+    "range": 0,
+    "shieldRegen": 0,
+    "size": 11,
+    "speed": 127,
+    "splash": 0,
+  },
+  "engine thruster T2": {
+    "accel": 580,
+    "cargoCap": 80,
+    "dmgMul": 1,
+    "dps": 0,
+    "laserTier": 0,
+    "magnet": 70,
+    "maxHull": 100,
+    "maxShield": 0,
+    "range": 0,
+    "shieldRegen": 0,
+    "size": 11,
+    "speed": 150,
+    "splash": 0,
+  },
+  "engine thruster T3": {
+    "accel": 720,
+    "cargoCap": 80,
+    "dmgMul": 1,
+    "dps": 0,
+    "laserTier": 0,
+    "magnet": 70,
+    "maxHull": 100,
+    "maxShield": 0,
+    "range": 0,
+    "shieldRegen": 0,
+    "size": 11,
+    "speed": 175,
+    "splash": 0,
+  },
+  "laser focused T1": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -141,8 +195,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "laser T2": {
+  "laser focused T2": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -155,8 +210,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "laser T3": {
+  "laser focused T3": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -169,8 +225,54 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "sensor T1": {
+  "laser wide T1": {
+    "accel": 340,
+    "cargoCap": 80,
+    "dmgMul": 1,
+    "dps": 18,
+    "laserTier": 1,
+    "magnet": 70,
+    "maxHull": 100,
+    "maxShield": 0,
+    "range": 150,
+    "shieldRegen": 0,
+    "size": 11,
+    "speed": 105,
+    "splash": 45,
+  },
+  "laser wide T2": {
+    "accel": 340,
+    "cargoCap": 80,
+    "dmgMul": 1,
+    "dps": 23,
+    "laserTier": 2,
+    "magnet": 70,
+    "maxHull": 100,
+    "maxShield": 0,
+    "range": 180,
+    "shieldRegen": 0,
+    "size": 11,
+    "speed": 105,
+    "splash": 60,
+  },
+  "laser wide T3": {
+    "accel": 340,
+    "cargoCap": 80,
+    "dmgMul": 1,
+    "dps": 38,
+    "laserTier": 3,
+    "magnet": 70,
+    "maxHull": 100,
+    "maxShield": 0,
+    "range": 220,
+    "shieldRegen": 0,
+    "size": 11,
+    "speed": 105,
+    "splash": 80,
+  },
+  "sensor standard T1": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -183,8 +285,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "sensor T2": {
+  "sensor standard T2": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -197,8 +300,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "sensor T3": {
+  "sensor standard T3": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -211,8 +315,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 0,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "shield T1": {
+  "shield standard T1": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -225,8 +330,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 3,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "shield T2": {
+  "shield standard T2": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -239,8 +345,9 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 6,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
-  "shield T3": {
+  "shield standard T3": {
     "accel": 340,
     "cargoCap": 80,
     "dmgMul": 1,
@@ -253,6 +360,7 @@ exports[`shipStats > matches the committed snapshot for every component and tier
     "shieldRegen": 10,
     "size": 11,
     "speed": 105,
+    "splash": 0,
   },
 }
 `;

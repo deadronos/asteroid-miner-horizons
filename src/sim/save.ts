@@ -5,6 +5,7 @@
 // object is accepted too). Older versions are upgraded through sim/migrations;
 // saves from a newer version are rejected rather than half-loaded.
 
+import { COMPONENTS, isVariant, type ComponentId } from '../data/components';
 import { MODIFIERS } from '../data/modifiers';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
 import { RESOURCES } from '../data/resources';
@@ -88,6 +89,26 @@ function isTrait(r: unknown): boolean {
   return trait === undefined || (typeof trait === 'string' && Object.hasOwn(TRAITS, trait));
 }
 
+/** True when one slot is empty, or a component variant at a real tier. */
+function isFitted(f: unknown): boolean {
+  if (f === null) return true;
+  if (!f || typeof f !== 'object') return false;
+  const slot = f as { type?: unknown; variant?: unknown; tier?: unknown };
+  return (
+    typeof slot.type === 'string' &&
+    Object.hasOwn(COMPONENTS, slot.type) &&
+    isVariant(slot.type as ComponentId, slot.variant) &&
+    (slot.tier === 1 || slot.tier === 2 || slot.tier === 3)
+  );
+}
+
+/** True when `s` is a ship whose slot list the tick can derive stats from. */
+function isShipSlots(s: unknown): boolean {
+  if (!s || typeof s !== 'object') return false;
+  const slots = (s as { slots?: unknown }).slots;
+  return Array.isArray(slots) && slots.every(isFitted);
+}
+
 /** True when `h` has what the hazard tick reads: an RNG state, finite timers, and well-formed pending hazards. */
 function isHazards(h: unknown): boolean {
   if (!h || typeof h !== 'object') return false;
@@ -133,6 +154,9 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   // A wallet missing a resource column (e.g. alloy) would poison every later
   // read with NaN, so the bank and each ship's cargo must be complete.
   if (!isWallet(run.bank) || !run.ships.every((s) => isWallet(s.cargo))) return null;
+  // The tick derives each ship's stats from its fitted slots, so every one must
+  // name a known component variant at a real tier.
+  if (!run.ships.every(isShipSlots)) return null;
   // The tick walks the board, so reject anything it cannot handle: offers, the
   // id counter and the RNG state must all be present.
   const board = run.contracts as { offers?: unknown; nextId?: unknown; rng?: { s?: unknown } | null };

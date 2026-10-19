@@ -4,7 +4,7 @@
 
 import { removeItem } from '../core/array';
 import { v } from '../core/vec';
-import { COMPONENTS, type Tier } from '../data/components';
+import { COMPONENTS, isVariant, variantDef, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
 import { RECIPES } from '../data/refining';
@@ -147,7 +147,8 @@ export const handlers: Handlers = {
       fs.hullId = cmd.hullId;
       fs.slots = Array.from({ length: h.slots }, (_, i) => old[i] ?? null);
       // Parts that no longer fit are refunded at half value.
-      for (const extra of old.slice(h.slots)) refund(state, halve(investedCost(extra!.type, extra!.tier)));
+      for (const extra of old.slice(h.slots))
+        refund(state, halve(investedCost(extra!.type, extra!.variant, extra!.tier)));
       fs.hull = frac * shipStats(fs, profile).maxHull;
       out.log.push({ level: 'major', text: `Flagship refitted onto a ${h.name} hull.` });
     } else {
@@ -216,7 +217,7 @@ export const handlers: Handlers = {
     const block = refitBlock(state, ship);
     if (block) return fail(state, block);
     refund(state, halve(HULLS[ship.hullId].cost));
-    for (const f of ship.slots) if (f) refund(state, halve(investedCost(f.type, f.tier)));
+    for (const f of ship.slots) if (f) refund(state, halve(investedCost(f.type, f.variant, f.tier)));
     removeItem(state.run.ships, ship);
     if (state.run.selectedId === ship.id) state.run.selectedId = flagship(state.run).id;
     state.out.log.push({ level: 'info', text: `${ship.name} scrapped for half value.` });
@@ -230,7 +231,10 @@ export const handlers: Handlers = {
     if (!cur || !cost) return;
     if (!pay(state.run.bank, cost)) return fail(state, 'Not enough resources for that upgrade.');
     cur.tier = (cur.tier + 1) as Tier;
-    state.out.log.push({ level: 'info', text: `${ship.name}: ${COMPONENTS[cur.type].name} → T${cur.tier}.` });
+    state.out.log.push({
+      level: 'info',
+      text: `${ship.name}: ${variantDef(cur.type, cur.variant).name} → T${cur.tier}.`,
+    });
   }),
 
   remove: withShip((state, ship, cmd) => {
@@ -238,22 +242,27 @@ export const handlers: Handlers = {
     if (!t) return;
     const { cur } = t;
     if (!cur) return;
-    refund(state, halve(investedCost(cur.type, cur.tier)));
+    refund(state, halve(investedCost(cur.type, cur.variant, cur.tier)));
     ship.slots[cmd.slot] = null;
     clampToStats(state, ship);
   }),
 
   install: withShip((state, ship, cmd) => {
+    if (!Object.hasOwn(COMPONENTS, cmd.comp) || !isVariant(cmd.comp, cmd.variant))
+      return fail(state, 'Unknown component variant.');
     const t = slotTarget(state, ship, cmd.slot);
     if (!t) return;
     const { cur } = t;
     if (cur?.type === cmd.comp) return;
-    if (!pay(state.run.bank, COMPONENTS[cmd.comp].cost(1)))
+    if (!pay(state.run.bank, variantDef(cmd.comp, cmd.variant).cost(1)))
       return fail(state, 'Not enough resources for that component.');
-    if (cur) refund(state, halve(investedCost(cur.type, cur.tier)));
-    ship.slots[cmd.slot] = { type: cmd.comp, tier: 1 };
+    if (cur) refund(state, halve(investedCost(cur.type, cur.variant, cur.tier)));
+    ship.slots[cmd.slot] = { type: cmd.comp, variant: cmd.variant, tier: 1 };
     clampToStats(state, ship);
-    state.out.log.push({ level: 'info', text: `${ship.name}: installed ${COMPONENTS[cmd.comp].name}.` });
+    state.out.log.push({
+      level: 'info',
+      text: `${ship.name}: installed ${variantDef(cmd.comp, cmd.variant).name}.`,
+    });
   }),
 
   acceptContract: (state, cmd) => {

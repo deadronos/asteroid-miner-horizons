@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { COMPONENTS, type ComponentId } from '../src/data/components';
+import { COMPONENTS, defaultVariant, variantDef, type ComponentId } from '../src/data/components';
 import { HULLS } from '../src/data/hulls';
 import { RECIPES, RECIPE_IDS, type RecipeId } from '../src/data/refining';
 import {
@@ -414,20 +414,20 @@ describe('cost table', () => {
 
   it('keeps every tier-1 and tier-2 price and the drone price unchanged', () => {
     for (const id of ids) {
-      expect(COMPONENTS[id].cost(1)).toEqual(T1[id]);
-      expect(COMPONENTS[id].cost(2)).toEqual(T2[id]);
+      expect(variantDef(id, defaultVariant(id)).cost(1)).toEqual(T1[id]);
+      expect(variantDef(id, defaultVariant(id)).cost(2)).toEqual(T2[id]);
     }
     expect(HULLS.drone.cost).toEqual({ ore: 80, ice: 25 });
   });
 
-  it('prices every tier-3 component and the big hulls in alloy', () => {
-    for (const id of ids) expect(COMPONENTS[id].cost(3).alloy ?? 0).toBeGreaterThan(0);
+  it('prices every tier-3 component variant and the big hulls in alloy', () => {
+    for (const id of ids) for (const v of COMPONENTS[id].variants) expect(v.cost(3).alloy ?? 0).toBeGreaterThan(0);
     expect(HULLS.excavator.cost.alloy ?? 0).toBeGreaterThan(0);
     expect(HULLS.harvester.cost.alloy ?? 0).toBeGreaterThan(0);
   });
 
   it('moves value rather than adding it: moved prices keep their ore-equivalent value', () => {
-    for (const id of ids) expect(drift(COMPONENTS[id].cost(3), OLD_T3[id])).toBe(0);
+    for (const id of ids) expect(drift(variantDef(id, defaultVariant(id)).cost(3), OLD_T3[id])).toBe(0);
     expect(drift(HULLS.excavator.cost, { ore: 900, ice: 300 })).toBe(0);
     expect(drift(HULLS.harvester.cost, { ore: 350, ice: 120 })).toBe(0);
   });

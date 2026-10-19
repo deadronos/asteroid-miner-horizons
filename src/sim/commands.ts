@@ -6,7 +6,7 @@
 // union (imported from here across the app) and the dispatch into the map.
 
 import type { Vec2 } from '../core/vec';
-import type { ComponentId } from '../data/components';
+import type { ComponentId, VariantId } from '../data/components';
 import type { HullId } from '../data/hulls';
 import type { PerkId } from '../data/perks';
 import type { RecipeId } from '../data/refining';
@@ -20,7 +20,7 @@ export type Command =
   | { t: 'dock'; shipId: number }
   | { t: 'stop'; shipId: number }
   | { t: 'aiMode'; shipId: number; mode: AiMode }
-  | { t: 'install'; shipId: number; slot: number; comp: ComponentId }
+  | { t: 'install'; shipId: number; slot: number; comp: ComponentId; variant: VariantId }
   | { t: 'upgrade'; shipId: number; slot: number }
   | { t: 'remove'; shipId: number; slot: number }
   | { t: 'repair'; shipId: number }

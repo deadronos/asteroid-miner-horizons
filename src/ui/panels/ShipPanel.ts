@@ -1,23 +1,83 @@
 // Selected-ship panel: hull/shield/cargo bars, stats, dock/repair/scrap and
 // the component slots (install, upgrade, remove).
 
-import { COMPONENTS, COMPONENT_IDS } from '../../data/components';
+import {
+  COMPONENTS,
+  COMPONENT_IDS,
+  isVariant,
+  variantDef,
+  type ComponentId,
+  type VariantId,
+} from '../../data/components';
 import { HULLS } from '../../data/hulls';
-import { RESOURCES, RESOURCE_INFO, canAfford, formatCost, walletTotal } from '../../data/resources';
+import { RESOURCES, RESOURCE_INFO, canAfford, formatCost, type Cost, walletTotal } from '../../data/resources';
 import { halve, investedCost, isDocked, refitBlock, repairCost, upgradeCost } from '../../sim/economy';
 import { applySystemStats } from '../../sim/modifiers';
 import { isAlive, isFlagship, shipStats } from '../../sim/ships';
-import type { Ship } from '../../sim/types';
+import type { Fitted, Ship } from '../../sim/types';
 import { Panel, bar, h, setDisabled, setText } from '../dom';
 import type { PanelCtx } from './context';
+
+/** One `<option>` of an empty slot's install select. */
+export interface InstallOption {
+  /** `component:variant`, the option's `value`. */
+  value: string;
+  /** Option text: the family name, plus the variant when the family has several, plus the tier-1 price. */
+  label: string;
+  comp: ComponentId;
+  variant: VariantId;
+  /** That variant's tier-1 install price. */
+  cost: Cost;
+}
+
+/** Every (component, variant) an empty slot can install, in table order. */
+export function installOptions(): InstallOption[] {
+  const out: InstallOption[] = [];
+  for (const cid of COMPONENT_IDS) {
+    const def = COMPONENTS[cid];
+    for (const v of def.variants) {
+      const cost = v.cost(1);
+      const name = def.variants.length > 1 ? `${def.name} — ${v.name}` : def.name;
+      out.push({
+        value: `${cid}:${v.id}`,
+        label: `${name} — ${formatCost(cost)}`,
+        comp: cid,
+        variant: v.id,
+        cost,
+      });
+    }
+  }
+  return out;
+}
+
+/** Parse an install option's `value`; null if it names no real component variant. */
+export function parseInstallValue(value: string): { comp: ComponentId; variant: VariantId } | null {
+  const at = value.indexOf(':');
+  if (at < 0) return null;
+  const comp = value.slice(0, at) as ComponentId;
+  const variant = value.slice(at + 1);
+  if (!COMPONENT_IDS.includes(comp) || !isVariant(comp, variant)) return null;
+  return { comp, variant };
+}
+
+/** Tooltip for the remove button: the refund of half the fitted variant's cost. */
+export function removeRefundTitle(f: Fitted): string {
+  return `Remove (refund ${formatCost(halve(investedCost(f.type, f.variant, f.tier)))})`;
+}
+
+/** Structure key for the panel: hull plus every slot's type, variant and tier. */
+export function shipPanelKey(ship: Ship | undefined): string {
+  if (!ship) return 'none';
+  const slots = ship.slots.map((f) => (f ? `${f.type}:${f.variant}:${f.tier}` : '-')).join('.');
+  return `${ship.id}:${ship.hullId}:${slots}`;
+}
 
 export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
   return new Panel(
     el,
     () => {
       const s = ctx.getState();
-      const sel = s.run.ships.find((x) => x.id === s.run.selectedId);
-      return sel ? `${sel.id}:${sel.hullId}:${sel.slots.map((f) => (f ? f.type + f.tier : '-')).join('.')}` : 'none';
+      return shipPanelKey(s.run.ships.find((x) => x.id === s.run.selectedId));
     },
     (bind) => {
       const st = ctx.getState;
@@ -94,7 +154,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       const slotRows = ship0.slots.map((f, i) => {
         const row = h('div', { class: 'slot' });
         if (f) {
-          const def = COMPONENTS[f.type];
+          const def = variantDef(f.type, f.variant);
           row.append(
             h(
               'div',
@@ -108,7 +168,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           const rm = h('button', {
             class: 'icon',
             text: '✕',
-            title: `Remove (refund ${formatCost(halve(investedCost(f.type, f.tier)))})`,
+            title: removeRefundTitle(f),
             onclick: () => send({ t: 'remove', shipId: id, slot: i }),
           });
           rm.dataset.title = rm.title;
@@ -135,14 +195,15 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           );
           const sel = h('select');
           sel.append(h('option', { text: 'Install…' }));
-          for (const cid of COMPONENT_IDS) {
-            const o = h('option', { text: `${COMPONENTS[cid].name} — ${formatCost(COMPONENTS[cid].cost(1))}` });
-            o.value = cid;
-            sel.append(o);
+          const opts = installOptions();
+          for (const o of opts) {
+            const opt = h('option', { text: o.label });
+            opt.value = o.value;
+            sel.append(opt);
           }
           sel.addEventListener('change', () => {
-            if (sel.value)
-              send({ t: 'install', shipId: id, slot: i, comp: sel.value as (typeof COMPONENT_IDS)[number] });
+            const pick = parseInstallValue(sel.value);
+            if (pick) send({ t: 'install', shipId: id, slot: i, comp: pick.comp, variant: pick.variant });
             sel.selectedIndex = 0;
           });
           row.append(sel);
@@ -152,9 +213,9 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             const rb = refitBlock(st(), s);
             sel.disabled = !!rb;
             sel.title = rb ?? '';
-            for (const o of Array.from(sel.options).slice(1)) {
-              o.disabled = !canAfford(st().run.bank, COMPONENTS[o.value as (typeof COMPONENT_IDS)[number]].cost(1));
-            }
+            // Option 0 is the 'Install…' placeholder; the rest mirror installOptions().
+            const bank = st().run.bank;
+            for (let k = 0; k < opts.length; k++) sel.options[k + 1]!.disabled = !canAfford(bank, opts[k]!.cost);
           });
         }
         return row;

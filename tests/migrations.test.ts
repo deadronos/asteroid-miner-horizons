@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { defaultVariant } from '../src/data/components';
 import { RESOURCES } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { SAVE_VERSION } from '../src/sim/create';
@@ -9,13 +10,14 @@ import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
-// Real saves frozen at versions 2 to 6 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 7 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
 import V4_FIXTURE from './fixtures/save-v4.json?raw';
 import V5_FIXTURE from './fixtures/save-v5.json?raw';
 import V6_FIXTURE from './fixtures/save-v6.json?raw';
+import V7_FIXTURE from './fixtures/save-v7.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -26,11 +28,15 @@ function saveAt(version: number): SaveData {
   return { version, profile: { marker: 'original' }, run: { ships: [] } } as unknown as SaveData;
 }
 
-/** The v3 fixture's run reshaped as current: refined columns added, a system with no modifiers, and a hazard board. */
+/** The v3 fixture's run reshaped as current: refined columns added, a system with no modifiers, a hazard board, and every fitted slot at its default variant. */
 const currentRun = () => {
   const fixture = v3FixtureState();
   const run = fixture.run;
-  const ships = run.ships.map((s) => ({ ...s, cargo: { ...s.cargo, alloy: 0, fuel: 0 } }));
+  const ships = run.ships.map((s) => ({
+    ...s,
+    cargo: { ...s.cargo, alloy: 0, fuel: 0 },
+    slots: s.slots.map((f) => (f ? { ...f, variant: defaultVariant(f.type) } : null)),
+  }));
   const system = { ...run.system, modifiers: [] };
   const hazards = newHazards(fixture.profile.seed, run.system.number);
   return { ...run, system, bank: { ...run.bank, alloy: 0, fuel: 0 }, ships, refinery: newRefinery(), hazards };
@@ -474,5 +480,57 @@ describe('rock traits migration to v7', () => {
     const state = parseImport(JSON.stringify({ version: 7, profile: loadFrozen(V6_FIXTURE).profile, run }));
     if (!state.ok) throw new Error('expected the save to load');
     expect(state.record.state.run.rocks[0]!.trait).toBe('volatile');
+  });
+});
+
+describe('component variants migration to v8', () => {
+  const frozen: Array<[string, string]> = [
+    ['v2', FIXTURE],
+    ['v3', V3_FIXTURE],
+    ['v4', V4_FIXTURE],
+    ['v5', V5_FIXTURE],
+    ['v6', V6_FIXTURE],
+    ['v7', V7_FIXTURE],
+  ];
+
+  it.each(frozen)('loads the %s fixture as v8 with every fitted slot at its default variant', (_label, raw) => {
+    const state = loadFrozen(raw);
+
+    expect(state.version).toBe(SAVE_VERSION);
+    const slots = state.run.ships.flatMap((s) => s.slots);
+    expect(slots.every((f) => f === null || f.variant === defaultVariant(f.type))).toBe(true);
+  });
+
+  it('loads a v7 save whose fitted slots already carry a variant', () => {
+    // The branch's own intermediate writes saved v7 with a variant set; a v7
+    // save never legitimately had one, so the migration may overwrite it.
+    const { profile, run } = JSON.parse(V7_FIXTURE).state;
+    run.ships[0].slots[0] = { type: 'laser', variant: 'wide', tier: 1 };
+    const r = parseImport(JSON.stringify({ version: 7, profile, run }));
+    if (!r.ok) throw new Error('expected the save to load');
+    expect(r.record.state.run.ships[0]!.slots[0]!.variant).toBe(defaultVariant('laser'));
+  });
+
+  it('rejects a save with a variant unknown for its slot type', () => {
+    const loaded = loadFrozen(V7_FIXTURE);
+    const run = loaded.run;
+    run.ships[0]!.slots[0] = { type: 'laser', variant: 'thruster', tier: 1 } as never;
+    expect(parseImport(JSON.stringify({ version: 8, profile: loaded.profile, run })).ok).toBe(false);
+  });
+
+  it('rejects a save whose slot tier is out of range', () => {
+    const loaded = loadFrozen(V7_FIXTURE);
+    const run = loaded.run;
+    run.ships[0]!.slots[0] = { type: 'laser', variant: 'focused', tier: 4 } as never;
+    expect(parseImport(JSON.stringify({ version: 8, profile: loaded.profile, run })).ok).toBe(false);
+  });
+
+  it('keeps a non-default variant through a round-trip', () => {
+    const loaded = loadFrozen(V7_FIXTURE);
+    const run = loaded.run;
+    run.ships[0]!.slots[0] = { type: 'laser', variant: 'wide', tier: 2 };
+    const r = parseImport(JSON.stringify({ version: 8, profile: loaded.profile, run }));
+    if (!r.ok) throw new Error('expected the save to load');
+    expect(r.record.state.run.ships[0]!.slots[0]).toEqual({ type: 'laser', variant: 'wide', tier: 2 });
   });
 });

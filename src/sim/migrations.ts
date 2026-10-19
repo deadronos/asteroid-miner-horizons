@@ -3,6 +3,7 @@
 // upgrades the previous version to the new one. Older saves are then loaded by
 // replaying the entries in order instead of being rejected outright.
 
+import { defaultVariant } from '../data/components';
 import { newBoard } from './contracts';
 import { SAVE_VERSION } from './create';
 import { newHazards } from './hazards';
@@ -51,6 +52,12 @@ export const migrations: Record<number, Migration> = {
   },
   // v7 added an optional `rock.trait`; old rocks stay plain.
   6: (d) => d,
+  // v8 added `fitted.variant`. A pre-variant part becomes its component's
+  // default, whose numbers are the ones it already had.
+  7: (d) => {
+    for (const ship of d.run.ships) for (const f of ship.slots) if (f) f.variant = defaultVariant(f.type);
+    return d;
+  },
 };
 
 export interface MigrateOptions {

@@ -21,7 +21,7 @@
 // alloy is smelted from ore.
 
 import { dist, distSq, type Vec2 } from '../src/core/vec';
-import { COMPONENTS, type ComponentId } from '../src/data/components';
+import { variantDef, type ComponentId, type VariantId } from '../src/data/components';
 import { CONTRACTS } from '../src/data/contracts';
 import { HULLS } from '../src/data/hulls';
 import type { PerkId } from '../src/data/perks';
@@ -41,8 +41,15 @@ export const ICE_RESERVE = 0.5;
 const ICE_PER_FUEL = (RECIPES.fuel.input.ice ?? 0) / RECIPES.fuel.output;
 /** Ore the alloy recipe eats per unit of alloy produced. */
 const ORE_PER_ALLOY = (RECIPES.alloy.input.ore ?? 0) / RECIPES.alloy.output;
-/** Fill order for empty slots. */
-const INSTALL_ORDER: ComponentId[] = ['cargo', 'sensor', 'engine', 'armor', 'laser', 'shield'];
+/** Fill order for empty slots, with the variant each install fits. */
+const INSTALL_ORDER: { comp: ComponentId; variant: VariantId }[] = [
+  { comp: 'cargo', variant: 'standard' },
+  { comp: 'sensor', variant: 'standard' },
+  { comp: 'engine', variant: 'ion' },
+  { comp: 'armor', variant: 'standard' },
+  { comp: 'laser', variant: 'focused' },
+  { comp: 'shield', variant: 'standard' },
+];
 /** Upgrade order for fitted components. */
 const UPGRADE_ORDER: ComponentId[] = ['laser', 'cargo', 'sensor', 'engine', 'armor', 'shield'];
 const PERK_ORDER: PerkId[] = ['yield', 'optics', 'bay', 'kit', 'thrust', 'warp'];
@@ -240,11 +247,11 @@ function nextPurchase(state: GameState, wc: number): Command | null {
   if (!hullBlock(state, 'drone') && ok(HULLS.drone.cost)) return { t: 'buyHull', hullId: 'drone' };
 
   const docked = run.ships.filter((s) => !refitBlock(state, s));
-  for (const comp of INSTALL_ORDER) {
+  for (const { comp, variant } of INSTALL_ORDER) {
     for (const s of docked) {
       const i = s.slots.indexOf(null);
-      if (i >= 0 && ok(COMPONENTS[comp].cost(1)) && !s.slots.some((f) => f?.type === comp && comp !== 'laser'))
-        return { t: 'install', shipId: s.id, slot: i, comp };
+      if (i >= 0 && ok(variantDef(comp, variant).cost(1)) && !s.slots.some((f) => f?.type === comp && comp !== 'laser'))
+        return { t: 'install', shipId: s.id, slot: i, comp, variant };
     }
   }
   for (const comp of UPGRADE_ORDER) {

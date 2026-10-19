@@ -2,7 +2,7 @@
 // (to show prices and disabled reasons). Nothing here mutates state.
 
 import { dist } from '../core/vec';
-import { COMPONENTS, type ComponentId, type Tier } from '../data/components';
+import { variantDef, type ComponentId, type Tier, type VariantId } from '../data/components';
 import { HULLS, type HullId } from '../data/hulls';
 import { PERKS, type PerkId } from '../data/perks';
 import { RESOURCES, canAfford, type Cost } from '../data/resources';
@@ -14,10 +14,10 @@ export const isDocked = (run: Run, ship: Ship): boolean =>
   isAlive(ship) && dist(ship.pos, run.system.station.pos) <= TUNING.dockRadius;
 
 /** Total resources sunk into a component up to its tier (for refunds). */
-export function investedCost(type: ComponentId, tier: Tier): Cost {
+export function investedCost(type: ComponentId, variant: VariantId, tier: Tier): Cost {
   const total: Cost = {};
   for (let t = 1; t <= tier; t++) {
-    const c = COMPONENTS[type].cost(t as Tier);
+    const c = variantDef(type, variant).cost(t as Tier);
     for (const r of RESOURCES) total[r] = (total[r] ?? 0) + (c[r] ?? 0);
   }
   return total;
@@ -29,7 +29,7 @@ export const halve = (c: Cost): Cost =>
 export function upgradeCost(ship: Ship, slot: number): Cost | null {
   const f = ship.slots[slot];
   if (!f || f.tier >= 3) return null;
-  return COMPONENTS[f.type].cost((f.tier + 1) as Tier);
+  return variantDef(f.type, f.variant).cost((f.tier + 1) as Tier);
 }
 
 export function repairCost(state: GameState, ship: Ship): number {

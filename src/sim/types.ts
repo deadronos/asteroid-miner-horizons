@@ -4,7 +4,7 @@
 
 import type { Rng } from '../core/rng';
 import type { Vec2 } from '../core/vec';
-import type { ComponentId, Tier } from '../data/components';
+import type { ComponentId, Tier, VariantId } from '../data/components';
 import type { ContractKind } from '../data/contracts';
 import type { HullId } from '../data/hulls';
 import type { ModifierId } from '../data/modifiers';
@@ -44,6 +44,7 @@ export interface Pickup {
 
 export interface Fitted {
   type: ComponentId;
+  variant: VariantId;
   tier: Tier;
 }
 
