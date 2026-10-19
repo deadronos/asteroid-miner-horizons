@@ -5,7 +5,15 @@
 // draws from an RNG or moves a ship, rock or pickup.
 
 import { HULLS } from '../data/hulls';
-import { RAW_RESOURCES, RESOURCE_INFO, RESOURCES, emptyWallet, walletTotal, walletValue } from '../data/resources';
+import {
+  credit,
+  RAW_RESOURCES,
+  RESOURCE_INFO,
+  RESOURCES,
+  emptyWallet,
+  walletTotal,
+  walletValue,
+} from '../data/resources';
 import type { Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { yieldMul } from './mining';
@@ -93,7 +101,7 @@ export function applyOffline(state: GameState, awaySec: number): OfflineGains | 
   if (walletTotal(gains.bank) + gains.stored < 1) return null;
   const { run, profile } = state;
   const mul = yieldMul(state);
-  for (const r of RESOURCES) run.bank[r] += gains.bank[r];
+  credit(run.bank, gains.bank);
   run.runValue += walletValue(gains.bank);
   run.automation.outposts.forEach((o, i) => {
     const take = gains.extract[i]!;

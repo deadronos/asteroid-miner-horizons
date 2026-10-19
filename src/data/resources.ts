@@ -41,6 +41,11 @@ export function pay(w: Wallet, cost: Cost): boolean {
   return true;
 }
 
+/** Adds every entry of `cost` to `wallet` in `RESOURCES` order. The counterpart of `pay`. */
+export function credit(w: Wallet, cost: Cost): void {
+  for (const r of RESOURCES) w[r] += cost[r] ?? 0;
+}
+
 export function formatCost(cost: Cost): string {
   const parts = RESOURCES.filter((r) => (cost[r] ?? 0) > 0).map(
     (r) => `${Math.ceil(cost[r]!)}${RESOURCE_INFO[r].icon}`,

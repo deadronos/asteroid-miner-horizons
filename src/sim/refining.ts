@@ -4,7 +4,16 @@
 // shorten each cycle and let one cycle finish several batches.
 
 import { RECIPES, type RecipeId } from '../data/refining';
-import { formatCost, pay, RESOURCES, RESOURCE_INFO, type Cost, type Resource, type Wallet } from '../data/resources';
+import {
+  credit,
+  formatCost,
+  pay,
+  RESOURCES,
+  RESOURCE_INFO,
+  type Cost,
+  type Resource,
+  type Wallet,
+} from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { GameState, Profile, RefineJob, Refinery, Run } from './types';
 
@@ -108,7 +117,7 @@ export function cancelRefine(run: Run, id: number): RefineJob | null {
   const job = queue[index]!;
   queue.splice(index, 1);
   const cost = batchCost(job.recipe, job.count);
-  for (const r of RESOURCES) run.bank[r] += cost[r] ?? 0;
+  credit(run.bank, cost);
   return job;
 }
 
