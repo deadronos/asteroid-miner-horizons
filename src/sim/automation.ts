@@ -9,7 +9,7 @@ import { TUNING } from '../data/tuning';
 import { isDocked } from './economy';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
-import { arrive, dodgeHazards, steer, unsafe, type TickCtx } from './pilot';
+import { arrive, dodgeHazards, formationSlot, steer, unsafe, type TickCtx } from './pilot';
 import { cargoFree, findShip, flagship, isAlive, isHoldFull, type ShipStats } from './ships';
 import type { Automation, GameState, Outpost, Rock, Ship } from './types';
 
@@ -137,7 +137,7 @@ interface Source {
 /** The source behind a hauler target id, or null when it has nothing left to give or sits in a hazard. */
 function sourceFor(ctx: TickCtx, id: number): Source | null {
   const { run } = ctx.state;
-  const o = run.automation.outposts.find((x) => x.rockId === id);
+  const o = outpostAt(ctx.state, id);
   if (o) {
     const rock = ctx.index.rockById.get(o.rockId);
     if (!rock || walletTotal(o.stored) <= 1e-6 || unsafe(ctx, rock.pos)) return null;
@@ -224,9 +224,5 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     return;
   }
   // Idle, or loaded without auto-dock: wait just off the station for work or a manual dock order.
-  const home = ctx.index.home;
-  const slot = (ship.id % 6) * ((Math.PI * 2) / 6);
-  home.x = station.x + Math.cos(slot) * 110;
-  home.z = station.z + Math.sin(slot) * 110;
-  haulTo(ctx, ship, st, home, 20, null);
+  haulTo(ctx, ship, st, formationSlot(ctx.index.home, station, ship.id, 110), 20, null);
 }

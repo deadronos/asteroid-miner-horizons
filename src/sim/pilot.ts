@@ -253,6 +253,17 @@ export function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: bool
 }
 
 /**
+ * Writes ship `id`'s parking spot into `out` and returns it: one of six slots on a ring of `radius` around `anchor`,
+ * so ships waiting at the same anchor spread out. Writes into `out` so the per-tick path does not allocate.
+ */
+export function formationSlot(out: Vec2, anchor: Vec2, id: number, radius: number): Vec2 {
+  const slot = (id % 6) * ((Math.PI * 2) / 6);
+  out.x = anchor.x + Math.cos(slot) * radius;
+  out.z = anchor.z + Math.sin(slot) * radius;
+  return out;
+}
+
+/**
  * Drone brain, used when a drone has no manual order:
  * comet path or flare → get clear · full → return to station · loose pickups nearby → collect · else mine near the
  * anchor (the flagship in "assist" mode, the station in "auto" mode) · else follow the anchor. Targets in a comet
@@ -264,10 +275,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   const fs = flagship(run);
   const anchor = ship.aiMode === 'assist' && isAlive(fs) ? fs.pos : station;
-  const slot = (ship.id % 6) * ((Math.PI * 2) / 6);
-  const home = ctx.index.home;
-  home.x = anchor.x + Math.cos(slot) * 70;
-  home.z = anchor.z + Math.sin(slot) * 70;
+  const home = formationSlot(ctx.index.home, anchor, ship.id, 70);
 
   const full = isHoldFull(ship, st);
   if (dodgeHazards(ctx, ship, st, full)) {
