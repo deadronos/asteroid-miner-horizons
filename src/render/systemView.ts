@@ -4,12 +4,20 @@
 import * as THREE from 'three';
 import { TUNING } from '../data/tuning';
 import type { StarSystem } from '../sim/types';
+import { HALO_SCALE, PlanetSurface, RIM_SCALE, atmosphereMaterial, planetKind, planetSeed } from './planetLook';
 import { additive, circleLoop, flat, glowTexture } from './util';
+
+/** Radians the planets' spin axes lean toward the camera. */
+const PLANET_TILT = 0.35;
+/** Milliseconds per frame spent painting planet surfaces (a row costs ~0.2 ms). */
+const PAINT_BUDGET_MS = 3;
 
 export class SystemView {
   readonly group = new THREE.Group();
   readonly light: THREE.PointLight;
   private planets: { body: THREE.Mesh; moons: THREE.Mesh[]; ring: THREE.Mesh | null }[] = [];
+  /** Planet surfaces; their textures are not reached by the material traversal in `dispose`. */
+  private surfaces: PlanetSurface[] = [];
   private station = new THREE.Group();
   private stationRing!: THREE.Mesh;
   private beacons: THREE.Mesh[] = [];
@@ -66,14 +74,28 @@ export class SystemView {
       g.add(band);
     }
 
-    for (const p of sys.planets) {
+    sys.planets.forEach((p, i) => {
       const orbit = circleLoop(p.orbitR, 0x35507a, 0.35);
       orbit.position.y = -10;
       g.add(orbit);
+      const kind = planetKind(p);
+      const surface = new PlanetSurface(kind, p.color, planetSeed(sys, i));
+      this.surfaces.push(surface);
       const body = new THREE.Mesh(
-        new THREE.SphereGeometry(p.radius, 40, 20),
-        new THREE.MeshLambertMaterial({ color: p.color }),
+        new THREE.SphereGeometry(p.radius, 48, 24),
+        new THREE.MeshLambertMaterial({ map: surface.texture }),
       );
+      // Lay the spin axis toward the top-down camera's up, tipped a little so a
+      // pole shows: bands and terrain then roll across the visible disc.
+      body.rotation.x = Math.PI / 2 - PLANET_TILT;
+      for (const [layer, scale] of [
+        ['rim', RIM_SCALE],
+        ['halo', HALO_SCALE],
+      ] as const) {
+        body.add(
+          new THREE.Mesh(new THREE.SphereGeometry(p.radius * scale, 48, 24), atmosphereMaterial(kind, p.color, layer)),
+        );
+      }
       g.add(body);
       let ring: THREE.Mesh | null = null;
       if (p.ringed) {
@@ -93,7 +115,7 @@ export class SystemView {
         return mesh;
       });
       this.planets.push({ body, moons, ring });
-    }
+    });
 
     this.buildStation(sys);
   }
@@ -124,6 +146,11 @@ export class SystemView {
 
   /** `boost` (0..1) brightens and swells the star glow, e.g. during a solar flare. */
   update(sys: StarSystem, time: number, boost = 0): void {
+    // Planets show their flat colour until their surface finishes painting.
+    const until = performance.now() + PAINT_BUDGET_MS;
+    for (const s of this.surfaces) {
+      while (!s.done && performance.now() < until) s.paint(2);
+    }
     sys.planets.forEach((p, i) => {
       const v = this.planets[i];
       if (!v) return;
@@ -156,6 +183,8 @@ export class SystemView {
       else mat?.dispose();
     });
     this.group.clear();
+    this.surfaces.forEach((s) => s.texture.dispose());
+    this.surfaces = [];
     this.planets = [];
     this.beacons = [];
     this.starGlow = [];
