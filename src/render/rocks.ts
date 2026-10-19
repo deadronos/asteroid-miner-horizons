@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { hash01 } from '../core/rng';
 import { RAW_RESOURCES, RESOURCE_INFO, type RawResource } from '../data/resources';
+import type { RockTrait } from '../data/traits';
 import { TUNING } from '../data/tuning';
 import type { Pickup, Rock } from '../sim/types';
 import { inView, type ViewRect } from './cull';
@@ -13,6 +14,10 @@ import { rockGeometry, type RockStyle } from './util';
 
 /** Number of shared rock shape pools: two shapes for each of the three kinds. */
 export const ROCK_POOLS = 6;
+/** `aTrait` shader value per trait; also the fragment accent branch order. */
+const TRAIT_INDEX: Record<RockTrait, number> = { volatile: 1, dense: 2, magnetic: 3 };
+/** Shader value for a rock's trait: volatile 1, dense 2, magnetic 3, plain 0. */
+export const traitIndex = (trait: RockTrait | undefined): number => (trait ? TRAIT_INDEX[trait] : 0);
 const STYLE_OF: Record<RawResource, RockStyle> = { ore: 'rock', ice: 'gem', crystal: 'shard' };
 /** Shape family a kind is drawn with: ore `rock`, ice `gem`, crystal `shard`. */
 export const rockStyleOf = (kind: RawResource): RockStyle => STYLE_OF[kind];
@@ -48,6 +53,8 @@ class InstancePool {
   mesh: THREE.InstancedMesh;
   /** Per-instance (damage 0..1, crack seed, self-glow), only when `withDamage`. */
   damage: THREE.InstancedBufferAttribute | null = null;
+  /** Per-instance trait index (see `traitIndex`), only when `withDamage`. */
+  trait: THREE.InstancedBufferAttribute | null = null;
   constructor(
     private readonly parent: THREE.Object3D,
     private readonly geo: THREE.BufferGeometry,
@@ -63,6 +70,9 @@ class InstancePool {
       this.damage = new THREE.InstancedBufferAttribute(new Float32Array(capacity * 3), 3);
       this.damage.setUsage(THREE.DynamicDrawUsage);
       this.geo.setAttribute('aDamage', this.damage);
+      this.trait = new THREE.InstancedBufferAttribute(new Float32Array(capacity), 1);
+      this.trait.setUsage(THREE.DynamicDrawUsage);
+      this.geo.setAttribute('aTrait', this.trait);
     }
     const mesh = new THREE.InstancedMesh(this.geo, this.mat, capacity);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
@@ -86,6 +96,7 @@ class InstancePool {
     this.mesh.instanceMatrix.needsUpdate = true;
     if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
     if (this.damage) this.damage.needsUpdate = true;
+    if (this.trait) this.trait.needsUpdate = true;
   }
 }
 
@@ -102,8 +113,9 @@ const KIND_SURFACE: Record<RawResource, { shininess: number; specular: number; e
  * Patches a Phong material with the shared rock shader: emissive crack lines
  * (thin bands of 3D value noise in object space that widen and spread as
  * `aDamage.x` rises) plus a `uKind` branch that shades ore veins, an icy
- * fresnel rim, or crystal facets. `uKind` is a uniform rather than a define so
- * all three kinds share one program.
+ * fresnel rim, or crystal facets, and a tint keyed on the per-instance
+ * `aTrait`. `uKind` is a uniform rather than a define so all three kinds share
+ * one program.
  */
 function patchRock(mat: THREE.MeshPhongMaterial, kind: RawResource): void {
   const kindIndex = KIND_INDEX[kind];
@@ -116,14 +128,17 @@ function patchRock(mat: THREE.MeshPhongMaterial, kind: RawResource): void {
         '#include <common>',
         `#include <common>
 attribute vec3 aDamage;
+attribute float aTrait;
 varying vec3 vDamage;
-varying vec3 vObj;`,
+varying vec3 vObj;
+varying float vTrait;`,
       )
       .replace(
         '#include <begin_vertex>',
         `#include <begin_vertex>
 vDamage = aDamage;
-vObj = position;`,
+vObj = position;
+vTrait = aTrait;`,
       );
     shader.fragmentShader = shader.fragmentShader
       .replace(
@@ -134,6 +149,7 @@ uniform float uGlow;
 uniform float uKind;
 varying vec3 vDamage;
 varying vec3 vObj;
+varying float vTrait;
 float hash3(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
 float vnoise(vec3 p) {
   vec3 i = floor(p);
@@ -166,6 +182,14 @@ if (uKind < 0.5) {
   float mask = smoothstep(0.42, 0.86, vnoise(vObj * 4.2));
   float pulse = 0.75 + 0.25 * sin(uTime * 1.6 + facet * 6.283185);
   totalEmissiveRadiance += vec3(0.58, 0.3, 1.0) * facet * mask * pulse * (0.3 + 0.5 * uGlow);
+}
+// Trait accent: a steady tint so traited rocks read at a glance from any angle.
+if (vTrait > 2.5) {
+  totalEmissiveRadiance += vec3(0.35, 0.82, 1.0) * 0.2;
+} else if (vTrait > 1.5) {
+  totalEmissiveRadiance += vec3(0.56, 0.65, 0.72) * 0.2;
+} else if (vTrait > 0.5) {
+  totalEmissiveRadiance += vec3(1.0, 0.42, 0.23) * 0.2;
 }
 totalEmissiveRadiance += diffuseColor.rgb * vDamage.z * uGlow * (0.85 + 0.15 * sin(uTime * 2.0 + vDamage.y * 20.0));
 if (vDamage.x > 0.001) {
@@ -283,6 +307,7 @@ export class RockView {
           .lerp(HOT, dmg * 0.35);
         pool.mesh.setColorAt(i, c);
         pool.damage!.setXYZ(i, dmg, h, r.kind === 'crystal' ? 1 : 0);
+        pool.trait!.setX(i, traitIndex(r.trait));
       });
       pool.commit(bucket.length);
     });
