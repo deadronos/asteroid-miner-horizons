@@ -49,6 +49,8 @@ export const migrations: Record<number, Migration> = {
     d.run.hazards = newHazards(d.profile.seed, d.run.system.number);
     return d;
   },
+  // v7 added an optional `rock.trait`; old rocks stay plain.
+  6: (d) => d,
 };
 
 export interface MigrateOptions {

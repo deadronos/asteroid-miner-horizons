@@ -9,12 +9,13 @@ import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
-// Real saves frozen at versions 2 to 5 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 6 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
 import V4_FIXTURE from './fixtures/save-v4.json?raw';
 import V5_FIXTURE from './fixtures/save-v5.json?raw';
+import V6_FIXTURE from './fixtures/save-v6.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -272,7 +273,8 @@ describe('load through the production registry', () => {
 
   it('loads a malformed upgradable save as unusable instead of throwing', () => {
     // Through the production table, migrations[3] reads fields this payload lacks.
-    const broken = JSON.stringify({ version: SAVE_VERSION - 1, profile: {}, run: {} });
+    // The newest step (migrations[6]) is a documented no-op, so it cannot throw.
+    const broken = JSON.stringify({ version: 3, profile: {}, run: {} });
     expect(migrate(JSON.parse(broken))).toBeNull();
     expect(parseImport(broken)).toEqual({
       ok: false,
@@ -441,5 +443,30 @@ describe('hazards migration to v6', () => {
     };
     const state = { version: 6, profile: loadFrozen(V5_FIXTURE).profile, run: { ...run, hazards } };
     expect(parseImport(JSON.stringify(state)).ok).toBe(true);
+  });
+});
+
+describe('rock traits migration to v7', () => {
+  it.each([
+    ['v5', V5_FIXTURE],
+    ['v6', V6_FIXTURE],
+  ])('loads the %s fixture as v7 with plain rocks', (_l, raw) => {
+    const state = loadFrozen(raw);
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.run.rocks.every((r) => r.trait === undefined)).toBe(true);
+  });
+
+  it('rejects a rock with an unknown trait', () => {
+    const run = loadFrozen(V6_FIXTURE).run;
+    run.rocks[0]!.trait = 'bogus' as never;
+    expect(parseImport(JSON.stringify({ version: 7, profile: loadFrozen(V6_FIXTURE).profile, run })).ok).toBe(false);
+  });
+
+  it('keeps a known trait through a round-trip', () => {
+    const run = loadFrozen(V6_FIXTURE).run;
+    run.rocks[0]!.trait = 'volatile';
+    const state = parseImport(JSON.stringify({ version: 7, profile: loadFrozen(V6_FIXTURE).profile, run }));
+    if (!state.ok) throw new Error('expected the save to load');
+    expect(state.record.state.run.rocks[0]!.trait).toBe('volatile');
   });
 });
