@@ -3,16 +3,14 @@ import type { ComponentId } from '../src/data/components';
 import { RESOURCES, type Cost } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { makeOutpost } from '../src/sim/automation';
-import { applyCommand, type Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { halve, investedCost, warpCost } from '../src/sim/economy';
 import { makeRock } from '../src/sim/generate';
 import { describeModifiers, rollModifiers } from '../src/sim/modifiers';
 import { handlers } from '../src/sim/handlers';
 import { flagship, makeShip } from '../src/sim/ships';
-import type { GameState } from '../src/sim/types';
+import { send } from './helpers';
 
-const send = (s: GameState, c: Command): void => applyCommand(s, c);
 const fs1 = () => {
   const s = newGame(1);
   return { s, fs: flagship(s.run) };

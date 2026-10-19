@@ -12,10 +12,9 @@ import { chainTarget, droneThink, steer, workRock, type TickCtx } from '../src/s
 import { serialize } from '../src/sim/save';
 import { flagship, makeShip } from '../src/sim/ships';
 import type { GameState, Rock, Ship, StarClass } from '../src/sim/types';
-import { tick } from '../src/sim/update';
+import { DT, runTicks } from './helpers';
 
-const DT = 1 / 60;
-
+const NORMAL = { hazards: 'normal' } as const;
 function ctxFor(state: ReturnType<typeof newGame>): TickCtx {
   const index = new SimIndex();
   index.rebuild(state);
@@ -89,12 +88,6 @@ function hazardGame(starClass: StarClass, pos: { x: number; z: number }): { stat
   return { state, drone };
 }
 
-function run(state: GameState, seconds: number): void {
-  const index = new SimIndex();
-  const input = { thrust: { x: 0, z: 0 }, commands: [], hazards: 'normal' as const };
-  for (let i = 0; i < Math.round(seconds / DT); i++) tick(state, DT, input, index);
-}
-
 describe('droneThink hazard reflexes', () => {
   it('docks near the station during a flare warning and stays docked, unhurt, through the flare', () => {
     const { state, drone } = hazardGame('M', { x: 0, z: 0 });
@@ -105,10 +98,10 @@ describe('droneThink hazard reflexes', () => {
     flagship(state.run).pos = { ...drone.pos };
     const hull = drone.hull;
     state.run.hazards.flare = { phase: 'warning', timeLeft: TUNING.flareWarning };
-    run(state, TUNING.flareWarning + 1);
+    runTicks(state, (TUNING.flareWarning + 1) * TUNING.simHz, NORMAL);
     expect(state.run.hazards.flare?.phase).toBe('active');
     expect(isDocked(state.run, drone)).toBe(true);
-    run(state, TUNING.flareDuration - 2);
+    runTicks(state, (TUNING.flareDuration - 2) * TUNING.simHz, NORMAL);
     expect(isDocked(state.run, drone)).toBe(true);
     expect(drone.hull).toBe(hull);
   });
@@ -119,7 +112,7 @@ describe('droneThink hazard reflexes', () => {
     drone.pos = { x: -st.x * 1.2, z: -st.z * 1.2 };
     const hull = drone.hull;
     state.run.hazards.flare = { phase: 'warning', timeLeft: TUNING.flareWarning };
-    run(state, TUNING.flareWarning + TUNING.flareDuration - 1);
+    runTicks(state, (TUNING.flareWarning + TUNING.flareDuration - 1) * TUNING.simHz, NORMAL);
     expect(state.run.hazards.flare?.phase).toBe('active');
     expect(Math.hypot(drone.pos.x, drone.pos.z)).toBeGreaterThan(FLARES.M!.reach);
     expect(drone.hull).toBe(hull);
@@ -131,7 +124,7 @@ describe('droneThink hazard reflexes', () => {
     drone.aiMode = 'assist';
     flagship(state.run).pos = { x: 0, z: 600 };
     state.run.hazards.comet = { from: { x: -3200, z: 600 }, vel: { x: 130, z: 0 }, belt: 0, timeLeft: 8 };
-    run(state, 3);
+    runTicks(state, 3 * TUNING.simHz, NORMAL);
     expect(cometPathEscape(state.run, [], drone.pos, TUNING.cometDodgePad, { x: 0, z: 0 })).toBe(false);
     expect(drone.pos.z).toBeGreaterThan(600);
   });
@@ -267,8 +260,8 @@ describe('wide-beam splash', () => {
   it('is deterministic', () => {
     const a = wideField(42);
     const b = wideField(42);
-    run(a.state, 8);
-    run(b.state, 8);
+    runTicks(a.state, 8 * TUNING.simHz, NORMAL);
+    runTicks(b.state, 8 * TUNING.simHz, NORMAL);
     expect(a.near.hp).toBeLessThan(a.near.maxHp); // the run really did splash the neighbour
     expect(a.target.hp).toBeLessThan(a.target.maxHp);
     expect(serialize(a.state)).toBe(serialize(b.state));

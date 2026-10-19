@@ -12,9 +12,7 @@ import {
   type Wallet,
 } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
-import type { Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
-import { SimIndex } from '../src/sim/index';
 import {
   cancelRefine,
   describeRecipe,
@@ -27,7 +25,7 @@ import {
   updateRefinery,
 } from '../src/sim/refining';
 import type { GameState, Run } from '../src/sim/types';
-import { tick } from '../src/sim/update';
+import { runTicks } from './helpers';
 
 /** A fresh game with the bank overridden for the case at hand. */
 function stateWith(bank: Partial<Wallet>): GameState {
@@ -41,8 +39,6 @@ function pushJobs(run: Run, recipe: RecipeId, count: number, n = 1): void {
   for (let i = 0; i < n; i++)
     run.refinery.queue.push({ id: run.refinery.nextId++, recipe, count, total: count, progress: 0 });
 }
-
-const INPUT = { thrust: { x: 0, z: 0 }, commands: [] as Command[] };
 
 /** Ore-equivalent value gap between two prices. */
 const drift = (now: Cost, before: Cost): number => Math.abs(walletValue(now) - walletValue(before));
@@ -385,8 +381,7 @@ describe('refinery in the tick', () => {
   it('advances the queue as the sim runs', () => {
     const state = stateWith({ ice: 100 });
     queueRefine(state.run, 'fuel', 3);
-    const index = new SimIndex();
-    for (let t = 0; t < 72; t++) tick(state, 1 / 60, INPUT, index);
+    runTicks(state, 72);
 
     expect(state.run.bank.fuel).toBe(2);
     expect(state.run.refinery.produced.fuel).toBe(2);

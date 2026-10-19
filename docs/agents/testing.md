@@ -29,7 +29,7 @@ special roles worth knowing before you change the code they guard:
 | `stats.test.ts`      | Derived ship stats as a snapshot; update it only when the change is intended |
 | `bot.test.ts`        | The balance bot's decisions                                                  |
 
-Helpers: `tests/memStorage.ts` is an in-memory `Storage` (save slots and settings read
+Helpers: `tests/helpers.ts` drives the sim (`runTicks`, `runFor`, `send`, and the shared `DT`); `tests/memStorage.ts` is an in-memory `Storage` (save slots and settings read
 `globalThis.localStorage`, which tests swap in); `tests/fixtures/save-vN.json` are old saves for the migration
 tests; `tests/__snapshots__/` holds snapshots.
 
@@ -45,9 +45,9 @@ tests; `tests/__snapshots__/` holds snapshots.
   even if nobody asked.
 - **Isolation matters.** New subsystems draw from their own RNG stream and id counter, so a test should assert
   `run.rng.s` and rock layout are unchanged by the new feature. This is what keeps `docs/balance.md` stable.
-- **Sim tests drive the tick directly.** A local helper that builds `{ thrust, commands }`, constructs one
-  `SimIndex` and loops `tick(state, DT, input, index)` is the standard shape — see `sim.test.ts` and
-  `alloc.test.ts`. Do not spin up `main.ts`.
+- **Sim tests drive the tick directly** through `tests/helpers.ts`: `runTicks(state, n, opts)` for an exact tick
+  count, `runFor(state, seconds, opts)` for sim time (it accumulates `t += DT`, so it can run one tick more than
+  `seconds / DT`), with `commands`, `hazards`, `assists` or a shared `index` in `opts`. Do not spin up `main.ts`.
 - **`alloc.test.ts` guards allocation.** Reuse buffers and instances rather than allocating per tick; that test
   is the regression net for hot-path changes.
 

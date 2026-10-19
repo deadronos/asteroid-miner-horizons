@@ -1,23 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { ACHIEVEMENTS, ACHIEVEMENT_IDS, STAT_KEYS } from '../src/data/achievements';
 import { achievementProgress, newStats, updateAchievements } from '../src/sim/achievements';
-import { applyCommand, type Command } from '../src/sim/commands';
+import { applyCommand } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
-import { SimIndex } from '../src/sim/index';
 import { destroyRock } from '../src/sim/mining';
 import { damageShip, flagship, makeShip } from '../src/sim/ships';
 import { serialize } from '../src/sim/save';
 import type { GameState } from '../src/sim/types';
-import { tick, type TickInput } from '../src/sim/update';
 import { achievementRows, formatPlayTime, groupDigits, statRows } from '../src/ui/menu/StatsTab';
-
-const DT = 1 / 60;
-
-function run(state: GameState, ticks: number, commands: Command[] = []): void {
-  const index = new SimIndex();
-  const input: TickInput = { thrust: { x: 0, z: 0 }, commands };
-  for (let i = 0; i < ticks; i++) tick(state, DT, input, index);
-}
+import { runTicks } from './helpers';
 
 const unlockLogs = (s: GameState) => s.out.log.filter((l) => l.achievement);
 
@@ -31,7 +22,7 @@ describe('lifetime stats', () => {
 
   it('count play time in sim seconds', () => {
     const s = newGame(1);
-    run(s, 120);
+    runTicks(s, 120);
     expect(s.profile.stats.time).toBeCloseTo(2, 9);
   });
 
@@ -50,7 +41,7 @@ describe('lifetime stats', () => {
     const s = newGame(1);
     const fs = flagship(s.run);
     s.run.pickups.push({ id: 9999, kind: 'ore', amount: 3, pos: { ...fs.pos }, vel: { x: 0, z: 0 }, age: 0 });
-    run(s, 1);
+    runTicks(s, 1);
     expect(s.profile.stats.unitsMined).toBe(3);
   });
 
@@ -79,7 +70,7 @@ describe('achievements', () => {
     const s = newGame(1);
     s.out.log.length = 0;
     destroyRock(s, s.run.rocks[0]!);
-    run(s, 2);
+    runTicks(s, 2);
     expect(s.profile.achievements).toEqual(['firstCrack']);
     expect(unlockLogs(s)).toEqual([
       { level: 'major', text: 'Achievement unlocked: First Crack. Break an asteroid.', achievement: 'firstCrack' },
@@ -108,8 +99,8 @@ describe('achievements', () => {
   it('keep the run deterministic and survive a save round-trip', () => {
     const a = newGame(3);
     const b = newGame(3);
-    run(a, 600);
-    run(b, 600);
+    runTicks(a, 600);
+    runTicks(b, 600);
     expect(serialize(a)).toBe(serialize(b));
     a.profile.achievements.push('wingman');
     expect(JSON.parse(serialize(a)).profile.achievements).toEqual(['wingman']);
