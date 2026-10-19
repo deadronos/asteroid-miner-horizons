@@ -93,12 +93,7 @@ export class GameSession implements SaveActions {
     // overwrites anyway.
     if (i === this.slot) clearSlot(i);
     else this.persist();
-    this.slot = i;
-    setActiveSlot(i);
-    this.running = newGame();
-    this.clearIndex();
-    this.hooks.onSwitch?.();
-    this.persist();
+    this.adopt(i);
   }
 
   /** Copy an imported record into slot `i`; the running game is untouched. */
@@ -143,9 +138,14 @@ export class GameSession implements SaveActions {
   /** Swap the running game, saving the old one to its slot and the new one to its. */
   private switchTo(next: number, nextState: GameState): void {
     this.persist();
-    this.slot = next;
-    setActiveSlot(next);
-    this.running = nextState;
+    this.adopt(next, nextState);
+  }
+
+  /** Swap in `state` (a fresh game by default) as slot `i`, and persist it. */
+  private adopt(i: number, state: GameState = newGame()): void {
+    this.slot = i;
+    setActiveSlot(i);
+    this.running = state;
     this.clearIndex();
     this.hooks.onSwitch?.();
     this.persist();

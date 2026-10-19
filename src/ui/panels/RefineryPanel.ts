@@ -3,9 +3,9 @@
 
 import { RECIPES, RECIPE_IDS } from '../../data/refining';
 import { RESOURCE_INFO } from '../../data/resources';
-import { describeRecipe, jobProgress, maxBatches, refineBlock } from '../../sim/refining';
+import { describeRecipe, findJob, jobProgress, maxBatches, refineBlock } from '../../sim/refining';
 import type { GameState } from '../../sim/types';
-import { Panel, bar, h, setDisabled, setText } from '../dom';
+import { Panel, bar, h, setBlocked, setText, slotRow } from '../dom';
 import type { PanelCtx } from './context';
 
 /**
@@ -44,14 +44,12 @@ export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           bind(() => {
             // Max can be 0; validate 1 so the tooltip names the real blocker.
             const block = refineBlock(st().run, id, Math.max(1, spec.n()));
-            setDisabled(btn, 'error' in block, 'error' in block ? block.error : '');
+            setBlocked(btn, 'error' in block ? block.error : null);
           });
         }
         const desc = h('small');
         bind(() => setText(desc, describeRecipe(id, st().profile)));
-        nodes.push(
-          h('div', { class: 'slot' }, h('div', { class: 'nm' }, h('b', { text: RECIPES[id].name }), desc), row),
-        );
+        nodes.push(slotRow(RECIPES[id].name, desc, row));
       }
 
       if (queue0.length === 0) {
@@ -67,17 +65,10 @@ export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             onclick: () => ctx.send({ t: 'cancelRefine', jobId }),
           });
           bind(() => {
-            const job = st().run.refinery.queue.find((j) => j.id === jobId);
+            const job = findJob(st().run, jobId);
             if (job) setText(done, `${job.total - job.count}/${job.total}`);
           });
-          nodes.push(
-            h(
-              'div',
-              { class: 'slot' },
-              h('div', { class: 'nm' }, h('b', { text: `${RESOURCE_INFO[id].icon} ${RECIPES[id].name}` }), done),
-              cancel,
-            ),
-          );
+          nodes.push(slotRow(`${RESOURCE_INFO[id].icon} ${RECIPES[id].name}`, done, cancel));
           if (i === 0) {
             const progress = bar('refine');
             nodes.push(progress.el);

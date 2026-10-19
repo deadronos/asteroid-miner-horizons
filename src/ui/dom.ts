@@ -57,6 +57,17 @@ export function setDisabled(btn: HTMLButtonElement, disabled: boolean, reason = 
   }
 }
 
+/** Disable `btn` with a reason tooltip, or enable it when `reason` is null. `''` disables it and falls back to the element's `dataset.title`. */
+export function setBlocked(btn: HTMLButtonElement, reason: string | null): void {
+  setDisabled(btn, reason !== null, reason ?? '');
+}
+
+/** One `.slot` row: a bold `name` and any `detail` nodes inside `.nm`, then the controls. */
+export function slotRow(name: string, detail: Node | readonly Node[] | null = null, ...controls: Node[]): HTMLElement {
+  const details = detail == null ? [] : Array.isArray(detail) ? detail : [detail];
+  return h('div', { class: 'slot' }, h('div', { class: 'nm' }, h('b', { text: name }), ...details), ...controls);
+}
+
 export function bar(cls: string): { el: HTMLElement; set: (f: number, label?: string) => void } {
   const fill = h('div', { class: 'fill' });
   const label = h('span', { class: 'label' });

@@ -3,11 +3,11 @@
 import { HULLS, HULL_IDS } from '../../data/hulls';
 import { formatCost, walletTotal } from '../../data/resources';
 import { TUNING } from '../../data/tuning';
-import { isHauler } from '../../sim/automation';
+import { outpostAt } from '../../sim/automation';
 import { hullBlock, isDocked } from '../../sim/economy';
-import { droneCount, findShip, fleetCap, isAlive, isFlagship, isHoldFull, shipStats } from '../../sim/ships';
+import { droneCount, findShip, fleetCap, isAlive, isFlagship, isHauler, isHoldFull, shipStats } from '../../sim/ships';
 import type { GameState, Ship } from '../../sim/types';
-import { Panel, bar, h, setDisabled, setText } from '../dom';
+import { Panel, bar, h, setBlocked, setText } from '../dom';
 import type { PanelCtx } from './context';
 
 function status(state: GameState, s: Ship): string {
@@ -90,7 +90,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         const stat = h('span', { class: 'st' });
         const sb = bar('cargo mini');
         bind(() => {
-          const o = st().run.automation.outposts.find((x) => x.rockId === rockId);
+          const o = outpostAt(st(), rockId);
           if (!o) return;
           setText(stat, `${Math.floor(o.reserve)} left`);
           sb.set(walletTotal(o.stored) / TUNING.outpostCapacity);
@@ -118,8 +118,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           h('small', { text: formatCost(def.cost) }),
         );
         bind(() => {
-          const block = hullBlock(st(), hid);
-          setDisabled(btn, !!block, block ?? '');
+          setBlocked(btn, hullBlock(st(), hid));
           btn.classList.toggle('hidden', def.role === 'flagship' && st().run.ships.some((x) => x.hullId === hid));
         });
         return btn;

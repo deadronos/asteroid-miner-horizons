@@ -3,6 +3,7 @@
 // values on old installs. Subscribers are notified on every change.
 
 import { HAZARD_LEVEL_IDS, type HazardLevel } from './data/hazards';
+import { safeStorage } from './sim/save';
 
 export type Quality = 'low' | 'medium' | 'high';
 export type Shake = 'off' | 'low' | 'full';
@@ -135,7 +136,13 @@ export const QUALITY: Record<Quality, { pixelRatioCap: number; stars: number; pa
   high: { pixelRatioCap: 2, stars: 1, particles: 1, bloom: 0.9 },
 };
 
+export const QUALITY_IDS = Object.keys(QUALITY) as Quality[];
+
 export const SHAKE_SCALE: Record<Shake, number> = { off: 0, low: 0.35, full: 1 };
+
+export const SHAKE_IDS = Object.keys(SHAKE_SCALE) as Shake[];
+
+export const LOG_VERBOSITY_IDS = ['all', 'important'] as const;
 
 /** Human-readable name for a KeyboardEvent.code. */
 export function keyLabel(code: string | null): string {
@@ -172,20 +179,21 @@ export function keyLabel(code: string | null): string {
 
 const KEY = 'asteroid-miner-horizons/settings';
 
+const AUTOSAVE_SEC_VALUES = [0, 10, 30, 60] as const;
+const HUD_SCALE_RANGE = [0.5, 2] as const;
+const ZOOM_SPEED_RANGE = [0.25, 4] as const;
+const VOLUME_RANGE = [0, 1] as const;
+
+/** True when `v` is a finite number inside the inclusive `[lo, hi]` range. */
+const inRange = (v: unknown, [lo, hi]: readonly [number, number]): v is number =>
+  typeof v === 'number' && Number.isFinite(v) && v >= lo && v <= hi;
+
 export class SettingsStore {
   value: Settings;
   private subs: ((s: Settings) => void)[] = [];
 
-  constructor(private readonly storage: Storage | null = SettingsStore.defaultStorage()) {
+  constructor(private readonly storage: Storage | null = safeStorage()) {
     this.value = SettingsStore.merge(this.read());
-  }
-
-  private static defaultStorage(): Storage | null {
-    try {
-      return globalThis.localStorage ?? null;
-    } catch {
-      return null;
-    }
   }
 
   private read(): unknown {
@@ -207,6 +215,32 @@ export class SettingsStore {
       if (k === 'hazards') {
         if (HAZARD_LEVEL_IDS.includes(d[k] as HazardLevel)) out.hazards = d[k] as HazardLevel;
         continue;
+      }
+      switch (k) {
+        case 'quality':
+          if (QUALITY_IDS.includes(d[k] as Quality)) out.quality = d[k] as Quality;
+          continue;
+        case 'shake':
+          if (SHAKE_IDS.includes(d[k] as Shake)) out.shake = d[k] as Shake;
+          continue;
+        case 'logVerbosity':
+          if (LOG_VERBOSITY_IDS.includes(d[k] as LogVerbosity)) out.logVerbosity = d[k] as LogVerbosity;
+          continue;
+        case 'autosaveSec':
+          if (AUTOSAVE_SEC_VALUES.includes(d[k] as Settings['autosaveSec']))
+            out.autosaveSec = d[k] as Settings['autosaveSec'];
+          continue;
+        case 'hudScale':
+          if (inRange(d[k], HUD_SCALE_RANGE)) out.hudScale = d[k];
+          continue;
+        case 'zoomSpeed':
+          if (inRange(d[k], ZOOM_SPEED_RANGE)) out.zoomSpeed = d[k];
+          continue;
+        case 'volMaster':
+        case 'volSfx':
+        case 'volMusic':
+          if (inRange(d[k], VOLUME_RANGE)) out[k] = d[k];
+          continue;
       }
       if (typeof d[k] === typeof DEFAULTS[k]) (out as unknown as Record<string, unknown>)[k] = d[k];
     }

@@ -3,13 +3,13 @@
 // contracts → refinery → achievements.
 
 import { range } from '../core/rng';
-import { damp, dist, integrate, type Vec2 } from '../core/vec';
+import { damp, dist, integrate, len, type Vec2 } from '../core/vec';
 import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
-import { walletValue, RESOURCES, RESOURCE_INFO, walletTotal } from '../data/resources';
+import { walletValue, RESOURCES, formatWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { updateAchievements } from './achievements';
 import { DEFAULT_ASSISTS, type Assists } from './assists';
-import { haulerThink, isHauler, updateOutposts } from './automation';
+import { haulerThink, updateOutposts } from './automation';
 import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
@@ -19,7 +19,7 @@ import type { SimIndex } from './index';
 import { systemEffects } from './modifiers';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
 import { updateRefinery } from './refining';
-import { cargoFree, damageShip, isAlive, isFlagship, type ShipStats } from './ships';
+import { cargoFree, damageShip, isAlive, isFlagship, isHauler, type ShipStats } from './ships';
 import { magnetPull } from './traits';
 import type { GameState, Run, Ship } from './types';
 
@@ -57,7 +57,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
       integrate(r, dt);
       continue;
     }
-    const d = Math.hypot(r.pos.x, r.pos.z) || 1;
+    const d = len(r.pos) || 1;
     const tx = (-r.pos.z / d) * TUNING.rockOrbitSpeed;
     const tz = (r.pos.x / d) * TUNING.rockOrbitSpeed;
     r.vel.x += (tx - r.vel.x) * settle;
@@ -138,7 +138,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
   ship.vel.x *= drag;
   ship.vel.z *= drag;
   integrate(ship, dt);
-  if (!ship.beamOn && Math.hypot(ship.vel.x, ship.vel.z) > 6) {
+  if (!ship.beamOn && len(ship.vel) > 6) {
     const target = Math.atan2(ship.vel.z, ship.vel.x);
     let da = target - ship.angle;
     da = Math.atan2(Math.sin(da), Math.cos(da));
@@ -150,7 +150,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
 
   // Star heat ramps up toward the photosphere.
   const sys = run.system;
-  const dStar = Math.hypot(ship.pos.x, ship.pos.z);
+  const dStar = len(ship.pos);
   if (dStar < sys.heatRadius) {
     const k = 1 - (dStar - sys.starRadius) / (sys.heatRadius - sys.starRadius);
     damageShip(state, ship, TUNING.starHeatDps * Math.max(0.2, k) * dt);
@@ -211,9 +211,7 @@ function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 function unload(state: GameState, ship: Ship): void {
   const { run } = state;
   const value = walletValue(ship.cargo);
-  const parts = RESOURCES.filter((r) => ship.cargo[r] >= 0.5).map(
-    (r) => `${Math.floor(ship.cargo[r])}${RESOURCE_INFO[r].icon}`,
-  );
+  const parts = formatWallet(ship.cargo);
   for (const r of RESOURCES)
     if (ship.cargo[r] > 0) contractProgress(state, { t: 'deliver', resource: r, amount: ship.cargo[r] });
   for (const r of RESOURCES) {
@@ -222,8 +220,7 @@ function unload(state: GameState, ship: Ship): void {
   }
   run.runValue += value;
   if (value > 0) state.out.fx.push({ t: 'dock', pos: { ...ship.pos }, shipId: ship.id, value });
-  if (isFlagship(ship) && parts.length)
-    state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts.join(' ')}.` });
+  if (isFlagship(ship) && parts) state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts}.` });
 }
 
 function updatePickups(state: GameState, index: SimIndex, dt: number): void {

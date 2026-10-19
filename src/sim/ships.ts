@@ -71,6 +71,8 @@ export function shipStats(ship: Ship, profile: Profile): ShipStats {
 }
 
 export const isFlagship = (ship: Ship): boolean => HULLS[ship.hullId].role === 'flagship';
+export const isDrone = (ship: Ship): boolean => HULLS[ship.hullId].role === 'drone';
+export const isHauler = (ship: Ship): boolean => HULLS[ship.hullId].role === 'hauler';
 export const isAlive = (ship: Ship): boolean => ship.respawn <= 0;
 export const cargoFree = (ship: Ship, st: ShipStats): number => Math.max(0, st.cargoCap - walletTotal(ship.cargo));
 

@@ -27,6 +27,9 @@ function hazardTicks(state: GameState, n: number, level: HazardLevel = 'normal')
   }
 }
 
+/** 20 000-tick determinism runs; the default 5 s is too tight on a shared CI runner. */
+const HEAVY = { timeout: 30_000 };
+
 const cometOf = (state: GameState): Rock | undefined => state.run.rocks.find((r) => r.comet);
 
 /** Replaces the ship's last slot with a tier-2 shield so it has shields to soak damage. */
@@ -163,7 +166,7 @@ function flareLoss(level: HazardLevel): number {
 }
 
 describe('hazards off', () => {
-  it('matches a baseline captured from main (20000 ticks, system 2, fixed thrust)', () => {
+  it('matches a baseline captured from main (20000 ticks, system 2, fixed thrust)', HEAVY, () => {
     const state = game(11);
     const input = { thrust: { x: 0.6, z: -0.8 }, commands: [], hazards: 'off' as const };
     const index = new SimIndex();
@@ -189,7 +192,7 @@ describe('hazards off', () => {
     expect(f.hull).toBe(100);
   });
 
-  it('is identical to a tick without the feature over 20000 ticks', () => {
+  it('is identical to a tick without the feature over 20000 ticks', HEAVY, () => {
     const a = game(11);
     const b = game(11);
     const timers = [a.run.hazards.cometTimer, a.run.hazards.flareTimer];
@@ -203,7 +206,7 @@ describe('hazards off', () => {
     expect(b.run.rocks.some((r) => r.comet)).toBe(false);
   });
 
-  it('never schedules in system 1', () => {
+  it('never schedules in system 1', HEAVY, () => {
     const state = game(11, 1);
     const before = { ...state.run.hazards, rng: { ...state.run.hazards.rng } };
     runTicks(state, 20000, { hazards: 'harsh' });

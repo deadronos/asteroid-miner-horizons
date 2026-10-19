@@ -4,7 +4,7 @@ import { TUNING } from '../src/data/tuning';
 import { GameSession } from '../src/session';
 import { makeOutpost } from '../src/sim/automation';
 import { newGame } from '../src/sim/create';
-import { applyOffline, droneMix, formatAway, offlineGains, offlineLog } from '../src/sim/offline';
+import { applyOffline, droneMix, offlineGains, offlineLog } from '../src/sim/offline';
 import { readSlot, serialize, writeSlot } from '../src/sim/save';
 import { makeShip, shipStats } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
@@ -145,14 +145,6 @@ describe('applyOffline', () => {
     expect(JSON.stringify(s.run.rocks)).toBe(rocks);
     expect(JSON.stringify(s.run.ships)).toBe(ships);
     expect(s.run.time).toBe(0);
-  });
-});
-
-describe('formatAway', () => {
-  it('formats hours, minutes and seconds', () => {
-    expect(formatAway(3 * HOUR + 5 * 60 + 9)).toBe('3h 05m');
-    expect(formatAway(12 * 60 + 30)).toBe('12m');
-    expect(formatAway(45)).toBe('45s');
   });
 });
 

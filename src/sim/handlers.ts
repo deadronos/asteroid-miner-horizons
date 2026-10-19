@@ -7,7 +7,7 @@ import { v } from '../core/vec';
 import { COMPONENTS, isVariant, variantDef, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
-import { RESOURCES, formatCost, pay, type Cost } from '../data/resources';
+import { credit, formatCost, pay } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { makeOutpost, outpostAt, outpostBlock } from './automation';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
@@ -38,11 +38,7 @@ function fail(state: GameState, msg: string): void {
   state.out.log.push({ level: 'warn', text: msg });
 }
 
-function refund(state: GameState, c: Cost): void {
-  for (const r of RESOURCES) state.run.bank[r] += c[r] ?? 0;
-}
-
-const refundFitted = (state: GameState, f: Fitted): void => refund(state, scrapValue(f));
+const refundFitted = (state: GameState, f: Fitted): void => credit(state.run.bank, scrapValue(f));
 
 /** Keeps hull/shield within new maxima after a refit, preserving damage taken. */
 function clampToStats(state: GameState, ship: Ship): void {
@@ -228,7 +224,7 @@ export const handlers: Handlers = {
     if (isFlagship(ship)) return fail(state, 'The flagship cannot be scrapped.');
     const block = refitBlock(state, ship);
     if (block) return fail(state, block);
-    refund(state, halve(HULLS[ship.hullId].cost));
+    credit(state.run.bank, halve(HULLS[ship.hullId].cost));
     for (const f of ship.slots) if (f) refundFitted(state, f);
     removeItem(state.run.ships, ship);
     if (state.run.selectedId === ship.id) state.run.selectedId = flagship(state.run).id;

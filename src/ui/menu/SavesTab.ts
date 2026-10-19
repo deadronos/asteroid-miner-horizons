@@ -1,6 +1,7 @@
 // Saves tab: the 3 localStorage slots (load / save / new / delete), import
 // from a file or pasted text, export to compact text or a downloaded .json.
 
+import { formatDuration } from '../../core/format';
 import type { SaveActions } from '../../session';
 import { SLOT_COUNT, exportCompact, exportText, parseImportText, readSlot, type SaveRecord } from '../../sim/save';
 import type { GameState } from '../../sim/types';
@@ -10,14 +11,8 @@ import type { MenuCtx } from './context';
 function ago(ms: number): string {
   const s = Math.max(0, (Date.now() - ms) / 1000);
   if (s < 45) return 'just now';
-  if (s < 3600) return `${Math.round(s / 60)} min ago`;
-  if (s < 86400) return `${Math.round(s / 3600)} h ago`;
+  if (s < 86400) return `${formatDuration(s, { seconds: s < 60 })} ago`;
   return new Date(ms).toLocaleString();
-}
-
-function clock(sec: number): string {
-  const m = Math.floor(sec / 60);
-  return m >= 60 ? `${Math.floor(m / 60)}h ${m % 60}m` : `${m}m ${Math.floor(sec % 60)}s`;
 }
 
 function summary(state: GameState): string[] {
@@ -25,7 +20,7 @@ function summary(state: GameState): string[] {
   const b = run.bank;
   return [
     `System ${run.system.number} · ${run.system.name} (${run.system.starClass}-class)`,
-    `${profile.warps} warp${profile.warps === 1 ? '' : 's'} · ✦ ${profile.data} HD · ${run.ships.length} ship${run.ships.length === 1 ? '' : 's'} · ${clock(run.time)} in system`,
+    `${profile.warps} warp${profile.warps === 1 ? '' : 's'} · ✦ ${profile.data} HD · ${run.ships.length} ship${run.ships.length === 1 ? '' : 's'} · ${formatDuration(run.time, { seconds: true })} in system`,
     `⬢ ${Math.floor(b.ore)}  ❄ ${Math.floor(b.ice)}${b.crystal > 0 ? `  ◆ ${Math.floor(b.crystal)}` : ''}`,
   ];
 }

@@ -31,11 +31,11 @@ import { canAfford, pay, type Cost } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
-import { isHauler, outpostAt, outpostBlock } from '../src/sim/automation';
+import { outpostAt, outpostBlock } from '../src/sim/automation';
 import { findRock } from '../src/sim/generate';
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
-import { flagship, isAlive, isFlagship, isHoldFull, shipStats, type ShipStats } from '../src/sim/ships';
+import { flagship, isAlive, isFlagship, isHauler, isHoldFull, shipStats, type ShipStats } from '../src/sim/ships';
 import { canMine } from '../src/sim/traits';
 import type { GameState, Rock, Run, Ship } from '../src/sim/types';
 

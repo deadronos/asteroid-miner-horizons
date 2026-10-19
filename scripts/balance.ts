@@ -19,13 +19,13 @@ import { execSync } from 'node:child_process';
 import { writeFileSync } from 'node:fs';
 import { availableParallelism } from 'node:os';
 import { Worker, isMainThread, parentPort, workerData } from 'node:worker_threads';
+import { formatCountdown } from '../src/core/format';
 import { HAZARD_LEVEL_IDS, type HazardLevel } from '../src/data/hazards';
 import { MODIFIER_IDS, MODIFIERS } from '../src/data/modifiers';
 import { walletValue } from '../src/data/resources';
-import { isHauler } from '../src/sim/automation';
 import { newGame } from '../src/sim/create';
 import { isDocked } from '../src/sim/economy';
-import { droneCount, fleetCap, isFlagship } from '../src/sim/ships';
+import { droneCount, fleetCap, isFlagship, isHauler } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
 import { runBot } from './harness';
 
@@ -166,8 +166,7 @@ const median = (xs: number[]): number => {
 };
 function mmss(sec: number | null): string {
   if (sec == null) return '—';
-  const t = Math.round(sec);
-  return `${Math.floor(t / 60)}:${String(t % 60).padStart(2, '0')}`;
+  return formatCountdown(Math.round(sec));
 }
 const stat = (xs: number[], f: (n: number) => string): string =>
   xs.length ? `${f(median(xs))} (${f(Math.min(...xs))}–${f(Math.max(...xs))})` : '—';

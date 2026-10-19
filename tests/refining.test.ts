@@ -16,6 +16,7 @@ import { newGame } from '../src/sim/create';
 import {
   cancelRefine,
   describeRecipe,
+  findJob,
   jobLabel,
   jobProgress,
   maxBatches,
@@ -155,6 +156,41 @@ describe('maxBatches', () => {
     expect(run.refinery.queue).toHaveLength(TUNING.refineQueueMax);
     expect(maxBatches(run, 'alloy')).toBe(3);
   });
+
+  it('refineBlock accepts exactly maxBatches whenever it is positive', () => {
+    const banks: Partial<Wallet>[] = [
+      { ore: 1e6, ice: 1e6 },
+      { ore: 23, ice: 12 },
+      { ore: 8, ice: 8 },
+    ];
+    const fills: ((run: Run) => void)[] = [
+      () => {},
+      (run) => pushJobs(run, 'alloy', 1, TUNING.refineQueueMax),
+      (run) => pushJobs(run, 'alloy', TUNING.refineMaxBatch),
+      (run) => pushJobs(run, 'fuel', 2),
+    ];
+    // Collect every disagreement and assert once: an expect inside the guard
+    // would trip vitest/no-conditional-expect and hide the rest of the grid.
+    const mismatches: string[] = [];
+    for (const bank of banks)
+      for (const fill of fills)
+        for (const recipe of RECIPE_IDS) {
+          const { run } = stateWith(bank);
+          fill(run);
+          const n = maxBatches(run, recipe);
+          const block = refineBlock(run, recipe, n);
+          if (n > 0 && (!('n' in block) || block.n !== n))
+            mismatches.push(`${recipe}: maxBatches ${n}, refineBlock ${JSON.stringify(block)}`);
+        }
+    expect(mismatches).toEqual([]);
+  });
+
+  it('clamps a corrupt negative last count to the per-job cap', () => {
+    const { run } = stateWith({ ore: 1e6 });
+    run.refinery.queue.push({ id: 1, recipe: 'alloy', count: -10, total: 0, progress: 0 });
+    expect(maxBatches(run, 'alloy')).toBeLessThanOrEqual(TUNING.refineMaxBatch);
+    expect(refineBlock(run, 'alloy', TUNING.refineMaxBatch + 100)).toEqual({ n: TUNING.refineMaxBatch });
+  });
 });
 
 describe('queueRefine', () => {
@@ -244,6 +280,16 @@ describe('cancelRefine', () => {
 
     expect(cancelRefine(run, fuelId)?.recipe).toBe('fuel');
     expect(run.refinery.queue.map((j) => j.recipe)).toEqual(['alloy']);
+  });
+});
+
+describe('findJob', () => {
+  it('returns the queued job with the id, or undefined when it is gone', () => {
+    const { run } = stateWith({ ore: 40 });
+    queueRefine(run, 'alloy', 2);
+    const id = run.refinery.queue[0]!.id;
+    expect(findJob(run, id)?.recipe).toBe('alloy');
+    expect(findJob(run, id + 1)).toBeUndefined();
   });
 });
 

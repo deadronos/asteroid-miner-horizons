@@ -4,12 +4,13 @@
 // belts it can reach, and outposts extract at their normal rate. Nothing here
 // draws from an RNG or moves a ship, rock or pickup.
 
-import { HULLS } from '../data/hulls';
-import { RAW_RESOURCES, RESOURCE_INFO, RESOURCES, emptyWallet, walletTotal, walletValue } from '../data/resources';
+import { formatDuration } from '../core/format';
+import { len } from '../core/vec';
+import { credit, RAW_RESOURCES, emptyWallet, formatWallet, walletTotal, walletValue } from '../data/resources';
 import type { Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { yieldMul } from './mining';
-import { shipStats } from './ships';
+import { isDrone, isHauler, shipStats } from './ships';
 import type { GameState, LogEntry } from './types';
 
 export interface OfflineGains {
@@ -30,7 +31,7 @@ export interface OfflineGains {
 /** The share of drone income each raw resource gets: the belts within leash range of the station, by rock count. */
 export function droneMix(state: GameState): Record<(typeof RAW_RESOURCES)[number], number> {
   const { system } = state.run;
-  const stationR = Math.hypot(system.station.pos.x, system.station.pos.z);
+  const stationR = len(system.station.pos);
   const mix = { ore: 0, ice: 0, crystal: 0 };
   let weight = 0;
   for (const b of system.belts) {
@@ -63,9 +64,8 @@ export function offlineGains(state: GameState, awaySec: number): OfflineGains {
   let dps = 0;
   let haulers = 0;
   for (const s of run.ships) {
-    const role = HULLS[s.hullId].role;
-    if (role === 'hauler') haulers++;
-    if (role === 'drone') dps += shipStats(s, profile).dps;
+    if (isHauler(s)) haulers++;
+    if (isDrone(s)) dps += shipStats(s, profile).dps;
   }
   const mined = dps * TUNING.offlineUnitsPerDps * TUNING.offlineEfficiency * mul * seconds;
   if (mined > 0) {
@@ -93,7 +93,7 @@ export function applyOffline(state: GameState, awaySec: number): OfflineGains | 
   if (walletTotal(gains.bank) + gains.stored < 1) return null;
   const { run, profile } = state;
   const mul = yieldMul(state);
-  for (const r of RESOURCES) run.bank[r] += gains.bank[r];
+  credit(run.bank, gains.bank);
   run.runValue += walletValue(gains.bank);
   run.automation.outposts.forEach((o, i) => {
     const take = gains.extract[i]!;
@@ -107,24 +107,12 @@ export function applyOffline(state: GameState, awaySec: number): OfflineGains | 
   return gains;
 }
 
-/** "3h 05m", "12m" or "45s". */
-export function formatAway(sec: number): string {
-  const s = Math.floor(sec);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  if (h > 0) return `${h}h ${String(m).padStart(2, '0')}m`;
-  if (m > 0) return `${m}m`;
-  return `${s}s`;
-}
-
 /** The summary line, also shown as a toast. */
 export function offlineLog(gains: OfflineGains, capped: boolean): LogEntry {
-  const parts = RESOURCES.filter((r) => gains.bank[r] >= 0.5).map(
-    (r) => `${Math.floor(gains.bank[r])}${RESOURCE_INFO[r].icon}`,
-  );
-  const away = formatAway(gains.seconds) + (capped ? ' (cap)' : '');
+  const parts = formatWallet(gains.bank);
+  const away = formatDuration(gains.seconds, { seconds: gains.seconds < 60 }) + (capped ? ' (cap)' : '');
   const lines: string[] = [];
-  if (parts.length) lines.push(`fleet banked ${parts.join(' ')}`);
+  if (parts) lines.push(`fleet banked ${parts}`);
   if (gains.stored >= 0.5) lines.push(`outposts stored ${Math.floor(gains.stored)} units`);
   const detail = lines.join('; ') || 'fleet banked a few scraps';
   return {

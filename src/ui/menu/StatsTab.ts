@@ -1,6 +1,7 @@
 // Stats tab: this save's lifetime stats and its achievements with progress.
 // Rows come from pure helpers so tests can check the text without a DOM.
 
+import { formatDuration } from '../../core/format';
 import { ACHIEVEMENTS, ACHIEVEMENT_IDS, STAT_KEYS, STAT_LABELS } from '../../data/achievements';
 import { achievementProgress } from '../../sim/achievements';
 import type { Profile } from '../../sim/types';
@@ -12,17 +13,11 @@ export function groupDigits(n: number): string {
   return String(Math.floor(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
-/** Play time as `Xm` under an hour, `Xh YYm` from there. */
-export function formatPlayTime(sec: number): string {
-  const m = Math.floor(sec / 60);
-  return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
-}
-
 /** One `[label, value]` per lifetime stat, in table order. */
 export function statRows(profile: Profile): [string, string][] {
   return STAT_KEYS.map((k) => [
     STAT_LABELS[k],
-    k === 'time' ? formatPlayTime(profile.stats.time) : groupDigits(profile.stats[k]),
+    k === 'time' ? formatDuration(profile.stats.time) : groupDigits(profile.stats[k]),
   ]);
 }
 
@@ -41,7 +36,7 @@ export function achievementRows(profile: Profile): AchievementRow[] {
     const a = ACHIEVEMENTS[id];
     const unlocked = profile.achievements.includes(id);
     const { value, target } = achievementProgress(profile, id);
-    const fmt = a.stat === 'time' ? formatPlayTime : groupDigits;
+    const fmt = a.stat === 'time' ? formatDuration : groupDigits;
     return { name: a.name, desc: a.desc, unlocked, status: unlocked ? 'Unlocked' : `${fmt(value)} / ${fmt(target)}` };
   });
 }

@@ -4,7 +4,7 @@
 
 import { makeRng, pick } from '../core/rng';
 import { CONTRACTS, CONTRACT_KINDS, type ContractKind } from '../data/contracts';
-import { formatCost, RESOURCES, RESOURCE_INFO, walletValue, type Cost, type Resource } from '../data/resources';
+import { credit, formatCost, RESOURCE_INFO, walletValue, type Cost, type Resource } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { Contract, ContractBoard, GameState, RockSize } from './types';
 
@@ -96,7 +96,7 @@ export function updateContracts(state: GameState, dt: number): void {
 
   // Completion is checked before the timer so a last-tick delivery still counts.
   if (c.progress >= c.target) {
-    for (const r of RESOURCES) run.bank[r] += c.reward[r] ?? 0;
+    credit(run.bank, c.reward);
     profile.data += c.data;
     profile.dataEarned += c.data;
     board.completed++;
@@ -122,10 +122,4 @@ export function updateContracts(state: GameState, dt: number): void {
 /** Player-facing goal text for a contract. */
 export function describeContract(c: Contract): string {
   return CONTRACTS[c.kind].describe(c.target);
-}
-
-/** Formats a countdown as `m:ss`, rounding seconds up and clamping at zero. */
-export function formatTimeLeft(sec: number): string {
-  const s = Math.max(0, Math.ceil(sec));
-  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 }

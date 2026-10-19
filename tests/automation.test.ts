@@ -4,7 +4,7 @@ import { TUNING } from '../src/data/tuning';
 import { outpostAt, transfer } from '../src/sim/automation';
 import { newGame } from '../src/sim/create';
 import { SimIndex } from '../src/sim/index';
-import { flagship, makeShip } from '../src/sim/ships';
+import { flagship, isDrone, isFlagship, isHauler, makeShip } from '../src/sim/ships';
 import type { GameState, Rock, Ship } from '../src/sim/types';
 import { tick, type TickInput } from '../src/sim/update';
 import { DT, runFor, send } from './helpers';
@@ -20,6 +20,21 @@ function setup(seed = 1): { s: GameState; rock: Rock; fs: Ship } {
 }
 
 const lastLog = (s: GameState) => s.out.log.at(-1);
+
+describe('ship roles', () => {
+  it('classifies flagship, drone and hauler hulls', () => {
+    const s = newGame(1);
+    const at = s.run.system.station.pos;
+    const drone = makeShip(s.run, s.profile, 'drone', 'D', at);
+    const harvester = makeShip(s.run, s.profile, 'harvester', 'V', at);
+    const hauler = makeShip(s.run, s.profile, 'hauler', 'H', at);
+    const fs = flagship(s.run);
+    expect([isFlagship(fs), isDrone(fs), isHauler(fs)]).toEqual([true, false, false]);
+    expect([isFlagship(drone), isDrone(drone), isHauler(drone)]).toEqual([false, true, false]);
+    expect([isFlagship(harvester), isDrone(harvester), isHauler(harvester)]).toEqual([false, true, false]);
+    expect([isFlagship(hauler), isDrone(hauler), isHauler(hauler)]).toEqual([false, false, true]);
+  });
+});
 
 describe('deployOutpost', () => {
   it('pays, records an outpost sized from the rock and leaves the rock intact', () => {

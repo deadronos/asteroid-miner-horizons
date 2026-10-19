@@ -3,7 +3,7 @@
 // for the continuous layer (beam hums, danger alarm) and a rate limiter so a
 // fleet of drones can't turn the mix into noise.
 
-import type { Vec2 } from '../core/vec';
+import { len, type Vec2 } from '../core/vec';
 import { flareExposure } from '../sim/hazards';
 import { isAlive, selectedShip, shipStats } from '../sim/ships';
 import type { Fx, Profile, Run } from '../sim/types';
@@ -203,7 +203,7 @@ export function alarmLevel(run: Run, profile: Profile): number {
   const st = shipStats(ship, profile);
   const hullFrac = st.maxHull > 0 ? ship.hull / st.maxHull : 0;
   const hullSev = hullFrac < 0.25 ? (0.25 - hullFrac) / 0.25 : 0;
-  const dStar = Math.hypot(ship.pos.x, ship.pos.z);
+  const dStar = len(ship.pos);
   let heatSev = 0;
   // Mirrors the star-heat ramp in sim/update so the alarm follows the damage being taken.
   if (dStar < run.system.heatRadius) {

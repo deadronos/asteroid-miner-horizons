@@ -3,7 +3,7 @@
 
 import { removeItem } from '../core/array';
 import { makeRng, range } from '../core/rng';
-import { fromAngle, type Vec2 } from '../core/vec';
+import { dist, fromAngle, len, type Vec2 } from '../core/vec';
 import { FLARES, HAZARD_LEVELS, type HazardLevel } from '../data/hazards';
 import { TUNING } from '../data/tuning';
 import { isDocked } from './economy';
@@ -30,9 +30,9 @@ export function newHazards(seed: number, number: number): Hazards {
 
 /** Closest the straight path from `from` along `vel` (t >= 0) comes to the star. */
 function closestApproach(from: Vec2, vel: Vec2): number {
-  const speed = Math.hypot(vel.x, vel.z) || 1;
+  const speed = len(vel) || 1;
   const t = -(from.x * vel.x + from.z * vel.z) / speed;
-  if (t <= 0) return Math.hypot(from.x, from.z);
+  if (t <= 0) return len(from);
   return Math.abs(from.x * vel.z - from.z * vel.x) / speed;
 }
 
@@ -47,8 +47,8 @@ function rollComet(state: GameState, speed: number): CometWarning {
     const b = run.system.belts[belt]!;
     const crossing = fromAngle(range(rng, 0, Math.PI * 2), (b.inner + b.outer) / 2);
     const from = fromAngle(range(rng, 0, Math.PI * 2), TUNING.cometEdge);
-    const len = Math.hypot(crossing.x - from.x, crossing.z - from.z) || 1;
-    const vel = { x: ((crossing.x - from.x) / len) * speed, z: ((crossing.z - from.z) / len) * speed };
+    const span = dist(crossing, from) || 1;
+    const vel = { x: ((crossing.x - from.x) / span) * speed, z: ((crossing.z - from.z) / span) * speed };
     warning = { from, vel, belt, timeLeft: TUNING.cometWarning };
     if (closestApproach(from, vel) >= minMiss) break;
   }
@@ -160,7 +160,7 @@ export function flareExposure(run: Run, ship: Ship): number {
   const profile = FLARES[run.system.starClass];
   if (run.hazards.flare?.phase !== 'active' || !profile || isDocked(run, ship)) return 0;
   const { starRadius } = run.system;
-  const d = Math.hypot(ship.pos.x, ship.pos.z);
+  const d = len(ship.pos);
   return Math.min(1, Math.max(0, 1 - (d - starRadius) / (profile.reach - starRadius)));
 }
 
@@ -177,7 +177,7 @@ export function inFlareZone(run: Run, pos: Vec2): boolean {
 
 /** Writes the unit vector out of the path ahead of `from` along `vel` into `out` if `pos` lies within `half` of it. */
 function pathEscape(from: Vec2, vel: Vec2, half: number, pos: Vec2, out: Vec2): boolean {
-  const sp = Math.hypot(vel.x, vel.z);
+  const sp = len(vel);
   if (sp < 1e-6) return false;
   const dx = vel.x / sp;
   const dz = vel.z / sp;
@@ -209,11 +209,10 @@ export function cometPathEscape(run: Run, comets: readonly Rock[], pos: Vec2, pa
  */
 export function flareShelter(run: Run, pos: Vec2, preferDock: boolean, out: Vec2): 'dock' | 'flee' {
   const profile = FLARES[run.system.starClass];
-  const d = Math.hypot(pos.x, pos.z) || 1;
+  const d = len(pos) || 1;
   const safe = (profile?.reach ?? 0) + TUNING.flareShelterPad + 40;
   out.x = (pos.x / d) * safe;
   out.z = (pos.z / d) * safe;
-  if (preferDock || Math.hypot(run.system.station.pos.x - pos.x, run.system.station.pos.z - pos.z) <= safe - d)
-    return 'dock';
+  if (preferDock || dist(run.system.station.pos, pos) <= safe - d) return 'dock';
   return 'flee';
 }

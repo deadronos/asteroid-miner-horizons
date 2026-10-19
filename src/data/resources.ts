@@ -41,9 +41,35 @@ export function pay(w: Wallet, cost: Cost): boolean {
   return true;
 }
 
+/** Adds every entry of `cost` to `wallet` in `RESOURCES` order. The counterpart of `pay`. */
+export function credit(w: Wallet, cost: Cost): void {
+  for (const r of RESOURCES) w[r] += cost[r] ?? 0;
+}
+
 export function formatCost(cost: Cost): string {
   const parts = RESOURCES.filter((r) => (cost[r] ?? 0) > 0).map(
     (r) => `${Math.ceil(cost[r]!)}${RESOURCE_INFO[r].icon}`,
   );
   return parts.length ? parts.join(' ') : 'free';
+}
+
+export interface WalletFormat {
+  /** Minimum amount to include (>= min), then rounded down. Default 0.5. */
+  min?: number;
+  /** Separator between entries. Default ' '. */
+  sep?: string;
+  /** Put the icon before the amount (`⬢ 3`) instead of after (`3⬢`). */
+  iconFirst?: boolean;
+  /** Text when nothing meets `min`. Default ''. */
+  empty?: string;
+}
+
+/** Icon summary of `w`, each amount rounded down, in RESOURCES order. */
+export function formatWallet(w: Cost, opts: WalletFormat = {}): string {
+  const { min = 0.5, sep = ' ', iconFirst = false, empty = '' } = opts;
+  const parts = RESOURCES.filter((r) => (w[r] ?? 0) >= min).map((r) => {
+    const n = Math.floor(w[r] ?? 0);
+    return iconFirst ? `${RESOURCE_INFO[r].icon} ${n}` : `${n}${RESOURCE_INFO[r].icon}`;
+  });
+  return parts.length ? parts.join(sep) : empty;
 }
