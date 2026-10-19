@@ -74,6 +74,10 @@ export const isFlagship = (ship: Ship): boolean => HULLS[ship.hullId].role === '
 export const isAlive = (ship: Ship): boolean => ship.respawn <= 0;
 export const cargoFree = (ship: Ship, st: ShipStats): number => Math.max(0, st.cargoCap - walletTotal(ship.cargo));
 
+/** True when `ship` should stop mining and unload: the shared rule for drones, haulers, the bot and the HUD. */
+export const isHoldFull = (ship: Ship, st: ShipStats): boolean =>
+  cargoFree(ship, st) < Math.max(TUNING.fullHoldMin, st.cargoCap * TUNING.fullHoldShare);
+
 export function makeShip(run: Run, profile: Profile, hullId: HullId, name: string, pos: Vec2): Ship {
   const h = HULLS[hullId];
   const slots = Array.from({ length: h.slots }, (_, i) => {
@@ -115,6 +119,9 @@ export const droneCount = (run: Run): number => run.ships.filter((s) => !isFlags
 export const flagship = (run: Run): Ship => run.ships.find(isFlagship)!;
 
 export const findShip = (run: Run, id: number): Ship | undefined => run.ships.find((s) => s.id === id);
+
+/** The ship the player has selected, if it still exists. */
+export const selectedShip = (run: Run): Ship | undefined => findShip(run, run.selectedId);
 
 /** Applies damage through shields then hull. Handles death. */
 export function damageShip(state: GameState, ship: Ship, raw: number): void {

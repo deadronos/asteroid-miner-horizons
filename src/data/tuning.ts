@@ -26,6 +26,9 @@ export const TUNING = {
   repairOrePerHull: 0.3,
 
   baseFleetCap: 5,
+  /** A hold counts as full once free space drops below max(fullHoldMin, cap × fullHoldShare). */
+  fullHoldMin: 2,
+  fullHoldShare: 0.04,
   droneLeash: 700,
 
   // Prestige.

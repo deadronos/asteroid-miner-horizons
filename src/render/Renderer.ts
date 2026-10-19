@@ -11,7 +11,8 @@ import { clamp, damp, type Vec2 } from '../core/vec';
 import { HULLS } from '../data/hulls';
 import { RESOURCE_INFO } from '../data/resources';
 import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
-import { isAlive } from '../sim/ships';
+import { findRock } from '../sim/generate';
+import { findShip, isAlive, selectedShip } from '../sim/ships';
 import type { GameState, Rock, StarSystem } from '../sim/types';
 import { Backdrop } from './backdrop';
 import type { ViewRect } from './cull';
@@ -271,7 +272,7 @@ export class Renderer {
 
     // Camera: smooth zoom, follow the selected ship.
     this.halfH += (this.targetHalfH - this.halfH) * (1 - damp(12, dt));
-    const sel = run.ships.find((s) => s.id === run.selectedId);
+    const sel = selectedShip(run);
     if (this.follow && sel) {
       const focus = isAlive(sel) ? sel.pos : sys.station.pos;
       const k = this.snapped ? 1 - damp(6, dt) : 1;
@@ -306,7 +307,7 @@ export class Renderer {
     v.halfW = vh * a;
     v.halfH = vh;
     this.rocks.update(run.rocks, run.pickups, run.time, v);
-    this.outpostView.update(run.automation.outposts, (id) => run.rocks.find((r) => r.id === id), run.time);
+    this.outpostView.update(run.automation.outposts, (id) => findRock(run, id), run.time);
     const wpp = this.wpp;
     const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars);
     this.hazardView.update(run.hazards, run.time, wpp);
@@ -321,7 +322,7 @@ export class Renderer {
       dt,
       (p) => this.worldToScreen(p),
       (id) => {
-        const s = run.ships.find((x) => x.id === id);
+        const s = findShip(run, id);
         return s && isAlive(s) ? s.pos : null;
       },
     );
@@ -430,7 +431,7 @@ export class Renderer {
       target = { pos: h.rock.pos, r: h.rock.radius + 6 * wpp, color: RESOURCE_INFO[h.rock.kind].color };
     else if (h?.kind === 'station') target = { pos: state.run.system.station.pos, r: 60, color: 0x59ffa0 };
     else if (h?.kind === 'ship') {
-      const s = state.run.ships.find((x) => x.id === h.id);
+      const s = findShip(state.run, h.id);
       if (s) target = { pos: s.pos, r: HULLS[s.hullId].size * 2.4 + 6 * wpp, color: 0xffffff };
     }
     this.hoverRing.visible = !!target;

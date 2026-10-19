@@ -16,6 +16,7 @@ import { newGame } from '../src/sim/create';
 import {
   cancelRefine,
   describeRecipe,
+  jobLabel,
   jobProgress,
   maxBatches,
   newRefinery,
@@ -482,5 +483,12 @@ describe('refinery perks (#84)', () => {
     updateRefinery(state, 1000);
     expect(state.run.bank.ice).toBe(0);
     expect(state.run.bank.fuel).toBe(100);
+  });
+});
+
+describe('jobLabel', () => {
+  it('formats a job the way the refinery log lines show it', () => {
+    expect(jobLabel('alloy', 3)).toBe('3 × smelt alloy');
+    expect(jobLabel('fuel', 1)).toBe('1 × crack fuel');
   });
 });

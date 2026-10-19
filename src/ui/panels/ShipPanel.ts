@@ -11,9 +11,9 @@ import {
 } from '../../data/components';
 import { HULLS } from '../../data/hulls';
 import { RESOURCES, RESOURCE_INFO, canAfford, formatCost, type Cost, walletTotal } from '../../data/resources';
-import { halve, investedCost, isDocked, refitBlock, repairCost, upgradeCost } from '../../sim/economy';
+import { isDocked, refitBlock, repairCost, scrapValue, upgradeCost } from '../../sim/economy';
 import { applySystemStats } from '../../sim/modifiers';
-import { isAlive, isFlagship, shipStats } from '../../sim/ships';
+import { findShip, isAlive, isFlagship, selectedShip, shipStats } from '../../sim/ships';
 import type { Fitted, Ship } from '../../sim/types';
 import { Panel, bar, h, setDisabled, setText } from '../dom';
 import type { PanelCtx } from './context';
@@ -62,7 +62,7 @@ export function parseInstallValue(value: string): { comp: ComponentId; variant: 
 
 /** Tooltip for the remove button: the refund of half the fitted variant's cost. */
 export function removeRefundTitle(f: Fitted): string {
-  return `Remove (refund ${formatCost(halve(investedCost(f.type, f.variant, f.tier)))})`;
+  return `Remove (refund ${formatCost(scrapValue(f))})`;
 }
 
 /** Structure key for the panel: hull plus every slot's type, variant and tier. */
@@ -77,15 +77,15 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
     el,
     () => {
       const s = ctx.getState();
-      return shipPanelKey(s.run.ships.find((x) => x.id === s.run.selectedId));
+      return shipPanelKey(selectedShip(s.run));
     },
     (bind) => {
       const st = ctx.getState;
       const s0 = st();
-      const ship0 = s0.run.ships.find((x) => x.id === s0.run.selectedId);
+      const ship0 = selectedShip(s0.run);
       if (!ship0) return [h('h3', { text: 'No ship selected' })];
       const id = ship0.id;
-      const cur = (): Ship | undefined => st().run.ships.find((x) => x.id === id);
+      const cur = (): Ship | undefined => findShip(st().run, id);
       const send = ctx.send;
 
       const title = h(

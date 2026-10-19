@@ -5,7 +5,7 @@
 
 import type { Vec2 } from '../core/vec';
 import { flareExposure } from '../sim/hazards';
-import { isAlive, shipStats } from '../sim/ships';
+import { isAlive, selectedShip, shipStats } from '../sim/ships';
 import type { Fx, Profile, Run } from '../sim/types';
 import type { ZzfxParams } from './zzfx';
 
@@ -198,7 +198,7 @@ export function beamHums(run: Run, profile: Profile, view: View, max = MAX_HUMS)
  * 0 when quiet.
  */
 export function alarmLevel(run: Run, profile: Profile): number {
-  const ship = run.ships.find((s) => s.id === run.selectedId);
+  const ship = selectedShip(run);
   if (!ship || !isAlive(ship)) return 0;
   const st = shipStats(ship, profile);
   const hullFrac = st.maxHull > 0 ? ship.hull / st.maxHull : 0;

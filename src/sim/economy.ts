@@ -7,8 +7,8 @@ import { HULLS, type HullId } from '../data/hulls';
 import { PERKS, type PerkId } from '../data/perks';
 import { RESOURCES, canAfford, type Cost } from '../data/resources';
 import { TUNING } from '../data/tuning';
-import { droneCount, fleetCap, isAlive, isFlagship, shipStats } from './ships';
-import type { GameState, Run, Ship } from './types';
+import { droneCount, flagship, fleetCap, isAlive, shipStats } from './ships';
+import type { Fitted, GameState, Run, Ship } from './types';
 
 export const isDocked = (run: Run, ship: Ship): boolean =>
   isAlive(ship) && dist(ship.pos, run.system.station.pos) <= TUNING.dockRadius;
@@ -25,6 +25,9 @@ export function investedCost(type: ComponentId, variant: VariantId, tier: Tier):
 
 export const halve = (c: Cost): Cost =>
   Object.fromEntries(Object.entries(c).map(([k, n]) => [k, Math.floor((n ?? 0) / 2)])) as Cost;
+
+/** What removing, replacing or scrapping a fitted component refunds: half its invested cost. */
+export const scrapValue = (f: Fitted): Cost => halve(investedCost(f.type, f.variant, f.tier));
 
 export function upgradeCost(ship: Ship, slot: number): Cost | null {
   const f = ship.slots[slot];
@@ -49,7 +52,7 @@ export function hullBlock(state: GameState, hullId: HullId): string | null {
   const { run, profile } = state;
   const h = HULLS[hullId];
   if (h.role === 'flagship') {
-    const fs = run.ships.find(isFlagship)!;
+    const fs = flagship(run);
     if (fs.hullId === hullId) return 'Already flying this hull';
     if (!isDocked(run, fs)) return 'Flagship must be docked';
   } else if (droneCount(run) >= fleetCap(profile)) {

@@ -5,7 +5,7 @@ import { dist, type Vec2 } from './core/vec';
 import { HULLS } from './data/hulls';
 import type { Command } from './sim/commands';
 import { outpostAt } from './sim/automation';
-import { isAlive } from './sim/ships';
+import { findShip, isAlive, selectedShip } from './sim/ships';
 import type { GameState } from './sim/types';
 import type { HoverTarget, Renderer } from './render/Renderer';
 import type { Hud } from './ui/Hud';
@@ -67,7 +67,7 @@ export class Input {
 
   private selected() {
     const s = this.getState();
-    return s.run.ships.find((x) => x.id === s.run.selectedId);
+    return selectedShip(s.run);
   }
 
   /** Selecting a ship re-centres the camera only if the player wants auto-follow. */
@@ -216,7 +216,7 @@ export class Input {
       hit?.kind === 'station'
         ? `${s.run.system.name} Station · click to dock & unload`
         : hit?.kind === 'ship'
-          ? (s.run.ships.find((x) => x.id === hit.id)?.name ?? null)
+          ? (findShip(s.run, hit.id)?.name ?? null)
           : null;
     const rock = hit?.kind === 'rock' ? hit.rock : null;
     this.hud.showTooltip(this.mouse.x, this.mouse.y, rock, label, rock ? outpostAt(s, rock.id) : undefined);
