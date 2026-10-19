@@ -3,7 +3,7 @@
 // contracts → refinery → achievements.
 
 import { range } from '../core/rng';
-import { damp, dist, type Vec2 } from '../core/vec';
+import { damp, dist, integrate, type Vec2 } from '../core/vec';
 import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
 import { walletValue, RESOURCES, RESOURCE_INFO, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
@@ -20,7 +20,8 @@ import { systemEffects } from './modifiers';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
 import { updateRefinery } from './refining';
 import { cargoFree, damageShip, isAlive, isFlagship, type ShipStats } from './ships';
-import type { GameState, Ship } from './types';
+import { magnetPull } from './traits';
+import type { GameState, Run, Ship } from './types';
 
 export interface TickInput {
   /** WASD vector for the selected ship; (0,0) when idle. */
@@ -53,8 +54,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   const settle = 1 - damp(0.25, dt);
   for (const r of run.rocks) {
     if (r.comet) {
-      r.pos.x += r.vel.x * dt;
-      r.pos.z += r.vel.z * dt;
+      integrate(r, dt);
       continue;
     }
     const d = Math.hypot(r.pos.x, r.pos.z) || 1;
@@ -63,38 +63,8 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     r.vel.x += (tx - r.vel.x) * settle;
     r.vel.z += (tz - r.vel.z) * settle;
 
-    // Magnetic rocks drift toward the nearest live ship in range.
-    if (r.trait === 'magnetic') {
-      let bestD = -1; // -1 marks "no ship in range"
-      let bestDx = 0;
-      let bestDz = 0;
-      for (let i = 0; i < run.ships.length; i++) {
-        const s = run.ships[i]!;
-        if (!isAlive(s)) continue;
-        const dx = s.pos.x - r.pos.x;
-        const dz = s.pos.z - r.pos.z;
-        const sd = Math.hypot(dx, dz);
-        if (sd < TUNING.magnetTraitRange && (bestD < 0 || sd < bestD)) {
-          bestD = sd;
-          bestDx = dx;
-          bestDz = dz;
-        }
-      }
-      // Guard the divide: a rock sitting exactly on its ship must stay finite.
-      if (bestD > 1e-6) {
-        r.vel.x += (bestDx / bestD) * TUNING.magnetTraitAccel * dt;
-        r.vel.z += (bestDz / bestD) * TUNING.magnetTraitAccel * dt;
-        const speed = Math.hypot(r.vel.x, r.vel.z);
-        if (speed > TUNING.magnetTraitMaxSpeed) {
-          const k = TUNING.magnetTraitMaxSpeed / speed;
-          r.vel.x *= k;
-          r.vel.z *= k;
-        }
-      }
-    }
-
-    r.pos.x += r.vel.x * dt;
-    r.pos.z += r.vel.z * dt;
+    if (r.trait === 'magnetic') magnetPull(run, r, dt);
+    integrate(r, dt);
   }
   const level = input.hazards ?? 'off';
   updateHazards(state, dt, level);
@@ -131,6 +101,9 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   updateAchievements(state);
 }
 
+/** True once `ship` has died or been removed from the run, so the rest of its update must stop. */
+const shipGone = (run: Run, ship: Ship): boolean => !isAlive(ship) || !run.ships.includes(ship);
+
 function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void {
   const { state, dt } = ctx;
   const { run } = state;
@@ -164,8 +137,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
   const drag = damp(ship.thrusting ? 0.6 : 1.4, dt);
   ship.vel.x *= drag;
   ship.vel.z *= drag;
-  ship.pos.x += ship.vel.x * dt;
-  ship.pos.z += ship.vel.z * dt;
+  integrate(ship, dt);
   if (!ship.beamOn && Math.hypot(ship.vel.x, ship.vel.z) > 6) {
     const target = Math.atan2(ship.vel.z, ship.vel.x);
     let da = target - ship.angle;
@@ -174,7 +146,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
   }
 
   collideRocks(ctx, ship, st);
-  if (!isAlive(ship) || !run.ships.includes(ship)) return;
+  if (shipGone(run, ship)) return;
 
   // Star heat ramps up toward the photosphere.
   const sys = run.system;
@@ -189,14 +161,14 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
     ) {
       state.out.log.push({ level: 'warn', text: `${ship.name} is overheating near the star!` });
     }
-    if (!isAlive(ship) || !run.ships.includes(ship)) return;
+    if (shipGone(run, ship)) return;
   }
 
   const flareProfile = FLARES[sys.starClass];
   const k = flareProfile ? flareExposure(run, ship) : 0;
   if (flareProfile && k > 0) {
     damageShip(state, ship, flareProfile.dps * HAZARD_LEVELS[ctx.hazards].damage * k * dt);
-    if (!isAlive(ship) || !run.ships.includes(ship)) return;
+    if (shipGone(run, ship)) return;
   }
 
   ship.shield = Math.min(st.maxShield, ship.shield + st.shieldRegen * dt);
@@ -207,7 +179,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
 function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const { state } = ctx;
   ctx.index.rockHash.query(ship.pos, st.size + 50, (r) => {
-    if (!ctx.index.rockById.has(r.id) || !state.run.ships.includes(ship) || !isAlive(ship)) return;
+    if (!ctx.index.rockById.has(r.id) || shipGone(state.run, ship)) return;
     const dx = ship.pos.x - r.pos.x;
     const dz = ship.pos.z - r.pos.z;
     const d = Math.hypot(dx, dz) || 0.01;
@@ -292,8 +264,7 @@ function updatePickups(state: GameState, index: SimIndex, dt: number): void {
         if (p.amount <= 1e-6) continue; // consumed: dropped
       }
     }
-    p.pos.x += p.vel.x * dt;
-    p.pos.z += p.vel.z * dt;
+    integrate(p, dt);
     pickups[kept++] = p;
   }
   pickups.length = kept;
