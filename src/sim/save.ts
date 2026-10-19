@@ -10,7 +10,7 @@
 import { COMPONENTS, isVariant, type ComponentId } from '../data/components';
 import { MODIFIERS } from '../data/modifiers';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
-import { RESOURCES } from '../data/resources';
+import { RAW_RESOURCES, RESOURCES } from '../data/resources';
 import { TRAITS } from '../data/traits';
 import { SAVE_VERSION } from './create';
 import { chainCovers, type MigrateOptions, migrate } from './migrations';
@@ -141,6 +141,28 @@ function isHazards(h: unknown): boolean {
   );
 }
 
+/** True when `a` has what the outpost tick reads, and every outpost sits on a distinct rock of this run. */
+function isAutomation(a: unknown, rocks: unknown[]): boolean {
+  if (!a || typeof a !== 'object') return false;
+  const x = a as { outposts?: unknown; extracted?: unknown };
+  if (!Array.isArray(x.outposts) || !finite(x.extracted)) return false;
+  const ids = new Set(rocks.map((r) => (r as { id?: unknown }).id));
+  const hosts = new Set<unknown>();
+  return x.outposts.every((o) => {
+    if (!o || typeof o !== 'object') return false;
+    const op = o as { rockId?: unknown; kind?: unknown; pos?: unknown; stored?: unknown; reserve?: unknown };
+    if (!ids.has(op.rockId) || hosts.has(op.rockId)) return false;
+    hosts.add(op.rockId);
+    return (
+      typeof op.kind === 'string' &&
+      (RAW_RESOURCES as readonly string[]).includes(op.kind) &&
+      isVec(op.pos) &&
+      isWallet(op.stored) &&
+      finite(op.reserve)
+    );
+  });
+}
+
 /** Validates the shape of parsed JSON well enough that the game can run on it. */
 function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   const migrated = migrate(data, opts);
@@ -191,6 +213,7 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (typeof nextId !== 'number' || !Number.isFinite(nextId)) return null;
   if ((refinery.queue as { id: number }[]).some((j) => j.id >= nextId)) return null;
   if (!isHazards(run.hazards)) return null;
+  if (!isAutomation(run.automation, run.rocks)) return null;
   return { version: migrated.version, profile, run, out: { fx: [], log: [] } };
 }
 

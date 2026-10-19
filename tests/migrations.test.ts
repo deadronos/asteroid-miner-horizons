@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { newAutomation } from '../src/sim/automation';
 import { defaultVariant } from '../src/data/components';
 import { RESOURCES } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
@@ -10,7 +11,7 @@ import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
-// Real saves frozen at versions 2 to 7 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 8 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
@@ -18,6 +19,7 @@ import V4_FIXTURE from './fixtures/save-v4.json?raw';
 import V5_FIXTURE from './fixtures/save-v5.json?raw';
 import V6_FIXTURE from './fixtures/save-v6.json?raw';
 import V7_FIXTURE from './fixtures/save-v7.json?raw';
+import V8_FIXTURE from './fixtures/save-v8.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -28,7 +30,7 @@ function saveAt(version: number): SaveData {
   return { version, profile: { marker: 'original' }, run: { ships: [] } } as unknown as SaveData;
 }
 
-/** The v3 fixture's run reshaped as current: refined columns added, a system with no modifiers, a hazard board, and every fitted slot at its default variant. */
+/** The v3 fixture's run reshaped as current: refined columns added, a system with no modifiers, a hazard board, every fitted slot at its default variant, and no outposts. */
 const currentRun = () => {
   const fixture = v3FixtureState();
   const run = fixture.run;
@@ -39,7 +41,15 @@ const currentRun = () => {
   }));
   const system = { ...run.system, modifiers: [] };
   const hazards = newHazards(fixture.profile.seed, run.system.number);
-  return { ...run, system, bank: { ...run.bank, alloy: 0, fuel: 0 }, ships, refinery: newRefinery(), hazards };
+  return {
+    ...run,
+    system,
+    bank: { ...run.bank, alloy: 0, fuel: 0 },
+    ships,
+    refinery: newRefinery(),
+    hazards,
+    automation: newAutomation(),
+  };
 };
 
 /** A valid current-version save, with the given run overrides applied on top. */
@@ -532,5 +542,63 @@ describe('component variants migration to v8', () => {
     const r = parseImport(JSON.stringify({ version: 8, profile: loaded.profile, run }));
     if (!r.ok) throw new Error('expected the save to load');
     expect(r.record.state.run.ships[0]!.slots[0]).toEqual({ type: 'laser', variant: 'wide', tier: 2 });
+  });
+});
+
+/** A current save from the v8 fixture whose automation is `automation`. */
+const withAutomation = (automation: unknown): string => {
+  const loaded = loadFrozen(V8_FIXTURE);
+  return JSON.stringify({ version: SAVE_VERSION, profile: loaded.profile, run: { ...loaded.run, automation } });
+};
+const outpostOn = (rockId: number) => ({
+  rockId,
+  kind: 'ore',
+  pos: { x: 0, z: 0 },
+  stored: { ore: 5, ice: 0, crystal: 0, alloy: 0, fuel: 0 },
+  reserve: 100,
+});
+
+describe('automation migration to v9', () => {
+  const frozen: Array<[string, string]> = [
+    ['v2', FIXTURE],
+    ['v5', V5_FIXTURE],
+    ['v7', V7_FIXTURE],
+    ['v8', V8_FIXTURE],
+  ];
+
+  it.each(frozen)('loads the %s fixture as v9 with no outposts', (_label, raw) => {
+    const state = loadFrozen(raw);
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.run.automation).toEqual(newAutomation());
+  });
+
+  it('keeps the v8 fixture otherwise unchanged', () => {
+    const before = JSON.parse(V8_FIXTURE).state;
+    const state = loadFrozen(V8_FIXTURE);
+    const { automation, ...run } = state.run;
+    expect(automation.outposts).toEqual([]);
+    expect(run).toEqual(before.run);
+  });
+
+  it('keeps a well-formed outpost through a round-trip', () => {
+    const rockId = loadFrozen(V8_FIXTURE).run.rocks[0]!.id;
+    const r = parseImport(withAutomation({ outposts: [outpostOn(rockId)], extracted: 5 }));
+    if (!r.ok) throw new Error('expected the save to load');
+    expect(r.record.state.run.automation.outposts[0]).toEqual(outpostOn(rockId));
+  });
+
+  it('rejects malformed automation', () => {
+    const rockId = loadFrozen(V8_FIXTURE).run.rocks[0]!.id;
+    const bad = [
+      undefined,
+      { outposts: [], extracted: 'x' },
+      { outposts: [outpostOn(-1)], extracted: 0 },
+      { outposts: [outpostOn(rockId), outpostOn(rockId)], extracted: 0 },
+      { outposts: [{ ...outpostOn(rockId), kind: 'alloy' }], extracted: 0 },
+      { outposts: [{ ...outpostOn(rockId), stored: { ore: 1 } }], extracted: 0 },
+      { outposts: [{ ...outpostOn(rockId), reserve: null }], extracted: 0 },
+      { outposts: [null], extracted: 0 },
+    ];
+    for (const a of bad) expect(parseImport(withAutomation(a)).ok).toBe(false);
   });
 });

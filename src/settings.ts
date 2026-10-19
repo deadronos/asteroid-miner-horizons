@@ -18,7 +18,8 @@ export type KeyAction =
   | 'map'
   | 'research'
   | 'help'
-  | 'pause';
+  | 'pause'
+  | 'outpost';
 
 /** Two bindings per action (primary, secondary); null = unbound. Values are KeyboardEvent.code. */
 export type KeyBindings = Record<KeyAction, [string | null, string | null]>;
@@ -66,6 +67,7 @@ export const KEY_ACTIONS: { id: KeyAction; label: string }[] = [
   { id: 'research', label: 'Research panel' },
   { id: 'help', label: 'Toggle help' },
   { id: 'pause', label: 'Pause' },
+  { id: 'outpost', label: 'Deploy outpost on hovered asteroid' },
 ];
 
 export const DEFAULT_KEYS: KeyBindings = {
@@ -79,6 +81,7 @@ export const DEFAULT_KEYS: KeyBindings = {
   research: ['KeyR', null],
   help: ['KeyH', null],
   pause: ['KeyP', 'Pause'],
+  outpost: ['KeyO', null],
 };
 
 /** Keys with a fixed meaning that can't be bound to an action. */

@@ -31,7 +31,8 @@ export type Command =
   | { t: 'refine'; recipe: RecipeId; count: number }
   | { t: 'cancelRefine'; jobId: number }
   | { t: 'acceptContract'; contractId: number }
-  | { t: 'abandonContract' };
+  | { t: 'abandonContract' }
+  | { t: 'deployOutpost'; rockId: number };
 
 export function applyCommand(state: GameState, cmd: Command): void {
   // One cast: `handlers` is a mapped type, so `handlers[cmd.t]` is the handler for

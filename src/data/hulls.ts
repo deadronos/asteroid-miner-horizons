@@ -1,16 +1,17 @@
 // Hull types. A hull fixes base stats and how many component slots a ship has.
 // Flagship hulls replace your command ship (keeping fitted parts); drone hulls
-// are bought as extra autonomous fleet members.
+// are bought as extra autonomous fleet members, and hauler hulls are fleet
+// members that ferry cargo from miners and outposts instead of mining.
 
 import type { ComponentId, Tier, VariantId } from './components';
 import type { Cost } from './resources';
 
-export type HullId = 'prospector' | 'excavator' | 'drone' | 'harvester';
+export type HullId = 'prospector' | 'excavator' | 'drone' | 'harvester' | 'hauler';
 
 export interface HullDef {
   id: HullId;
   name: string;
-  role: 'flagship' | 'drone';
+  role: 'flagship' | 'drone' | 'hauler';
   slots: number;
   hull: number;
   speed: number;
@@ -84,6 +85,21 @@ export const HULLS: Record<HullId, HullDef> = {
     cost: { ore: 150, alloy: 50, ice: 120 },
     loadout: [{ type: 'laser', variant: 'focused', tier: 1 }, { type: 'cargo', variant: 'standard', tier: 1 }, null],
     color: 0x7fe0c8,
+  },
+  hauler: {
+    id: 'hauler',
+    name: 'Hauler',
+    role: 'hauler',
+    slots: 2,
+    hull: 80,
+    speed: 115,
+    accel: 300,
+    cargo: 140,
+    magnet: 50,
+    size: 10,
+    cost: { ore: 160, ice: 60, alloy: 20 },
+    loadout: [{ type: 'engine', variant: 'ion', tier: 1 }, null],
+    color: 0xc9a2ff,
   },
 };
 

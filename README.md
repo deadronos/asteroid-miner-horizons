@@ -46,6 +46,7 @@ Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 | Mouse wheel                | Zoom (toward the cursor when not following)                                                      |
 | Drag                       | Pan (camera stops following) · `F` follows again                                                 |
 | `M`                        | System map toggle                                                                                |
+| `O` over a large asteroid  | Deploy a mining outpost there (the flagship must be beside it)                                   |
 | `R`                        | Research (prestige) panel · `P` pause · `H` hides help · `Esc` closes menus, else stops the ship |
 | ⚙ button                   | Menu: save slots, settings, key rebinding                                                        |
 
@@ -85,6 +86,13 @@ All keys can be rebound in ⚙ → Controls.
   up debris and return to unload when full. In **Assist** mode they work near the
   flagship; in **Auto** mode they work near the station. Select one to give it manual
   orders. The flagship can be refitted onto the 6-slot **Excavator** hull.
+- **Automation**: a **Hauler** takes a fleet slot but never mines. It skims drones once
+  their holds are 30% full and empties outposts, then unloads at the station, so drones
+  spend less time commuting. An **outpost** (120 ore · 30 ice · 15 alloy, up to 3) is
+  deployed by flying the flagship next to a large asteroid and pressing **O** over it. It
+  slowly taps a deep reserve (10× the rock's units) into a 100-unit store and stalls when
+  full, so it needs a hauler to pay off. Drones leave outpost rocks alone, and outposts
+  are left behind when you warp.
 - **Damage**: collisions above a speed threshold and star heat hit shields first, then
   hull. Armor reduces damage. A lost flagship is rebuilt at the station (its cargo is
   lost); lost drones are gone.
@@ -142,4 +150,4 @@ checks.
 ## Ideas for later
 
 Pirates and combat modules, trade contracts at the station, idle/offline progress,
-more hull classes and specialised drones (haulers, escorts), touch/pinch controls.
+more hull classes and specialised drones (escorts), touch/pinch controls.

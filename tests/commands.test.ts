@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import type { ComponentId } from '../src/data/components';
 import { RESOURCES, type Cost } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
+import { makeOutpost } from '../src/sim/automation';
 import { applyCommand, type Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { halve, investedCost, warpCost } from '../src/sim/economy';
@@ -356,7 +357,17 @@ describe('command handlers', () => {
     s.run.selectedId = 0;
     handlers.select(s, { t: 'select', shipId: fs.id });
     expect(s.run.selectedId).toBe(fs.id);
-    expect(Object.keys(handlers)).toHaveLength(18);
+    expect(Object.keys(handlers)).toHaveLength(19);
+  });
+
+  it('warp leaves outposts behind with a warning', () => {
+    const s = newGame(1);
+    s.run.bank.fuel = 1000;
+    const rock = s.run.rocks.find((r) => r.size === 0)!;
+    s.run.automation.outposts.push(makeOutpost(rock));
+    send(s, { t: 'warp' });
+    expect(s.run.automation.outposts).toEqual([]);
+    expect(s.out.log.some((l) => l.level === 'warn' && l.text.startsWith('Outposts left behind: 1'))).toBe(true);
   });
 
   it('a command for a missing ship is a silent no-op', () => {

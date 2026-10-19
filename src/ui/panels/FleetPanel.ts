@@ -1,7 +1,9 @@
-// Fleet list (status, hull and cargo bars, AI mode) plus the shipyard.
+// Fleet list (status, hull and cargo bars, AI mode), the outposts list and the shipyard.
 
 import { HULLS, HULL_IDS } from '../../data/hulls';
 import { formatCost, walletTotal } from '../../data/resources';
+import { TUNING } from '../../data/tuning';
+import { isHauler } from '../../sim/automation';
 import { hullBlock, isDocked } from '../../sim/economy';
 import { droneCount, fleetCap, isAlive, isFlagship, shipStats } from '../../sim/ships';
 import type { GameState, Ship } from '../../sim/types';
@@ -16,6 +18,10 @@ function status(state: GameState, s: Ship): string {
   if (s.order?.kind === 'move') return 'Moving';
   if (isFlagship(s)) return s.beamOn ? 'Mining' : 'Idle';
   const st = shipStats(s, state.profile);
+  if (isHauler(s)) {
+    if (s.aiTargetId != null) return walletTotal(s.cargo) > 0 ? 'Loading' : 'Collecting';
+    return walletTotal(s.cargo) > 0 ? 'Unloading' : 'Standby';
+  }
   if (walletTotal(s.cargo) >= st.cargoCap - Math.max(2, st.cargoCap * 0.04)) return 'Hauling';
   if (s.beamOn) return 'Mining';
   if (s.aiTargetId != null) return 'Prospecting';
@@ -28,7 +34,8 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
     el,
     () => {
       const s = st();
-      return s.run.ships.map((x) => `${x.id}:${x.hullId}`).join(',') + `|${fleetCap(s.profile)}`;
+      const outposts = s.run.automation.outposts.map((o) => o.rockId).join(',');
+      return s.run.ships.map((x) => `${x.id}:${x.hullId}`).join(',') + `|${fleetCap(s.profile)}|${outposts}`;
     },
     (bind) => {
       const s0 = st();
@@ -49,7 +56,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           cb.el,
         );
         let mode: HTMLButtonElement | null = null;
-        if (!isFlagship(ship)) {
+        if (!isFlagship(ship) && !isHauler(ship)) {
           mode = h('button', {
             class: 'mode',
             onclick: (e) => {
@@ -75,11 +82,37 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         return row;
       });
 
+      const outHead = h('h3');
+      bind(() => setText(outHead, `Outposts · ${st().run.automation.outposts.length}/${TUNING.outpostMax}`));
+      const outRows = s0.run.automation.outposts.map((o0) => {
+        const rockId = o0.rockId;
+        const label = h('span', { class: 'nm', text: `▪ ${o0.kind} outpost` });
+        const stat = h('span', { class: 'st' });
+        const sb = bar('cargo mini');
+        bind(() => {
+          const o = st().run.automation.outposts.find((x) => x.rockId === rockId);
+          if (!o) return;
+          setText(stat, `${Math.floor(o.reserve)} left`);
+          sb.set(walletTotal(o.stored) / TUNING.outpostCapacity);
+        });
+        return h('div', { class: 'shiprow' }, label, stat, sb.el);
+      });
+      const outHint = h('div', {
+        class: 'dim small',
+        text: 'Fly next to a large asteroid and press the outpost key over it. Haulers collect the output.',
+      });
+
       const yard = h('h3', { text: 'Shipyard' });
       const buys = HULL_IDS.filter((id) => id !== 'prospector').map((hid) => {
         const def = HULLS[hid];
         const btn = h('button', { class: 'buy', onclick: () => ctx.send({ t: 'buyHull', hullId: hid }) });
-        btn.dataset.title = `${def.name}: ${def.slots} slots, ${def.hull} hull, ${def.cargo} cargo${def.role === 'flagship' ? ' — replaces your flagship hull, keeps fitted parts' : ''}`;
+        const note =
+          def.role === 'flagship'
+            ? ' — replaces your flagship hull, keeps fitted parts'
+            : def.role === 'hauler'
+              ? ' — ferries cargo from drones and outposts to the station; does not mine'
+              : '';
+        btn.dataset.title = `${def.name}: ${def.slots} slots, ${def.hull} hull, ${def.cargo} cargo${note}`;
         btn.append(
           h('span', { text: `${def.role === 'flagship' ? 'Refit flagship → ' : '+ '}${def.name}` }),
           h('small', { text: formatCost(def.cost) }),
@@ -91,7 +124,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         });
         return btn;
       });
-      return [head, ...rows, yard, ...buys];
+      return [head, ...rows, outHead, ...outRows, ...(outRows.length ? [] : [outHint]), yard, ...buys];
     },
   );
 }

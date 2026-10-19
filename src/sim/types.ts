@@ -167,6 +167,25 @@ export interface Refinery {
   produced: Record<RecipeId, number>;
 }
 
+/** A mining outpost on a large belt rock: it taps a deep reserve slowly and holds the output for a hauler. */
+export interface Outpost {
+  /** Host rock; one outpost per rock. The rock itself is never drained, and drones leave it alone. */
+  rockId: number;
+  kind: RawResource;
+  /** Host rock position, refreshed every tick. */
+  pos: Vec2;
+  /** Units waiting for pickup. */
+  stored: Wallet;
+  /** Reserve units left to extract; the outpost is dismantled once this and `stored` are empty. */
+  reserve: number;
+}
+
+export interface Automation {
+  outposts: Outpost[];
+  /** Units outposts extracted this run (balance metric). */
+  extracted: number;
+}
+
 export interface Run {
   system: StarSystem;
   rng: Rng;
@@ -183,6 +202,7 @@ export interface Run {
   contracts: ContractBoard;
   refinery: Refinery;
   hazards: Hazards;
+  automation: Automation;
 }
 
 export interface CometWarning {

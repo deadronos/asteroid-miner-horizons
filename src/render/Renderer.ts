@@ -18,6 +18,7 @@ import type { ViewRect } from './cull';
 import { Debris } from './debris';
 import { FloatingText } from './floatingText';
 import { HazardView } from './hazardView';
+import { OutpostView } from './outpostView';
 import { Particles } from './particles';
 import { ROCK_TINT, RockView } from './rocks';
 import { ShipView } from './shipView';
@@ -61,6 +62,7 @@ export class Renderer {
   private rocks = new RockView();
   private ships = new ShipView();
   private hazardView = new HazardView();
+  private outpostView = new OutpostView();
   private particles = new Particles();
   /** 0..1 star-glow boost, eased toward 1 while a solar flare is active. */
   private flareGlow = 0;
@@ -109,6 +111,7 @@ export class Renderer {
       this.backdrop.group,
       this.system.group,
       this.rocks.group,
+      this.outpostView.group,
       this.ships.group,
       this.hazardView.line,
       this.particles.points,
@@ -298,6 +301,7 @@ export class Renderer {
     v.halfW = vh * a;
     v.halfH = vh;
     this.rocks.update(run.rocks, run.pickups, run.time, v);
+    this.outpostView.update(run.automation.outposts, (id) => run.rocks.find((r) => r.id === id), run.time);
     const wpp = this.wpp;
     const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars);
     this.hazardView.update(run.hazards, run.time, wpp);
@@ -335,6 +339,7 @@ export class Renderer {
    */
   private setPlayfieldVisible(on: boolean): void {
     this.system.group.visible = this.rocks.group.visible = this.ships.group.visible = on;
+    this.outpostView.group.visible = on;
     this.particles.points.visible = this.debris.mesh.visible = on;
     if (!on) this.hazardView.line.visible = this.hoverRing.visible = this.moveMarker.visible = false;
   }

@@ -1,5 +1,6 @@
 // The fixed-step simulation tick. Order of operations:
-// commands → orbits → rocks → hazards → ships (pilot, collide, heat, dock) → pickups → belt regrowth → contracts → refinery.
+// commands → orbits → rocks → hazards → outposts → ships (pilot, collide, heat, dock) → pickups → belt regrowth →
+// contracts → refinery.
 
 import { range } from '../core/rng';
 import { damp, dist, type Vec2 } from '../core/vec';
@@ -7,6 +8,7 @@ import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
 import { walletValue, RESOURCES, RESOURCE_INFO, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { DEFAULT_ASSISTS, type Assists } from './assists';
+import { haulerThink, isHauler, updateOutposts } from './automation';
 import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
@@ -95,6 +97,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   const level = input.hazards ?? 'off';
   updateHazards(state, dt, level);
   index.rebuild(state);
+  updateOutposts(state, index, dt);
 
   const ctx: TickCtx = {
     state,
@@ -150,7 +153,8 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
     ship.order = null;
     steer(ctx, ship, st, thrust.x, thrust.z);
   } else if (!runOrder(ctx, ship, st)) {
-    if (!isFlagship(ship)) droneThink(ctx, ship, st);
+    if (isHauler(ship)) haulerThink(ctx, ship, st);
+    else if (!isFlagship(ship)) droneThink(ctx, ship, st);
   }
 
   // Inertia with gentle drag so space feels slick but controllable.

@@ -160,7 +160,7 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
     // Wide Beam: the same beam also grazes every other live rock inside the splash radius.
     const dmg = st.dps * ctx.dt * TUNING.splashMul;
     ctx.index.rockHash.query(rock.pos, st.splash + 60, (n) => {
-      if (n.id === rock.id || !ctx.index.rockById.has(n.id)) return;
+      if (n.id === rock.id || !ctx.index.rockById.has(n.id) || ctx.index.outpostRocks.has(n.id)) return;
       if (dist(n.pos, rock.pos) > st.splash + n.radius) return;
       const nf = laserRock(ctx.state, n, dmg, st.laserTier);
       if (nf) {
@@ -171,6 +171,9 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
   }
   return frags;
 }
+
+/** A rock this ship's laser can cut that is not an outpost's host. */
+const minable = (ctx: TickCtx, st: ShipStats, r: Rock): boolean => canMine(st, r) && !ctx.index.outpostRocks.has(r.id);
 
 function nearestRock(ctx: TickCtx, from: Vec2, radius: number, filter: (r: Rock) => boolean): Rock | null {
   let best: Rock | null = null;
@@ -198,7 +201,7 @@ export function chainTarget(ctx: TickCtx, ship: Ship, st: ShipStats, frags: Rock
     }
   }
   if (best) return best.id;
-  return nearestRock(ctx, ship.pos, st.range * 1.2, (r) => canMine(st, r))?.id ?? null;
+  return nearestRock(ctx, ship.pos, st.range * 1.2, (r) => minable(ctx, st, r))?.id ?? null;
 }
 
 /** Executes a ship's manual order. Returns false if it has none. */
@@ -226,7 +229,7 @@ export function runOrder(ctx: TickCtx, ship: Ship, st: ShipStats): boolean {
 }
 
 /** True if `pos` lies in the flare zone or a comet path (see `sim/hazards`). */
-function unsafe(ctx: TickCtx, pos: Vec2): boolean {
+export function unsafe(ctx: TickCtx, pos: Vec2): boolean {
   const { run } = ctx.state;
   return inFlareZone(run, pos) || cometPathEscape(run, ctx.index.comets, pos, TUNING.cometDodgePad, ctx.index.escape);
 }
@@ -235,7 +238,7 @@ function unsafe(ctx: TickCtx, pos: Vec2): boolean {
  * Hazard reflexes ahead of the rest of the drone brain: step straight out of a comet path, else shelter from a
  * flare by docking (and staying docked) or fleeing past its reach. Returns true if it steered the drone.
  */
-function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: boolean): boolean {
+export function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: boolean): boolean {
   const { run } = ctx.state;
   const esc = ctx.index.escape;
   if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, esc)) {
@@ -297,11 +300,11 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   if (st.dps > 0) {
     let rock = ship.aiTargetId != null ? ctx.index.rockById.get(ship.aiTargetId) : undefined;
-    if (rock && (!canMine(st, rock) || dist(rock.pos, anchor) > TUNING.droneLeash || unsafe(ctx, rock.pos)))
+    if (rock && (!minable(ctx, st, rock) || dist(rock.pos, anchor) > TUNING.droneLeash || unsafe(ctx, rock.pos)))
       rock = undefined;
     if (!rock && ship.aiMode === 'assist' && fs.order?.kind === 'mine') {
       rock = ctx.index.rockById.get(fs.order.rockId);
-      if (rock && (!canMine(st, rock) || unsafe(ctx, rock.pos))) rock = undefined;
+      if (rock && (!minable(ctx, st, rock) || unsafe(ctx, rock.pos))) rock = undefined;
     }
     if (!rock) {
       rock =
@@ -309,9 +312,9 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
           ctx,
           ship.pos,
           500,
-          (r) => canMine(st, r) && dist(r.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, r.pos),
+          (r) => minable(ctx, st, r) && dist(r.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, r.pos),
         ) ??
-        nearestRock(ctx, anchor, TUNING.droneLeash, (r) => canMine(st, r) && !unsafe(ctx, r.pos)) ??
+        nearestRock(ctx, anchor, TUNING.droneLeash, (r) => minable(ctx, st, r) && !unsafe(ctx, r.pos)) ??
         undefined;
     }
     if (rock) {

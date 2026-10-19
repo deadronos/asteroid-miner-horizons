@@ -6,7 +6,7 @@
 import type { SaveActions } from '../session';
 import type { Command } from '../sim/commands';
 import { keyLabel, type SettingsStore } from '../settings';
-import type { GameState, LogEntry, Rock } from '../sim/types';
+import type { GameState, LogEntry, Outpost, Rock } from '../sim/types';
 import { type Panel, h, setText } from './dom';
 import { hazardBanner } from './hazardBanner';
 import { Menu } from './Menu';
@@ -91,6 +91,7 @@ export class Hud {
       <b>Mine</b> click an asteroid (laser auto-chains fragments)<br>
       <b>Collect</b> fly near debris · <b>Unload</b> click the station<br>
       <b>Fleet</b> click a ship, ${k('cycleShip')} or 1–9 to select · Esc stops<br>
+      <b>Automation</b> ${k('outpost')} over a large asteroid deploys an outpost · haulers collect from it<br>
       <b>View</b> wheel zoom · drag to pan · ${k('follow')} follow · ${k('map')} map<br>
       <b>Menus</b> ${k('research')} research · ${k('pause')} pause · ${k('help')} hide help · ⚙ saves & settings`;
     this.fps.classList.toggle('hidden', !s.showFps);
@@ -158,12 +159,13 @@ export class Hud {
     while (this.log.childElementCount > MAX_LOG) this.log.lastElementChild?.remove();
   }
 
-  showTooltip(x: number, y: number, rock: Rock | null, label: string | null): void {
+  showTooltip(x: number, y: number, rock: Rock | null, label: string | null, outpost?: Outpost): void {
     if (!rock && !label) {
       this.tooltip.style.display = 'none';
       return;
     }
-    const text = rock ? rockTooltip(rock) : label!;
+    const key = this.settings.value.keys.outpost.find(Boolean);
+    const text = rock ? rockTooltip(rock, outpost, key ? keyLabel(key) : undefined) : label!;
     setText(this.tooltip, text);
     this.tooltip.style.display = 'block';
     this.tooltip.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
