@@ -81,6 +81,14 @@ already isolates it from `main`.
 - Several test-strength minors (vacuous on-ship NaN test, stand-off single-branch coverage, loose
   balance-report labelling) were logged and left; none change behaviour.
 
+## Post-PR CI fix
+
+The first CI run failed only `tests/traits.test.ts`'s frozen-layout assertion: the recorded float
+values matched to ~15 significant digits, but Linux libm's `sin`/`pow` differ from macOS by an ulp.
+The fix compares positions/radius/hp at 1e-6 (still pins the layout to a micron) in both the recorded
+baseline and the live run, while `run.rng.s` stays an exact integer assertion — the actual isolation
+guarantee. `npm run check` green afterwards; CI then passed.
+
 ## What landed
 
 13 commits: the spec and plan, eight task commits (Tasks 1–8), one mid-implementation ruling, one
