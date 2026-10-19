@@ -23,6 +23,7 @@ import { ROCK_TINT, RockView } from './rocks';
 import { ShipView } from './shipView';
 import { SystemView } from './systemView';
 import { additive, flat } from './util';
+import { WARP_REST, WARP_TOTAL, type WarpFrame, WarpStreaks, warpFrame } from './warpFx';
 
 /**
  * Final composer pass: presents the sRGB-encoded buffer as-is (no second
@@ -73,7 +74,10 @@ export class Renderer {
   private bloom: UnrealBloomPass | null = null;
   private bloomOn = false;
   private readonly msaa: number;
-  private warpFlash = 0;
+  /** Seconds since the last warp; the transition plays while it is below WARP_TOTAL. */
+  private warpT = WARP_TOTAL;
+  private readonly warp: WarpFrame = { ...WARP_REST };
+  private streaks = new WarpStreaks();
   /** The camera's world rectangle this frame (shake included), reused for culling. */
   private readonly cullView: ViewRect = { x: 0, z: 0, halfW: 0, halfH: 0 };
 
@@ -109,6 +113,7 @@ export class Renderer {
       this.hazardView.line,
       this.particles.points,
       this.debris.mesh,
+      this.streaks.lines,
     );
 
     this.hoverRing = new THREE.Mesh(flat(new THREE.RingGeometry(0.9, 1, 48)), additive(0xffffff, 0.6));
@@ -250,6 +255,12 @@ export class Renderer {
       this.snapped = false;
     }
 
+    // The warp sequence runs on frame time, so it never holds up the sim or input.
+    // It starts on the frame the warp fx arrives, before the new system is drawn.
+    this.warpT = Math.min(WARP_TOTAL, this.warpT + dt);
+    for (const fx of state.out.fx) if (fx.t === 'warp') this.warpT = 0;
+    const w = warpFrame(this.warpT, this.warp);
+
     // Camera: smooth zoom, follow the selected ship.
     this.halfH += (this.targetHalfH - this.halfH) * (1 - damp(12, dt));
     const sel = run.ships.find((s) => s.id === run.selectedId);
@@ -261,28 +272,31 @@ export class Renderer {
       this.snapped = true;
     }
     this.shake = Math.max(0, this.shake - dt * 25);
-    const amp = this.shake * this.shakeScale * this.wpp;
+    const amp = (this.shake + w.shudder * 8) * this.shakeScale * this.wpp;
     const sx = (Math.random() - 0.5) * amp;
     const sz = (Math.random() - 0.5) * amp;
     const cx = this.center.x + sx;
     const cz = this.center.z + sz;
     const a = this.aspect;
-    this.camera.left = -this.halfH * a;
-    this.camera.right = this.halfH * a;
-    this.camera.top = this.halfH;
-    this.camera.bottom = -this.halfH;
+    // The warp's zoom is applied to the view only, so the player's zoom target is untouched.
+    const vh = this.halfH * w.zoom;
+    this.camera.left = -vh * a;
+    this.camera.right = vh * a;
+    this.camera.top = vh;
+    this.camera.bottom = -vh;
     this.camera.position.set(cx, 1000, cz);
     this.camera.lookAt(cx, 0, cz);
     this.camera.updateProjectionMatrix();
 
-    this.backdrop.update(cx, cz, this.halfH);
+    this.backdrop.update(cx, cz, vh, 1 - w.stretch);
+    this.streaks.update(w.stretch, cx, cz, vh * a, vh);
     this.flareGlow += ((run.hazards.flare?.phase === 'active' ? 1 : 0) - this.flareGlow) * (1 - damp(4, dt));
     this.system.update(sys, run.time, this.flareGlow);
     const v = this.cullView;
     v.x = cx;
     v.z = cz;
-    v.halfW = this.halfH * a;
-    v.halfH = this.halfH;
+    v.halfW = vh * a;
+    v.halfH = vh;
     this.rocks.update(run.rocks, run.pickups, run.time, v);
     const wpp = this.wpp;
     const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars);
@@ -292,6 +306,7 @@ export class Renderer {
     this.particles.update(dt);
     this.debris.update(dt);
     this.updateMarkers(state, moveMark, wpp);
+    this.setPlayfieldVisible(!w.hidden);
     this.floaters.update(
       dt,
       (p) => this.worldToScreen(p),
@@ -301,7 +316,6 @@ export class Renderer {
       },
     );
 
-    this.warpFlash = Math.max(0, this.warpFlash - dt * 1.2);
     if (this.bloomOn && this.composer) this.composer.render(dt);
     else this.gl.render(this.scene, this.camera);
   }
@@ -310,9 +324,19 @@ export class Renderer {
     return Math.abs(p.x - this.center.x) < this.halfH * this.aspect && Math.abs(p.z - this.center.z) < this.halfH;
   }
 
-  /** 0..1 white-out intensity after a warp, for the HUD overlay. */
+  /** 0..1 white-out intensity during the warp transition, for the HUD overlay. */
   get flash(): number {
-    return this.warpFlash;
+    return this.warp.flash;
+  }
+
+  /**
+   * Hides everything but the starfield while the warp streaks play. Runs after the
+   * per-frame updates, since the hazard line and markers set their own visibility.
+   */
+  private setPlayfieldVisible(on: boolean): void {
+    this.system.group.visible = this.rocks.group.visible = this.ships.group.visible = on;
+    this.particles.points.visible = this.debris.mesh.visible = on;
+    if (!on) this.hazardView.line.visible = this.hoverRing.visible = this.moveMarker.visible = false;
   }
 
   private consumeFx(
@@ -350,7 +374,6 @@ export class Renderer {
           this.shake = 16;
           break;
         case 'warp':
-          this.warpFlash = 1;
           this.follow = true;
           break;
         case 'hazard':
