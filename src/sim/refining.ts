@@ -49,6 +49,19 @@ function shortOf(bank: Wallet, cost: Cost): Resource | null {
   return null;
 }
 
+/** How many more batches of `recipe` the queue can take right now, or why none will fit. */
+function queueRoom(queue: readonly RefineJob[], recipe: RecipeId): { cap: number } | { error: string } {
+  const last = queue[queue.length - 1];
+  if (last && last.recipe === recipe) {
+    // Clamp to the per-job cap too, so a hand-edited save with a
+    // non-positive count cannot report more room than a fresh job has.
+    const cap = Math.min(TUNING.refineMaxBatch, TUNING.refineMaxBatch - last.count);
+    return cap < 1 ? { error: 'That refinery job is full.' } : { cap };
+  }
+  if (queue.length >= TUNING.refineQueueMax) return { error: 'Refinery queue is full.' };
+  return { cap: TUNING.refineMaxBatch };
+}
+
 /**
  * Validates a queued refine without mutating: the clamped batch count, or a
  * reason. The sim command and the HUD buttons share this rule.
@@ -57,15 +70,9 @@ export function refineBlock(run: Run, recipe: RecipeId, count: number): { n: num
   const queue = run.refinery.queue;
   const floored = Math.floor(count);
   if (!Number.isFinite(floored) || floored < 1) return { error: 'Nothing to refine.' };
-  let n = Math.min(floored, TUNING.refineMaxBatch);
-  const last = queue[queue.length - 1];
-  if (last && last.recipe === recipe) {
-    // Merging must not push the job past the per-job batch cap.
-    n = Math.min(n, TUNING.refineMaxBatch - last.count);
-    if (n < 1) return { error: 'That refinery job is full.' };
-  } else if (queue.length >= TUNING.refineQueueMax) {
-    return { error: 'Refinery queue is full.' };
-  }
+  const room = queueRoom(queue, recipe);
+  if ('error' in room) return room;
+  const n = Math.min(floored, room.cap);
   const short = shortOf(run.bank, batchCost(recipe, n));
   if (short) {
     const res = RESOURCE_INFO[short].name.toLowerCase();
@@ -96,11 +103,9 @@ export function queueRefine(run: Run, recipe: RecipeId, count: number): { queued
 
 /** Largest batch count `refineBlock` would accept right now; 0 when nothing can be queued. */
 export function maxBatches(run: Run, recipe: RecipeId): number {
-  const queue = run.refinery.queue;
-  const last = queue[queue.length - 1];
-  let cap: number = TUNING.refineMaxBatch;
-  if (last && last.recipe === recipe) cap = Math.min(cap, TUNING.refineMaxBatch - last.count);
-  else if (queue.length >= TUNING.refineQueueMax) return 0;
+  const room = queueRoom(run.refinery.queue, recipe);
+  if ('error' in room) return 0;
+  let cap = room.cap;
   const input = RECIPES[recipe].input;
   for (const r of RESOURCES) {
     const per = input[r] ?? 0;
