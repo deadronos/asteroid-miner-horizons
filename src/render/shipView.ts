@@ -1,13 +1,15 @@
-// Per-ship visuals: hull silhouette, engine flame, shield bubble, selection
-// ring, status bars and the mining beam. Overlay elements (rings, bars, beam
-// width) are scaled by world-units-per-pixel so they stay crisp at any zoom.
+// Per-ship visuals: hull silhouette, fitted-component attachments, engine
+// flame, shield bubble, selection ring, status bars and the mining beam.
+// Overlay elements (rings, bars, beam width) are scaled by
+// world-units-per-pixel so they stay crisp at any zoom.
 
 import * as THREE from 'three';
 import type { Vec2 } from '../core/vec';
 import { HULLS, type HullId } from '../data/hulls';
 import { walletTotal } from '../data/resources';
 import { isAlive, shipStats } from '../sim/ships';
-import type { GameState, Rock, Ship } from '../sim/types';
+import type { Fitted, GameState, Rock, Ship } from '../sim/types';
+import { buildFittings, fitLayout, type FitLayout, sameFit, snapshotFit } from './fittings';
 import { additive, flat, glowTexture } from './util';
 
 const HULL_SHAPES: Record<HullId, [number, number][]> = {
@@ -73,6 +75,10 @@ interface Visual {
   hullId: HullId;
   root: THREE.Group;
   body: THREE.Group;
+  /** The slots the attachments were built from; compared each frame, rebuilt on change. */
+  fit: (Fitted | null)[];
+  fittings: THREE.Group;
+  layout: FitLayout;
   flame: THREE.Mesh;
   shield: THREE.Mesh;
   select: THREE.Mesh;
@@ -124,6 +130,9 @@ export class ShipView {
     const flame = new THREE.Mesh(flat(new THREE.ShapeGeometry(flameShape)), additive(0xff8a3a, 0.9));
     flame.position.set(-h.size * 0.6, 1, 0);
     body.add(flame);
+    const layout = fitLayout(ship.slots, h.size);
+    const fittings = buildFittings(layout);
+    body.add(fittings);
     root.add(body);
 
     const shield = new THREE.Mesh(flat(new THREE.CircleGeometry(1, 40)), additive(0x4db8ff, 0.2, null));
@@ -163,6 +172,9 @@ export class ShipView {
       hullId: ship.hullId,
       root,
       body,
+      fit: snapshotFit(ship.slots),
+      fittings,
+      layout,
       flame,
       shield,
       select,
@@ -175,6 +187,15 @@ export class ShipView {
       shieldPrev: ship.shield,
       hitFlash: 0,
     };
+  }
+
+  /** Swaps a ship's attachments for its current fit; only called when the slots changed. */
+  private refit(v: Visual, ship: Ship): void {
+    v.body.remove(v.fittings);
+    v.fit = snapshotFit(ship.slots);
+    v.layout = fitLayout(ship.slots, HULLS[ship.hullId].size);
+    v.fittings = buildFittings(v.layout);
+    v.body.add(v.fittings);
   }
 
   private remove(id: number, v: Visual): void {
@@ -224,6 +245,8 @@ export class ShipView {
       if (!v) {
         v = this.build(ship);
         this.visuals.set(ship.id, v);
+      } else if (!sameFit(v.fit, ship.slots)) {
+        this.refit(v, ship);
       }
       const alive = isAlive(ship);
       v.root.visible = alive;
@@ -239,7 +262,7 @@ export class ShipView {
       const flick = 0.75 + Math.random() * 0.5;
       v.flame.visible = ship.thrusting;
       (v.flame.material as THREE.MeshBasicMaterial).color.setHex(0xff8a3a).multiplyScalar(this.glow);
-      v.flame.scale.set(flick, 1, 0.8 + Math.random() * 0.3);
+      v.flame.scale.set(flick * v.layout.flameLength, 1, (0.8 + Math.random() * 0.3) * v.layout.flameWidth);
 
       if (ship.shield < v.shieldPrev - 0.5) v.hitFlash = 1;
       v.shieldPrev = ship.shield;
