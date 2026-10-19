@@ -72,6 +72,30 @@ body {
   will-change: transform, opacity;
 }
 
+/* Station and planet names on the zoomed-out map; placed by transform, faded as one layer. */
+.map-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.map-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: calc(12px * var(--hud-scale, 1));
+  letter-spacing: 0.06em;
+  color: var(--txt);
+  white-space: nowrap;
+  text-shadow:
+    0 0 6px rgba(0, 0, 0, 0.95),
+    0 1px 2px #000;
+}
+.map-label.station {
+  color: var(--accent);
+  font-weight: 600;
+}
+
 .hidden {
   display: none !important;
 }
