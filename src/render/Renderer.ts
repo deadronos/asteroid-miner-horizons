@@ -15,6 +15,7 @@ import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
 import { findRock } from '../sim/generate';
 import { findShip, isAlive, selectedShip } from '../sim/ships';
 import type { GameState, Rock, StarSystem } from '../sim/types';
+import { contextAntialias, useComposer } from './aa';
 import { Backdrop } from './backdrop';
 import { CameraRig } from './camera';
 import { watchContextLoss } from './contextLoss';
@@ -79,6 +80,10 @@ export class Renderer {
   private composer: EffectComposer | null = null;
   private bloom: UnrealBloomPass | null = null;
   private bloomOn = false;
+  /** Whether this frame renders through the composer; set by applySettings. */
+  private viaComposer = false;
+  /** Whether the WebGL context was created with `antialias`; fixed for its lifetime. */
+  private readonly contextAA: boolean;
   private readonly msaa: number;
   /** Seconds since the last warp; the transition plays while it is below WARP_TOTAL. */
   private warpT = WARP_TOTAL;
@@ -93,12 +98,17 @@ export class Renderer {
   private shakeScale = 1;
   private alwaysBars = false;
 
-  /** `antialias` is fixed for the WebGL context's lifetime; it applies on reload. */
+  /**
+   * `antialias` is fixed for the WebGL context's lifetime; it applies on reload. The context gets it only when
+   * the startup preset has no bloom. Otherwise the composer's MSAA target carries it, and a later switch to a
+   * no-bloom preset renders through that target until reload.
+   */
   constructor(
     private container: HTMLElement,
     settings: Settings,
   ) {
-    this.gl = new THREE.WebGLRenderer({ antialias: settings.antialias, powerPreference: 'high-performance' });
+    this.contextAA = contextAntialias(settings.antialias, QUALITY[settings.quality].bloom);
+    this.gl = new THREE.WebGLRenderer({ antialias: this.contextAA, powerPreference: 'high-performance' });
     this.gl.setClearColor(0x03060d);
     // Counters span the whole frame: every composer pass adds to them, and render() resets them once.
     this.gl.info.autoReset = false;
@@ -138,7 +148,15 @@ export class Renderer {
     const q = QUALITY[s.quality];
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatioCap));
     this.bloomOn = q.bloom > 0;
-    if (this.bloomOn) this.ensureComposer().bloom.strength = q.bloom;
+    this.viaComposer = useComposer(this.bloomOn, this.msaa > 0, this.contextAA);
+    // Bloom off but still via the composer (runtime fallback, until reload): close to the canvas look, not identical.
+    // The half-float buffer does not clamp per blend and PRESENT keeps hue above 1. The disabled bloom pass keeps
+    // its targets allocated, which is deliberate for a state that lasts only until reload.
+    if (this.viaComposer) {
+      const { bloom } = this.ensureComposer();
+      bloom.enabled = this.bloomOn;
+      if (this.bloomOn) bloom.strength = q.bloom;
+    }
     this.rocks.glow = this.ships.glow = this.bloomOn ? 1.8 : 1;
     this.resize();
     this.backdrop.configure(q.stars, s.nebula);
@@ -154,8 +172,8 @@ export class Renderer {
       // space, which lifts those layers into a grey-blue fog, so the composer's
       // buffers take the XR-target path: shaders write sRGB-encoded values into a
       // half-float buffer and blend exactly as on screen; PRESENT_SHADER shows
-      // it with no second encode. MSAA on the target replaces the context's
-      // antialiasing, which post-processing bypasses.
+      // it with no second encode. The context is created without antialias whenever
+      // the startup preset has bloom, because this target's MSAA carries it.
       const target = new THREE.WebGLRenderTarget(1, 1, { type: THREE.HalfFloatType, samples: this.msaa });
       target.texture.colorSpace = THREE.SRGBColorSpace;
       this.composer = new EffectComposer(this.gl, target);
@@ -281,7 +299,7 @@ export class Renderer {
       this.warmShaders();
     }
 
-    if (this.bloomOn && this.composer) this.composer.render(dt);
+    if (this.viaComposer && this.composer) this.composer.render(dt);
     else this.gl.render(this.scene, this.cam.camera);
   }
 

@@ -174,20 +174,20 @@ new system is drawn after a warp.
 - Test: `tests/renderPerf.test.ts` (or a new file)
 
 **Build (option 2 from the issue, with a runtime fallback):**
-- [ ] An exported pure helper deciding the context's `antialias`: true only when the AA setting is on and the
+- [x] An exported pure helper deciding the context's `antialias`: true only when the AA setting is on and the
       startup quality preset has no bloom (`QUALITY[quality].bloom === 0`). With bloom, the composer target's
       `samples` carries the AA, as today.
-- [ ] Keep `this.msaa` derived from the AA setting (4 or 0), unchanged.
-- [ ] Render path: draw directly to the canvas when bloom is off **and** the context itself has AA (or AA is off).
+- [x] Keep `this.msaa` derived from the AA setting (4 or 0), unchanged.
+- [x] Render path: draw directly to the canvas when bloom is off **and** the context itself has AA (or AA is off).
       If bloom is off but AA is on and the context was created without it (the preset changed at runtime), render
       through the composer with the bloom pass disabled, so edges stay antialiased until the next reload.
       `applySettings` must create the composer for that case too, and set `bloom.enabled` to match.
-- [ ] The bloom path is unchanged: same target, passes and `PRESENT_SHADER`. The `isXRRenderTarget` comment in
+- [x] The bloom path is unchanged: same target, passes and `PRESENT_SHADER`. The `isXRRenderTarget` comment in
       `ensureComposer` still holds; update it to say the context is created without AA when the composer carries it.
 
 **Tests:**
-- [ ] The antialias helper for each of low/medium/high × AA on/off.
-- [ ] A pure "use the composer?" helper for bloom on/off × context AA on/off × AA setting on/off.
+- [x] The antialias helper for each of low/medium/high × AA on/off.
+- [x] A pure "use the composer?" helper for bloom on/off × context AA on/off × AA setting on/off.
 
 **Done when:** `npm run check` is green. Visual check at low, medium and high with AA on and off: the bloom look is
 unchanged, the no-bloom look at startup is unchanged, and the high preset no longer allocates a context MSAA
