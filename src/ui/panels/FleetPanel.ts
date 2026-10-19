@@ -5,7 +5,7 @@ import { formatCost, walletTotal } from '../../data/resources';
 import { TUNING } from '../../data/tuning';
 import { isHauler } from '../../sim/automation';
 import { hullBlock, isDocked } from '../../sim/economy';
-import { droneCount, fleetCap, isAlive, isFlagship, shipStats } from '../../sim/ships';
+import { droneCount, fleetCap, isAlive, isFlagship, isHoldFull, shipStats } from '../../sim/ships';
 import type { GameState, Ship } from '../../sim/types';
 import { Panel, bar, h, setDisabled, setText } from '../dom';
 import type { PanelCtx } from './context';
@@ -22,7 +22,7 @@ function status(state: GameState, s: Ship): string {
     if (s.aiTargetId != null) return walletTotal(s.cargo) > 0 ? 'Loading' : 'Collecting';
     return walletTotal(s.cargo) > 0 ? 'Unloading' : 'Standby';
   }
-  if (walletTotal(s.cargo) >= st.cargoCap - Math.max(2, st.cargoCap * 0.04)) return 'Hauling';
+  if (isHoldFull(s, st)) return 'Hauling';
   if (s.beamOn) return 'Mining';
   if (s.aiTargetId != null) return 'Prospecting';
   return s.aiMode === 'assist' ? 'Escorting' : 'Idle';

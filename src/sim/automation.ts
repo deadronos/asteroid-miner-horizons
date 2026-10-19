@@ -10,7 +10,7 @@ import { isDocked } from './economy';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
 import { arrive, dodgeHazards, steer, unsafe, type TickCtx } from './pilot';
-import { cargoFree, flagship, isAlive, type ShipStats } from './ships';
+import { cargoFree, flagship, isAlive, isHoldFull, type ShipStats } from './ships';
 import type { Automation, GameState, Outpost, Rock, Ship } from './types';
 
 export const newAutomation = (): Automation => ({ outposts: [], extracted: 0 });
@@ -193,7 +193,7 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const { run } = ctx.state;
   const station = run.system.station.pos;
   const carrying = walletTotal(ship.cargo) > 1e-6;
-  const full = cargoFree(ship, st) < Math.max(2, st.cargoCap * 0.04);
+  const full = isHoldFull(ship, st);
   if (dodgeHazards(ctx, ship, st, full || carrying)) {
     ship.aiTargetId = null;
     return;

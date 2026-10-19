@@ -9,7 +9,7 @@ import { isDocked } from './economy';
 import { cometPathEscape, flareShelter, inFlareZone } from './hazards';
 import type { SimIndex } from './index';
 import { laserRock } from './mining';
-import { cargoFree, flagship, isAlive, type ShipStats } from './ships';
+import { flagship, isAlive, isHoldFull, type ShipStats } from './ships';
 import { canMine, volatileSafeDistance } from './traits';
 import type { GameState, Rock, Ship } from './types';
 
@@ -269,7 +269,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   home.x = anchor.x + Math.cos(slot) * 70;
   home.z = anchor.z + Math.sin(slot) * 70;
 
-  const full = cargoFree(ship, st) < Math.max(2, st.cargoCap * 0.04);
+  const full = isHoldFull(ship, st);
   if (dodgeHazards(ctx, ship, st, full)) {
     ship.aiTargetId = null;
     return;
