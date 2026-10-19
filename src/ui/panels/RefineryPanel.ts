@@ -47,13 +47,10 @@ export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             setDisabled(btn, 'error' in block, 'error' in block ? block.error : '');
           });
         }
+        const desc = h('small');
+        bind(() => setText(desc, describeRecipe(id, st().profile)));
         nodes.push(
-          h(
-            'div',
-            { class: 'slot' },
-            h('div', { class: 'nm' }, h('b', { text: RECIPES[id].name }), h('small', { text: describeRecipe(id) })),
-            row,
-          ),
+          h('div', { class: 'slot' }, h('div', { class: 'nm' }, h('b', { text: RECIPES[id].name }), desc), row),
         );
       }
 
@@ -86,7 +83,7 @@ export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             nodes.push(progress.el);
             bind(() => {
               const job = st().run.refinery.queue[0];
-              if (job) progress.set(jobProgress(job));
+              if (job) progress.set(jobProgress(job, st().profile));
             });
           }
         }

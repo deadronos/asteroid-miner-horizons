@@ -11,7 +11,7 @@ import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
-// Real saves frozen at versions 2 to 8 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 9 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
@@ -20,6 +20,7 @@ import V5_FIXTURE from './fixtures/save-v5.json?raw';
 import V6_FIXTURE from './fixtures/save-v6.json?raw';
 import V7_FIXTURE from './fixtures/save-v7.json?raw';
 import V8_FIXTURE from './fixtures/save-v8.json?raw';
+import V9_FIXTURE from './fixtures/save-v9.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -53,8 +54,11 @@ const currentRun = () => {
 };
 
 /** A valid current-version save, with the given run overrides applied on top. */
-const saveCurrent = (run: Record<string, unknown> = {}): SaveData =>
-  ({ ...v3FixtureState(), version: SAVE_VERSION, run: { ...currentRun(), ...run } }) as unknown as SaveData;
+const saveCurrent = (run: Record<string, unknown> = {}): SaveData => {
+  const fixture = v3FixtureState();
+  const profile = { ...fixture.profile, perks: { ...fixture.profile.perks, furnace: 0, hopper: 0 } };
+  return { ...fixture, profile, version: SAVE_VERSION, run: { ...currentRun(), ...run } } as unknown as SaveData;
+};
 
 /** JSON for a current save whose run carries the given (unvalidated) contract board. */
 const saveWithBoard = (contracts: unknown): string => JSON.stringify(saveCurrent({ contracts }));
@@ -600,5 +604,33 @@ describe('automation migration to v9', () => {
       { outposts: [null], extracted: 0 },
     ];
     for (const a of bad) expect(parseImport(withAutomation(a)).ok).toBe(false);
+  });
+});
+
+describe('refinery perks migration to v10', () => {
+  it.each([
+    ['v2', FIXTURE],
+    ['v8', V8_FIXTURE],
+    ['v9', V9_FIXTURE],
+  ])('loads the %s fixture with both refinery perks at level 0', (_label, raw) => {
+    const state = loadFrozen(raw);
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.profile.perks.furnace).toBe(0);
+    expect(state.profile.perks.hopper).toBe(0);
+  });
+
+  it('keeps the other perk levels', () => {
+    const before = JSON.parse(V9_FIXTURE).state.profile.perks;
+    const { furnace, hopper, ...rest } = loadFrozen(V9_FIXTURE).profile.perks;
+    expect(furnace + hopper).toBe(0);
+    expect(rest).toEqual(before);
+  });
+
+  it('rejects a current save with a missing or non-numeric perk level', () => {
+    const loaded = loadFrozen(V9_FIXTURE);
+    for (const furnace of [undefined, 'x', null]) {
+      const profile = { ...loaded.profile, perks: { ...loaded.profile.perks, furnace } };
+      expect(parseImport(JSON.stringify({ version: SAVE_VERSION, profile, run: loaded.run })).ok).toBe(false);
+    }
   });
 });

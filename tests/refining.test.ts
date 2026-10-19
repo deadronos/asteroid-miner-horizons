@@ -349,14 +349,25 @@ describe('updateRefinery', () => {
 
 describe('refinery HUD helpers', () => {
   it('describes a recipe', () => {
-    expect(describeRecipe('alloy')).toBe('4⬢ → 1▣ · 2s');
-    expect(describeRecipe('fuel')).toBe('5❄ → 1◉ · 0.5s');
+    const { profile } = newGame(1);
+    expect(describeRecipe('alloy', profile)).toBe('4⬢ → 1▣ · 2s');
+    expect(describeRecipe('fuel', profile)).toBe('5❄ → 1◉ · 0.5s');
   });
 
-  it('reports batch progress clamped to [0, 1]', () => {
-    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 0 })).toBe(0);
-    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 1 })).toBe(0.5);
-    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 5 })).toBe(1);
+  it('describes a recipe with the furnace and hopper perks', () => {
+    const { profile } = newGame(1);
+    profile.perks.furnace = 1;
+    profile.perks.hopper = 2;
+    expect(describeRecipe('alloy', profile)).toBe('4⬢ → 1▣ · 1.6s · ×3');
+  });
+
+  it('reports cycle progress clamped to [0, 1]', () => {
+    const { profile } = newGame(1);
+    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 0 }, profile)).toBe(0);
+    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 1 }, profile)).toBe(0.5);
+    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 5 }, profile)).toBe(1);
+    profile.perks.furnace = 4; // 2 s → 1 s
+    expect(jobProgress({ id: 1, recipe: 'alloy', count: 1, total: 1, progress: 0.5 }, profile)).toBe(0.5);
   });
 
   it('sums the queued output of one recipe', () => {
@@ -430,5 +441,51 @@ describe('cost table', () => {
     for (const id of ids) expect(drift(variantDef(id, defaultVariant(id)).cost(3), OLD_T3[id])).toBe(0);
     expect(drift(HULLS.excavator.cost, { ore: 900, ice: 300 })).toBe(0);
     expect(drift(HULLS.harvester.cost, { ore: 350, ice: 120 })).toBe(0);
+  });
+});
+
+describe('refinery perks (#84)', () => {
+  it('the furnace shortens each cycle', () => {
+    const state = stateWith({ ore: 40 });
+    state.profile.perks.furnace = 4; // 2 s → 1 s per alloy batch
+    queueRefine(state.run, 'alloy', 5);
+    updateRefinery(state, 3);
+    expect(state.run.bank.alloy).toBe(3);
+    expect(state.run.refinery.queue[0]!.count).toBe(2);
+  });
+
+  it('hoppers finish several batches per cycle and a partial last cycle', () => {
+    const state = stateWith({ ore: 40 });
+    state.profile.perks.hopper = 2; // 3 batches per 2 s cycle
+    queueRefine(state.run, 'alloy', 5);
+    updateRefinery(state, 2);
+    expect(state.run.bank.alloy).toBe(3);
+    expect(state.run.refinery.queue[0]!.count).toBe(2);
+    updateRefinery(state, 2); // the last cycle only has 2 batches left
+    expect(state.run.bank.alloy).toBe(5);
+    expect(state.run.refinery.produced.alloy).toBe(5);
+    expect(state.run.refinery.queue).toEqual([]);
+  });
+
+  it('carries leftover time from a finished job into the next one', () => {
+    const state = stateWith({ ore: 40, ice: 50 });
+    state.profile.perks.hopper = 1;
+    state.profile.perks.furnace = 4; // alloy 1 s, fuel 0.25 s; 2 batches per cycle
+    queueRefine(state.run, 'alloy', 2);
+    queueRefine(state.run, 'fuel', 4);
+    updateRefinery(state, 1.5); // alloy done after 1 s, then two fuel cycles
+    expect(state.run.bank.alloy).toBe(2);
+    expect(state.run.bank.fuel).toBe(4);
+    expect(state.run.refinery.queue).toEqual([]);
+  });
+
+  it('keeps value in equal to value out', () => {
+    const state = stateWith({ ice: 500 });
+    state.profile.perks.furnace = 2;
+    state.profile.perks.hopper = 3;
+    queueRefine(state.run, 'fuel', 100);
+    updateRefinery(state, 1000);
+    expect(state.run.bank.ice).toBe(0);
+    expect(state.run.bank.fuel).toBe(100);
   });
 });

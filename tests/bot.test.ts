@@ -355,3 +355,25 @@ describe('balance bot automation', () => {
     expect(botCommands(s, { warp: false }).some((c) => c.t === 'deployOutpost')).toBe(false);
   });
 });
+
+/** Maxes the perks that would otherwise undercut the furnace's price. */
+function maxCheapPerks(s: GameState): void {
+  Object.assign(s.profile.perks, { yield: 10, optics: 10, thrust: 8, kit: 5 });
+}
+
+describe('balance bot refinery perks', () => {
+  it('researches no refinery perk while the warp fuel refines quickly', () => {
+    const s = newGame(1000);
+    s.profile.data = 2; // affords only furnace 1 (cost 2) or a cheap perk at level 1
+    maxCheapPerks(s);
+    expect(botCommands(s, { warp: false })[0]).not.toEqual({ t: 'buyPerk', perk: 'furnace' });
+  });
+
+  it('researches the furnace once refining the warp fuel takes over a minute', () => {
+    const s = newGame(1000);
+    s.profile.warps = 5; // 50 × 1.3^5 ≈ 186 fuel ≈ 93 s of refining
+    s.profile.data = 2;
+    maxCheapPerks(s);
+    expect(botCommands(s, { warp: false })[0]).toEqual({ t: 'buyPerk', perk: 'furnace' });
+  });
+});
