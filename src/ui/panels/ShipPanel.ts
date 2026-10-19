@@ -15,7 +15,7 @@ import { isDocked, refitBlock, repairCost, scrapValue, upgradeCost } from '../..
 import { applySystemStats } from '../../sim/modifiers';
 import { findShip, isAlive, isFlagship, selectedShip, shipStats } from '../../sim/ships';
 import type { Fitted, Ship } from '../../sim/types';
-import { Panel, bar, h, setDisabled, setText } from '../dom';
+import { Panel, bar, h, setBlocked, setDisabled, setText, slotRow } from '../dom';
 import type { PanelCtx } from './context';
 
 /** One `<option>` of an empty slot's install select. */
@@ -113,7 +113,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         actions.append(scrap);
         bind(() => {
           const s = cur();
-          if (s) setDisabled(scrap, !!refitBlock(st(), s), refitBlock(st(), s) ?? '');
+          if (s) setBlocked(scrap, refitBlock(st(), s));
         });
       }
       const notice = h('div', { class: 'notice' });
@@ -139,7 +139,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         const rc = repairCost(state, s);
         setText(repairBtn, rc > 0 ? `Repair ${rc}⬢` : 'Hull OK');
         const rb = refitBlock(state, s);
-        setDisabled(repairBtn, rc <= 0 || !!rb || state.run.bank.ore < rc, rb ?? (rc > 0 ? 'Not enough ore' : ''));
+        setBlocked(repairBtn, rb ?? (rc <= 0 ? '' : state.run.bank.ore < rc ? 'Not enough ore' : null));
         setDisabled(dockBtn, !isAlive(s) || isDocked(state.run, s));
         setText(notice, rb ? `⚓ ${rb}` : '⚓ Docked — refit available');
         notice.classList.toggle('ok', !rb);
@@ -147,18 +147,9 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
 
       const slotsHead = h('h3', { text: 'Components' });
       const slotRows = ship0.slots.map((f, i) => {
-        const row = h('div', { class: 'slot' });
         if (f) {
           const def = variantDef(f.type, f.variant);
-          row.append(
-            h(
-              'div',
-              { class: 'nm' },
-              h('b', { text: def.name }),
-              h('span', { class: 'pips', text: ' ' + '●'.repeat(f.tier) + '○'.repeat(3 - f.tier) }),
-              h('small', { text: def.describe(f.tier) }),
-            ),
-          );
+          const pips = h('span', { class: 'pips', text: ' ' + '●'.repeat(f.tier) + '○'.repeat(3 - f.tier) });
           const up = h('button', { onclick: () => send({ t: 'upgrade', shipId: id, slot: i }) });
           const rm = h('button', {
             class: 'icon',
@@ -167,7 +158,11 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             onclick: () => send({ t: 'remove', shipId: id, slot: i }),
           });
           rm.dataset.title = rm.title;
-          row.append(h('div', { class: 'row' }, up, rm));
+          const row = slotRow(
+            def.name,
+            [pips, h('small', { text: def.describe(f.tier) })],
+            h('div', { class: 'row' }, up, rm),
+          );
           bind(() => {
             const s = cur();
             if (!s) return;
@@ -175,44 +170,41 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             const rb = refitBlock(st(), s);
             if (!cost) {
               setText(up, 'MAX');
-              setDisabled(up, true, 'Max tier');
+              setBlocked(up, 'Max tier');
             } else {
               setText(up, `T${f.tier + 1} ${formatCost(cost)}`);
               up.dataset.title = def.describe((f.tier + 1) as 2 | 3);
-              setDisabled(up, !!rb || !canAfford(st().run.bank, cost), rb ?? 'Not enough resources');
+              setBlocked(up, rb ?? (canAfford(st().run.bank, cost) ? null : 'Not enough resources'));
             }
-            setDisabled(rm, !!rb, rb ?? '');
+            setBlocked(rm, rb);
           });
-        } else {
-          row.classList.add('empty');
-          row.append(
-            h('div', { class: 'nm' }, h('b', { text: 'Empty slot' }), h('small', { text: 'Install a component' })),
-          );
-          const sel = h('select');
-          sel.append(h('option', { text: 'Install…' }));
-          const opts = installOptions();
-          for (const o of opts) {
-            const opt = h('option', { text: o.label });
-            opt.value = o.value;
-            sel.append(opt);
-          }
-          sel.addEventListener('change', () => {
-            const pick = parseInstallValue(sel.value);
-            if (pick) send({ t: 'install', shipId: id, slot: i, comp: pick.comp, variant: pick.variant });
-            sel.selectedIndex = 0;
-          });
-          row.append(sel);
-          bind(() => {
-            const s = cur();
-            if (!s) return;
-            const rb = refitBlock(st(), s);
-            sel.disabled = !!rb;
-            sel.title = rb ?? '';
-            // Option 0 is the 'Install…' placeholder; the rest mirror installOptions().
-            const bank = st().run.bank;
-            for (let k = 0; k < opts.length; k++) sel.options[k + 1]!.disabled = !canAfford(bank, opts[k]!.cost);
-          });
+          return row;
         }
+        const sel = h('select');
+        sel.append(h('option', { text: 'Install…' }));
+        const opts = installOptions();
+        for (const o of opts) {
+          const opt = h('option', { text: o.label });
+          opt.value = o.value;
+          sel.append(opt);
+        }
+        sel.addEventListener('change', () => {
+          const pick = parseInstallValue(sel.value);
+          if (pick) send({ t: 'install', shipId: id, slot: i, comp: pick.comp, variant: pick.variant });
+          sel.selectedIndex = 0;
+        });
+        const row = slotRow('Empty slot', h('small', { text: 'Install a component' }), sel);
+        row.classList.add('empty');
+        bind(() => {
+          const s = cur();
+          if (!s) return;
+          const rb = refitBlock(st(), s);
+          sel.disabled = !!rb;
+          sel.title = rb ?? '';
+          // Option 0 is the 'Install…' placeholder; the rest mirror installOptions().
+          const bank = st().run.bank;
+          for (let k = 0; k < opts.length; k++) sel.options[k + 1]!.disabled = !canAfford(bank, opts[k]!.cost);
+        });
         return row;
       });
 

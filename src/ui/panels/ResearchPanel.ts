@@ -2,7 +2,7 @@
 
 import { PERKS, PERK_IDS } from '../../data/perks';
 import { dataGain, perkCost } from '../../sim/economy';
-import { Panel, h, setDisabled, setText } from '../dom';
+import { Panel, h, setDisabled, setText, slotRow } from '../dom';
 import type { PanelCtx } from './context';
 
 export class ResearchPanel {
@@ -44,7 +44,7 @@ export class ResearchPanel {
             setText(btn, cost == null ? 'MAX' : `✦ ${cost}`);
             setDisabled(btn, cost == null || s.profile.data < cost, cost == null ? 'Maxed' : 'Not enough Horizon Data');
           });
-          return h('div', { class: 'slot' }, h('div', { class: 'nm' }, h('b', { text: def.name }), lvl, desc), btn);
+          return slotRow(def.name, [lvl, desc], btn);
         });
         const close = h('button', { text: 'Close', onclick: () => this.toggle(false) });
         box.append(head, intro, ...rows, h('div', { class: 'row end' }, close));
