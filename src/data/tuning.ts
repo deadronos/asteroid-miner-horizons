@@ -40,6 +40,8 @@ export const TUNING = {
   refineQueueMax: 5,
   /** Batches a single refine job can hold. */
   refineMaxBatch: 500,
+  /** Catalytic Furnace perk: refinery speed added per level (cycle time ÷ (1 + this × level)). */
+  furnaceSpeedPerLevel: 0.25,
 
   // Contracts.
   /** Offers kept on the station board per system. */

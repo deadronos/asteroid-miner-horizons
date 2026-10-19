@@ -1,11 +1,19 @@
 // Station refinery: the queue, its validation and the tick that turns ore into
 // alloy and ice into fuel. Pure and deterministic; refining never draws from
-// run.rng and never touches run.runValue.
+// run.rng and never touches run.runValue. The furnace and hopper perks (#84)
+// shorten each cycle and let one cycle finish several batches.
 
 import { RECIPES, type RecipeId } from '../data/refining';
 import { formatCost, pay, RESOURCES, RESOURCE_INFO, type Cost, type Resource, type Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
-import type { GameState, RefineJob, Refinery, Run } from './types';
+import type { GameState, Profile, RefineJob, Refinery, Run } from './types';
+
+/** Seconds one refinery cycle of `recipe` takes, after the furnace perk. */
+export const cycleTime = (recipe: RecipeId, profile: Profile): number =>
+  RECIPES[recipe].time / (1 + TUNING.furnaceSpeedPerLevel * profile.perks.furnace);
+
+/** Batches one refinery cycle finishes from the front job, after the hopper perk. */
+export const batchesPerCycle = (profile: Profile): number => 1 + profile.perks.hopper;
 
 /** Fresh refinery: empty queue, no lifetime output. */
 export function newRefinery(): Refinery {
@@ -103,11 +111,13 @@ export function cancelRefine(run: Run, id: number): RefineJob | null {
 
 /**
  * Spends a `dt` time budget on the front job, carrying leftover time across
- * batches and jobs. Called once per tick, after the contracts.
+ * cycles and jobs. A cycle finishes up to `batchesPerCycle` of the job's
+ * batches at once. Called once per tick, after the contracts.
  */
 export function updateRefinery(state: GameState, dt: number): void {
-  const { run } = state;
+  const { run, profile } = state;
   const queue = run.refinery.queue;
+  const perCycle = batchesPerCycle(profile);
   let budget = dt;
   while (budget > 0 && queue.length > 0) {
     const job = queue[0]!;
@@ -118,12 +128,13 @@ export function updateRefinery(state: GameState, dt: number): void {
       continue;
     }
     const def = RECIPES[job.recipe];
-    const need = def.time - job.progress;
+    const need = Math.max(0, cycleTime(job.recipe, profile) - job.progress);
     if (budget >= need) {
       budget -= need;
-      run.bank[job.recipe] += def.output;
-      run.refinery.produced[job.recipe] += def.output;
-      job.count -= 1;
+      const done = Math.min(perCycle, job.count);
+      run.bank[job.recipe] += def.output * done;
+      run.refinery.produced[job.recipe] += def.output * done;
+      job.count -= done;
       job.progress = 0;
       if (job.count === 0) {
         queue.shift();
@@ -138,15 +149,17 @@ export function updateRefinery(state: GameState, dt: number): void {
   }
 }
 
-/** HUD label for a recipe, e.g. `4⬢ → 1▣ · 2s`. */
-export function describeRecipe(id: RecipeId): string {
+/** HUD label for a recipe with `profile`'s perks applied, e.g. `4⬢ → 1▣ · 2s` or `4⬢ → 1▣ · 1.6s · ×2`. */
+export function describeRecipe(id: RecipeId, profile: Profile): string {
   const def = RECIPES[id];
-  return `${formatCost(def.input)} → ${def.output}${RESOURCE_INFO[id].icon} · ${def.time}s`;
+  const t = Math.round(cycleTime(id, profile) * 100) / 100;
+  const n = batchesPerCycle(profile);
+  return `${formatCost(def.input)} → ${def.output}${RESOURCE_INFO[id].icon} · ${t}s${n > 1 ? ` · ×${n}` : ''}`;
 }
 
-/** Fraction of the current batch finished, clamped to [0, 1]. */
-export function jobProgress(job: RefineJob): number {
-  return Math.min(1, Math.max(0, job.progress / RECIPES[job.recipe].time));
+/** Fraction of the current cycle finished, clamped to [0, 1]. */
+export function jobProgress(job: RefineJob, profile: Profile): number {
+  return Math.min(1, Math.max(0, job.progress / cycleTime(job.recipe, profile)));
 }
 
 /** Output units still coming from queued jobs of `recipe`. */

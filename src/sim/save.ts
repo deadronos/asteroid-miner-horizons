@@ -9,6 +9,7 @@
 
 import { COMPONENTS, isVariant, type ComponentId } from '../data/components';
 import { MODIFIERS } from '../data/modifiers';
+import { PERK_IDS } from '../data/perks';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
 import { RAW_RESOURCES, RESOURCES } from '../data/resources';
 import { TRAITS } from '../data/traits';
@@ -169,7 +170,9 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!migrated) return null;
   // migrate() only guarantees the version envelope; validate the payload shape.
   const { profile, run } = migrated as { profile?: Profile; run?: Run };
-  if (!profile || typeof profile.seed !== 'number' || typeof profile.perks !== 'object') return null;
+  if (!profile || typeof profile.seed !== 'number' || !profile.perks || typeof profile.perks !== 'object') return null;
+  // Stats, costs and the refinery read every perk level, so each must be a finite number.
+  if (!PERK_IDS.every((p) => finite(profile.perks[p]))) return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
   // A trait the sim doesn't know would drive behaviour no rock can roll.

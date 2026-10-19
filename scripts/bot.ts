@@ -54,7 +54,7 @@ const INSTALL_ORDER: { comp: ComponentId; variant: VariantId }[] = [
 ];
 /** Upgrade order for fitted components. */
 const UPGRADE_ORDER: ComponentId[] = ['laser', 'cargo', 'sensor', 'engine', 'armor', 'shield'];
-const PERK_ORDER: PerkId[] = ['yield', 'optics', 'bay', 'kit', 'thrust', 'warp'];
+const PERK_ORDER: PerkId[] = ['yield', 'optics', 'furnace', 'bay', 'hopper', 'kit', 'thrust', 'warp'];
 const PICKUP_CHASE = 260;
 /** Mining drones owned before the bot spends a fleet slot on a hauler. */
 const HAULER_AFTER = 2;

@@ -1,7 +1,7 @@
 // Permanent prestige perks, bought with Horizon Data earned by warping.
 // They survive warps; everything else in a run is reset.
 
-export type PerkId = 'yield' | 'optics' | 'thrust' | 'bay' | 'kit' | 'warp';
+export type PerkId = 'yield' | 'optics' | 'thrust' | 'bay' | 'kit' | 'warp' | 'furnace' | 'hopper';
 
 export interface PerkDef {
   id: PerkId;
@@ -54,6 +54,20 @@ export const PERKS: Record<PerkId, PerkDef> = {
     describe: (l) => `−${l * 8}% warp fuel cost`,
     max: 5,
     cost: (l) => 2 * (l + 1),
+  },
+  furnace: {
+    id: 'furnace',
+    name: 'Catalytic Furnace',
+    describe: (l) => `+${l * 25}% refinery speed`,
+    max: 4,
+    cost: (l) => 2 + l,
+  },
+  hopper: {
+    id: 'hopper',
+    name: 'Bulk Hoppers',
+    describe: (l) => `refinery finishes ${l + 1} batch${l ? 'es' : ''} per cycle`,
+    max: 3,
+    cost: (l) => 3 * (l + 1),
   },
 };
 

@@ -64,6 +64,12 @@ export const migrations: Record<number, Migration> = {
     d.run.automation = newAutomation();
     return d;
   },
+  // v10 added the refinery perks (#84); nobody has researched them yet.
+  9: (d) => {
+    d.profile.perks.furnace = 0;
+    d.profile.perks.hopper = 0;
+    return d;
+  },
 };
 
 export interface MigrateOptions {

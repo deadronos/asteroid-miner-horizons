@@ -99,7 +99,8 @@ All keys can be rebound in ⚙ → Controls.
 - **Warp / prestige**: warping costs fuel from the bank, and the cost rises 35% per warp.
   It resets the bank, ships and components and generates the next system. It grants
   **Horizon Data** = ⌊√(value delivered this run / 60)⌋. Research spends it on permanent
-  perks: yield, laser damage, speed, fleet capacity, a starter kit, and cheaper warps.
+  perks: yield, laser damage, speed, fleet capacity, a starter kit, cheaper warps, a faster
+  refinery (Catalytic Furnace) and more batches per refinery cycle (Bulk Hoppers).
 - **Saves**: the ⚙ menu has three save slots in `localStorage`. The running game
   autosaves to its slot every 10 s (in the browser's next idle moment) and when the tab is
   hidden or closed. Filled slots can be loaded, exported as compact text (to copy) or
