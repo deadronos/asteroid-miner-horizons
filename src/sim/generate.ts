@@ -7,7 +7,7 @@ import type { RawResource } from '../data/resources';
 import type { RockTrait } from '../data/traits';
 import { TUNING } from '../data/tuning';
 import { applyBeltModifiers, rollModifiers } from './modifiers';
-import { rollTrait } from './traits';
+import { rollTrait, traitYield } from './traits';
 import type { Belt, Planet, Rock, RockSize, Run, StarClass, StarSystem } from './types';
 
 const SYL = ['ka', 've', 'lor', 'tha', 'zen', 'mi', 'dra', 'os', 'qu', 'rel', 'syn', 'tar', 'ul', 'ix', 'no', 'pha'];
@@ -131,7 +131,7 @@ export function makeRock(
     radius,
     hp,
     maxHp: hp,
-    units: units ?? Math.max(1, Math.round(baseUnits)),
+    units: units ?? Math.max(1, Math.round(baseUnits * traitYield(trait ?? undefined))),
     belt,
     trait: trait ?? undefined,
   };

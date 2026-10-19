@@ -1,11 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { TRAITS, TRAIT_IDS } from '../src/data/traits';
+import { makeRng } from '../src/core/rng';
+import { TRAITS, TRAIT_IDS, type RockTrait } from '../src/data/traits';
+import { TUNING } from '../src/data/tuning';
 import { newGame, newProfile, newRun } from '../src/sim/create';
 import { makeRock } from '../src/sim/generate';
-import { laserRock } from '../src/sim/mining';
+import { destroyRock, laserRock } from '../src/sim/mining';
 import { emptyStats, shipStats, type ShipStats } from '../src/sim/ships';
-import { canMine, rollTrait } from '../src/sim/traits';
-import type { GameState, Rock, Ship } from '../src/sim/types';
+import { canMine, rollTrait, traitYield } from '../src/sim/traits';
+import type { GameState, Rock, Run, Ship } from '../src/sim/types';
 
 const layout = (rocks: Rock[]) => rocks.map((r) => [r.id, r.kind, r.pos.x, r.pos.z, r.radius, r.hp] as const);
 
@@ -100,5 +102,38 @@ describe('the dense laser gate', () => {
     expect(dense.hp).toBe(hp);
     expect(laserRock(state, dense, 5, 2)).toBeNull();
     expect(dense.hp).toBe(hp - 5);
+  });
+});
+
+/** A size-1 rock whose radius is fixed by resetting the rng, so trait and plain rocks share one radius. */
+const rockAt = (run: Run, trait: RockTrait | null): Rock => {
+  run.rng = makeRng(4242);
+  return makeRock(run, 'ore', 1, { x: 0, z: 0 }, null, 0, trait);
+};
+
+describe('trait yield multipliers', () => {
+  it('scales a traited belt rock units by its trait', () => {
+    const run = newRun(newProfile(99));
+    const plain = rockAt(run, null);
+    const base = TUNING.rockYieldK * plain.radius ** 2 * run.system.richness;
+    expect(plain.units).toBe(Math.max(1, Math.round(base)));
+    for (const trait of TRAIT_IDS) {
+      const traited = rockAt(run, trait);
+      expect(traited.radius).toBe(plain.radius);
+      expect(traited.units).toBe(Math.max(1, Math.round(base * traitYield(trait))));
+      expect(traited.units).toBeGreaterThan(plain.units);
+    }
+  });
+
+  it('does not re-multiply a fragment share', () => {
+    const state = newGame(7);
+    const run = state.run;
+    const parent = rockAt(run, 'dense');
+    run.rocks.push(parent);
+    const kids = destroyRock(state, parent);
+    expect(kids).toHaveLength(2);
+    const share = Math.floor((parent.units * TUNING.crackChildShare) / kids.length);
+    expect(share).toBeGreaterThan(0);
+    for (const kid of kids) expect(kid.units).toBe(share);
   });
 });
