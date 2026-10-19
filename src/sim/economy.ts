@@ -8,7 +8,7 @@ import { PERKS, type PerkId } from '../data/perks';
 import { RESOURCES, canAfford, type Cost } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { droneCount, flagship, fleetCap, isAlive, shipStats } from './ships';
-import type { GameState, Run, Ship } from './types';
+import type { Fitted, GameState, Run, Ship } from './types';
 
 export const isDocked = (run: Run, ship: Ship): boolean =>
   isAlive(ship) && dist(ship.pos, run.system.station.pos) <= TUNING.dockRadius;
@@ -25,6 +25,9 @@ export function investedCost(type: ComponentId, variant: VariantId, tier: Tier):
 
 export const halve = (c: Cost): Cost =>
   Object.fromEntries(Object.entries(c).map(([k, n]) => [k, Math.floor((n ?? 0) / 2)])) as Cost;
+
+/** What removing, replacing or scrapping a fitted component refunds: half its invested cost. */
+export const scrapValue = (f: Fitted): Cost => halve(investedCost(f.type, f.variant, f.tier));
 
 export function upgradeCost(ship: Ship, slot: number): Cost | null {
   const f = ship.slots[slot];

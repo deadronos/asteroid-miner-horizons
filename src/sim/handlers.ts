@@ -7,7 +7,6 @@ import { v } from '../core/vec';
 import { COMPONENTS, isVariant, variantDef, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
-import { RECIPES } from '../data/refining';
 import { RESOURCES, formatCost, pay, type Cost } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { makeOutpost, outpostAt, outpostBlock } from './automation';
@@ -18,16 +17,16 @@ import {
   dataGain,
   halve,
   hullBlock,
-  investedCost,
   perkCost,
   refitBlock,
   repairCost,
+  scrapValue,
   upgradeCost,
   warpCost,
 } from './economy';
 import { findRock } from './generate';
 import { describeModifiers } from './modifiers';
-import { batchCost, cancelRefine, queueRefine } from './refining';
+import { batchCost, cancelRefine, jobLabel, queueRefine } from './refining';
 import { droneCount, findShip, flagship, isAlive, isFlagship, makeShip, shipStats } from './ships';
 import { canMine } from './traits';
 import type { Fitted, GameState, Ship } from './types';
@@ -42,6 +41,8 @@ function fail(state: GameState, msg: string): void {
 function refund(state: GameState, c: Cost): void {
   for (const r of RESOURCES) state.run.bank[r] += c[r] ?? 0;
 }
+
+const refundFitted = (state: GameState, f: Fitted): void => refund(state, scrapValue(f));
 
 /** Keeps hull/shield within new maxima after a refit, preserving damage taken. */
 function clampToStats(state: GameState, ship: Ship): void {
@@ -115,7 +116,7 @@ export const handlers: Handlers = {
     if (mods.length > 0) out.log.push({ level: 'major', text: `System modifiers: ${describeModifiers(mods)}.` });
     if (dropped) out.log.push({ level: 'warn', text: `Contract left behind: ${describeContract(dropped)}.` });
     if (left.length > 0) {
-      const jobs = left.map((j) => `${j.count} × ${RECIPES[j.recipe].name.toLowerCase()}`).join(', ');
+      const jobs = left.map((j) => jobLabel(j.recipe, j.count)).join(', ');
       out.log.push({ level: 'warn', text: `Refinery queue left behind: ${jobs}.` });
     }
     if (outposts > 0)
@@ -130,7 +131,7 @@ export const handlers: Handlers = {
     if ('error' in result) return fail(state, result.error);
     state.out.log.push({
       level: 'info',
-      text: `Refinery: queued ${result.queued} × ${RECIPES[cmd.recipe].name.toLowerCase()}.`,
+      text: `Refinery: queued ${jobLabel(cmd.recipe, result.queued)}.`,
     });
   },
 
@@ -140,7 +141,7 @@ export const handlers: Handlers = {
     const refundCost = batchCost(job.recipe, job.count);
     state.out.log.push({
       level: 'info',
-      text: `Refinery: cancelled ${job.count} × ${RECIPES[job.recipe].name.toLowerCase()}, refunded ${formatCost(refundCost)}.`,
+      text: `Refinery: cancelled ${jobLabel(job.recipe, job.count)}, refunded ${formatCost(refundCost)}.`,
     });
   },
 
@@ -157,8 +158,7 @@ export const handlers: Handlers = {
       fs.hullId = cmd.hullId;
       fs.slots = Array.from({ length: h.slots }, (_, i) => old[i] ?? null);
       // Parts that no longer fit are refunded at half value.
-      for (const extra of old.slice(h.slots))
-        refund(state, halve(investedCost(extra!.type, extra!.variant, extra!.tier)));
+      for (const extra of old.slice(h.slots)) refundFitted(state, extra!);
       fs.hull = frac * shipStats(fs, profile).maxHull;
       out.log.push({ level: 'major', text: `Flagship refitted onto a ${h.name} hull.` });
     } else {
@@ -229,7 +229,7 @@ export const handlers: Handlers = {
     const block = refitBlock(state, ship);
     if (block) return fail(state, block);
     refund(state, halve(HULLS[ship.hullId].cost));
-    for (const f of ship.slots) if (f) refund(state, halve(investedCost(f.type, f.variant, f.tier)));
+    for (const f of ship.slots) if (f) refundFitted(state, f);
     removeItem(state.run.ships, ship);
     if (state.run.selectedId === ship.id) state.run.selectedId = flagship(state.run).id;
     state.out.log.push({ level: 'info', text: `${ship.name} scrapped for half value.` });
@@ -254,7 +254,7 @@ export const handlers: Handlers = {
     if (!t) return;
     const { cur } = t;
     if (!cur) return;
-    refund(state, halve(investedCost(cur.type, cur.variant, cur.tier)));
+    refundFitted(state, cur);
     ship.slots[cmd.slot] = null;
     clampToStats(state, ship);
   }),
@@ -268,7 +268,7 @@ export const handlers: Handlers = {
     if (cur?.type === cmd.comp) return;
     if (!pay(state.run.bank, variantDef(cmd.comp, cmd.variant).cost(1)))
       return fail(state, 'Not enough resources for that component.');
-    if (cur) refund(state, halve(investedCost(cur.type, cur.variant, cur.tier)));
+    if (cur) refundFitted(state, cur);
     ship.slots[cmd.slot] = { type: cmd.comp, variant: cmd.variant, tier: 1 };
     clampToStats(state, ship);
     state.out.log.push({

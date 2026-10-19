@@ -11,7 +11,7 @@ import {
 } from '../../data/components';
 import { HULLS } from '../../data/hulls';
 import { RESOURCES, RESOURCE_INFO, canAfford, formatCost, type Cost, walletTotal } from '../../data/resources';
-import { halve, investedCost, isDocked, refitBlock, repairCost, upgradeCost } from '../../sim/economy';
+import { isDocked, refitBlock, repairCost, scrapValue, upgradeCost } from '../../sim/economy';
 import { applySystemStats } from '../../sim/modifiers';
 import { findShip, isAlive, isFlagship, selectedShip, shipStats } from '../../sim/ships';
 import type { Fitted, Ship } from '../../sim/types';
@@ -62,7 +62,7 @@ export function parseInstallValue(value: string): { comp: ComponentId; variant: 
 
 /** Tooltip for the remove button: the refund of half the fitted variant's cost. */
 export function removeRefundTitle(f: Fitted): string {
-  return `Remove (refund ${formatCost(halve(investedCost(f.type, f.variant, f.tier)))})`;
+  return `Remove (refund ${formatCost(scrapValue(f))})`;
 }
 
 /** Structure key for the panel: hull plus every slot's type, variant and tier. */
