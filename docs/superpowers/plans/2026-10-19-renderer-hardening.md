@@ -93,20 +93,20 @@ Most-likely mistakes first, each with the task that guards it.
 - Test: create `tests/shipView.test.ts`
 
 **Build:**
-- [ ] Hoist the flame `ShapeGeometry`, shield `CircleGeometry` and select `RingGeometry` to module constants next
+- [x] Hoist the flame `ShapeGeometry`, shield `CircleGeometry` and select `RingGeometry` to module constants next
       to `unitPlane` and `barPlane`. These are shared and never disposed.
-- [ ] Share materials that never vary per ship: the bar background, the cargo bar and the beam glow are never
+- [x] Share materials that never vary per ship: the bar background, the cargo bar and the beam glow are never
       written after creation. The hull Lambert material may be cached per hull id alongside `geos` if it is never
       mutated. Materials the update loop writes per ship (flame, shield, select, hpBar, beam, tip) stay per ship.
-- [ ] `remove` disposes every per-ship material and nothing shared. It must not touch `v.fittings` contents: those
+- [x] `remove` disposes every per-ship material and nothing shared. It must not touch `v.fittings` contents: those
       geometries and materials are cached in `fittings.ts`. `refit` keeps not disposing them.
 
 **Tests:**
-- [ ] Build a `ShipView`, call `update` with a state holding a ship, then with the ship gone. Spy on `dispose`:
+- [x] Build a `ShipView`, call `update` with a state holding a ship, then with the ship gone. Spy on `dispose`:
       every per-ship material was disposed exactly once; the shared geometries (hull, flame, shield, select,
       `unitPlane`/`barPlane`) and shared materials were not; fitting geometries/materials were not.
-- [ ] A refit (change the ship's slots between updates) disposes nothing.
-- [ ] Two ships share the hoisted geometries (same object identity).
+- [x] A refit (change the ship's slots between updates) disposes nothing.
+- [x] Two ships share the hoisted geometries (same object identity).
 
 **Done when:** `npm run check` is green and the tests above pass.
 
