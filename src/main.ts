@@ -120,4 +120,6 @@ hud.refresh();
 requestAnimationFrame(frame);
 
 // Debug hook for automated checks in the browser console.
-Object.assign(window, { __amh: { state: () => session.state, send, settings, renderer, audio } });
+Object.assign(window, {
+  __amh: { state: () => session.state, send, settings, renderer, audio, info: () => renderer.info },
+});

@@ -22,6 +22,7 @@ import { FxView } from './fxView';
 import { HazardView } from './hazardView';
 import { type Box, MapLabels } from './labels';
 import { OutpostView } from './outpostView';
+import { type InfoSnapshot, infoSnapshot } from './renderInfo';
 import { RockView } from './rocks';
 import { ShipView } from './shipView';
 import { SystemView } from './systemView';
@@ -93,6 +94,8 @@ export class Renderer {
   ) {
     this.gl = new THREE.WebGLRenderer({ antialias: settings.antialias, powerPreference: 'high-performance' });
     this.gl.setClearColor(0x03060d);
+    // Counters span the whole frame: every composer pass adds to them, and render() resets them once.
+    this.gl.info.autoReset = false;
     this.msaa = settings.antialias ? 4 : 0;
     this.canvas = this.gl.domElement;
     container.appendChild(this.canvas);
@@ -215,6 +218,7 @@ export class Renderer {
   }
 
   render(state: GameState, dt: number, moveMark: Vec2 | null): void {
+    this.gl.info.reset();
     const { run } = state;
     const sys = run.system;
     const key = `${sys.name}#${sys.number}`;
@@ -266,6 +270,14 @@ export class Renderer {
 
     if (this.bloomOn && this.composer) this.composer.render(dt);
     else this.gl.render(this.scene, this.cam.camera);
+  }
+
+  /**
+   * Draw counters for the last whole frame (every pass, bloom composer included, since autoReset
+   * is off and render() resets once per frame), plus live memory and program totals.
+   */
+  get info(): InfoSnapshot {
+    return infoSnapshot(this.gl.info);
   }
 
   /** 0..1 white-out intensity during the warp transition, for the HUD overlay. */

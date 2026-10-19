@@ -69,17 +69,17 @@ Most-likely mistakes first, each with the task that guards it.
 - Test: `tests/renderPerf.test.ts` (or a new `tests/renderInfo.test.ts`)
 
 **Build:**
-- [ ] Export a pure `infoSnapshot(info: THREE.WebGLInfo)` (in `Renderer.ts` or a small new `render/` module) that
+- [x] Export a pure `infoSnapshot(info: THREE.WebGLInfo)` (in `Renderer.ts` or a small new `render/` module) that
       returns a fresh plain object: `{ calls, triangles, points, lines, geometries, textures, programs }`, with
       `programs` as a count (`info.programs?.length ?? 0`).
-- [ ] Add a `get info()` on `Renderer` returning `infoSnapshot(this.gl.info)`. Its `/** */` comment documents
+- [x] Add a `get info()` on `Renderer` returning `infoSnapshot(this.gl.info)`. Its `/** */` comment documents
       that the numbers cover the whole last frame including the bloom composer's passes.
-- [ ] Set `this.gl.info.autoReset = false` in the constructor and call `this.gl.info.reset()` once at the start of
+- [x] Set `this.gl.info.autoReset = false` in the constructor and call `this.gl.info.reset()` once at the start of
       `render()`, so `info.render` counts every pass of the frame rather than only the last `gl.render` call.
-- [ ] In `main.ts`, add `info: () => renderer.info` to `__amh`.
+- [x] In `main.ts`, add `info: () => renderer.info` to `__amh`.
 
 **Tests:**
-- [ ] `infoSnapshot` copies the render and memory counters from a fake `WebGLInfo`-shaped object, counts programs,
+- [x] `infoSnapshot` copies the render and memory counters from a fake `WebGLInfo`-shaped object, counts programs,
       and returns a new object each call (mutating the source afterwards does not change an earlier snapshot).
 
 **Done when:** `npm run check` is green and `__amh.info()` returns the seven counters.
