@@ -121,18 +121,18 @@ Most-likely mistakes first, each with the task that guards it.
 - Test: create `tests/contextLoss.test.ts`
 
 **Build:**
-- [ ] An exported `watchContextLoss(target: EventTarget, onLost: () => void): () => void` that listens for
+- [x] An exported `watchContextLoss(target: EventTarget, onLost: () => void): () => void` that listens for
       `webglcontextlost`, calls `preventDefault()`, calls `onLost` once (later events are ignored), and returns an
       unsubscribe function.
-- [ ] `Renderer` gains a hook field `onContextLost: () => void = () => {}` (like `labelBlockers`) and wires
+- [x] `Renderer` gains a hook field `onContextLost: () => void = () => {}` (like `labelBlockers`) and wires
       `watchContextLoss(this.canvas, () => this.onContextLost())` in the constructor.
-- [ ] `main.ts` sets `renderer.onContextLost` to: save through the session (`session.saveNow()`), show a banner
+- [x] `main.ts` sets `renderer.onContextLost` to: save through the session (`session.saveNow()`), show a banner
       "Graphics reset — reloading…" through a small new `Hud` method (reuse the existing banner styling), stop
       ticking the sim, and `location.reload()` after a short delay so the banner is readable.
-- [ ] Nothing in `src/sim` changes.
+- [x] Nothing in `src/sim` changes.
 
 **Tests:**
-- [ ] Dispatching a cancelable `webglcontextlost` `Event` on a plain `EventTarget` marks it `defaultPrevented` and
+- [x] Dispatching a cancelable `webglcontextlost` `Event` on a plain `EventTarget` marks it `defaultPrevented` and
       calls `onLost` once; a second event does not call it again; after unsubscribe, nothing fires.
 
 **Done when:** `npm run check` is green. Manual check: `__amh.renderer.canvas.getContext('webgl2')

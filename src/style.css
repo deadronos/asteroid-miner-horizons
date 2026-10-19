@@ -683,6 +683,10 @@ kbd {
   pointer-events: none;
   z-index: 25;
 }
+/* The graphics-reset banner must stay above the menu backdrop and the warp flash. */
+.paused.gfx-reset {
+  z-index: 50;
+}
 /* Hazard banner: sits under the top bar, below the pause banner's slot */
 .hazard {
   position: fixed;

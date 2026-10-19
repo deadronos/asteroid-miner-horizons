@@ -17,6 +17,7 @@ import { findShip, isAlive, selectedShip } from '../sim/ships';
 import type { GameState, Rock, StarSystem } from '../sim/types';
 import { Backdrop } from './backdrop';
 import { CameraRig } from './camera';
+import { watchContextLoss } from './contextLoss';
 import type { ViewRect } from './cull';
 import { FxView } from './fxView';
 import { HazardView } from './hazardView';
@@ -69,6 +70,8 @@ export class Renderer {
   private labels: MapLabels;
   /** Client rectangles map labels must not cover; main.ts points this at the HUD panels. */
   labelBlockers: () => Box[] = () => [];
+  /** Called once when the WebGL context is lost; main.ts points this at the session save and reload. */
+  onContextLost: () => void = () => {};
   private hoverRing: THREE.Mesh;
   private moveMarker: THREE.Mesh;
   /** Bloom post-processing; created the first time a quality preset wants it. */
@@ -99,6 +102,7 @@ export class Renderer {
     this.msaa = settings.antialias ? 4 : 0;
     this.canvas = this.gl.domElement;
     container.appendChild(this.canvas);
+    watchContextLoss(this.canvas, () => this.onContextLost());
     this.cam = new CameraRig(container, this.canvas);
     this.labels = new MapLabels(container, () => this.labelBlockers());
     this.fx = new FxView(container, this.ships);
