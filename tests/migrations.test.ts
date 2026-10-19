@@ -187,32 +187,80 @@ describe('load through the production registry', () => {
   });
 
   it('rejects malformed tick-critical run fields before any tick reads them', () => {
-    const ship = currentRun().ships[0];
+    const run = currentRun();
+    const ship = run.ships[0];
+    const rock = run.rocks[0];
+    const pickup = { id: 9001, kind: 'ore', amount: 3, pos: { x: 1, z: 2 }, vel: { x: 0, z: 0 }, age: 0 };
+    const belt = run.system.belts[0];
+    const withBelt = (b: unknown) => ({ system: { ...run.system, belts: [b] } });
     const cases: Array<[string, Record<string, unknown>]> = [
-      ['missing run.system.belts', { system: { ...currentRun().system, belts: undefined } }],
-      ['missing run.system.station', { system: { ...currentRun().system, station: undefined } }],
+      ['missing run.system.belts', { system: { ...run.system, belts: undefined } }],
+      ['null belt entry', withBelt(null)],
+      ['empty belt entry', withBelt({})],
+      ['belt missing initialCount', withBelt({ ...belt, initialCount: undefined })],
+      ['belt mix missing a kind', withBelt({ ...belt, mix: { ore: 1, ice: 0 } })],
+      ['missing run.system.station', { system: { ...run.system, station: undefined } }],
       [
         'corrupt run.system.station.pos (z undefined)',
-        { system: { ...currentRun().system, station: { pos: { x: 0, y: 0, z: undefined } } } },
+        { system: { ...run.system, station: { pos: { x: 0, y: 0, z: undefined } } } },
       ],
       ['missing run.rng', { rng: undefined }],
       ['missing run.nextId', { nextId: undefined }],
       ['missing run.time', { time: undefined }],
       ['missing run.runValue', { runValue: undefined }],
-      ['corrupt run.rng', { rng: { s: Number.NaN } }],
-      ['corrupt run.nextId', { nextId: Number.POSITIVE_INFINITY }],
-      ['corrupt run.time', { time: Number.NaN }],
-      ['corrupt run.runValue', { runValue: Number.POSITIVE_INFINITY }],
+      ['missing run.regrowTimer', { regrowTimer: undefined }],
       ['missing ship.vel', { ships: [{ ...ship, vel: undefined }] }],
       ['corrupt ship.vel', { ships: [{ ...ship, vel: { x: 0 } }] }],
       ['missing ship.pos', { ships: [{ ...ship, pos: undefined }] }],
       ['corrupt ship.pos', { ships: [{ ...ship, pos: { x: 0 } }] }],
+      ...(['angle', 'hull', 'shield', 'collisionCd', 'respawn'] as const).map(
+        (k): [string, Record<string, unknown>] => [`missing ship.${k}`, { ships: [{ ...ship, [k]: undefined }] }],
+      ),
+      ['missing rock.pos', { rocks: [{ ...rock, pos: undefined }] }],
+      ['corrupt rock.vel', { rocks: [{ ...rock, vel: { x: 0 } }] }],
+      ['missing rock.radius', { rocks: [{ ...rock, radius: undefined }] }],
+      ['unknown rock.kind', { rocks: [{ ...rock, kind: 'unobtainium' }] }],
+      ['missing pickup.pos', { pickups: [{ ...pickup, pos: undefined }] }],
+      ['missing pickup.vel', { pickups: [{ ...pickup, vel: undefined }] }],
+      ['null pickup', { pickups: [null] }],
     ];
+    // The well-formed pickup is accepted, so its cases fail on the field alone.
+    expect(deserialize(JSON.stringify(saveCurrent({ pickups: [pickup] })))).not.toBeNull();
     for (const [label, patch] of cases) {
       expect(parseImport(JSON.stringify(saveCurrent(patch))), `case: ${label}`).toEqual({
         ok: false,
         error: 'This is not an Asteroid Miner Horizons save.',
       });
+    }
+  });
+
+  it('rejects non-finite tick-critical numbers that survive JSON.parse', () => {
+    // JSON.stringify writes NaN and Infinity as null, which only tests the missing case. An
+    // overflowing literal parses back to Infinity, so splice one in to reach the finite() checks.
+    const INF = '"__INF__"';
+    const run = currentRun();
+    const ship = run.ships[0];
+    const rock = run.rocks[0];
+    const withInf = (patch: Record<string, unknown>): string =>
+      JSON.stringify(saveCurrent(patch)).replace(INF, '1e999');
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['run.rng.s', { rng: { s: '__INF__' } }],
+      ['run.nextId', { nextId: '__INF__' }],
+      ['run.time', { time: '__INF__' }],
+      ['run.runValue', { runValue: '__INF__' }],
+      ['run.regrowTimer', { regrowTimer: '__INF__' }],
+      ['ship.pos.x', { ships: [{ ...ship, pos: { ...ship.pos, x: '__INF__' } }] }],
+      ['ship.hull', { ships: [{ ...ship, hull: '__INF__' }] }],
+      ['rock.radius', { rocks: [{ ...rock, radius: '__INF__' }] }],
+      [
+        'belt.initialCount',
+        { system: { ...run.system, belts: [{ ...run.system.belts[0], initialCount: '__INF__' }] } },
+      ],
+    ];
+    for (const [label, patch] of cases) {
+      const text = withInf(patch);
+      expect(text, `case: ${label}`).toContain('1e999');
+      expect(deserialize(text), `case: ${label}`).toBeNull();
     }
   });
 

@@ -61,8 +61,10 @@ export function deserialize(json: string, opts?: MigrateOptions): GameState | nu
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object';
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 const isVec = (p: unknown): boolean => isObj(p) && finite(p.x) && finite(p.z);
-/** True when `r` is a serialised `Rng`: an object with a numeric state. */
-const isRng = (r: unknown): boolean => isObj(r) && typeof r.s === 'number';
+/** True when `r` is a serialised `Rng`: an object with a finite numeric state. */
+const isRng = (r: unknown): boolean => isObj(r) && finite(r.s);
+/** True when `k` names a raw resource a rock, pickup or belt can carry. */
+const isRawKind = (k: unknown): boolean => typeof k === 'string' && (RAW_RESOURCES as readonly string[]).includes(k);
 
 /** True when `w` is an object with a number under every `RESOURCES` key. */
 function isWallet(w: unknown): boolean {
@@ -109,6 +111,53 @@ function isFitted(f: unknown): boolean {
 /** True when `s` is a ship whose slot list the tick can derive stats from. */
 function isShipSlots(s: unknown): boolean {
   return isObj(s) && Array.isArray(s.slots) && s.slots.every(isFitted);
+}
+
+/**
+ * True when `s` has everything the tick moves or reads each frame: position, velocity, the scalars it steps
+ * (a missing one turns NaN for good; a NaN hull can never reach 0), complete cargo and known fitted slots.
+ */
+function isShip(s: unknown): boolean {
+  return (
+    isObj(s) &&
+    isVec(s.pos) &&
+    isVec(s.vel) &&
+    finite(s.angle) &&
+    finite(s.hull) &&
+    finite(s.shield) &&
+    finite(s.collisionCd) &&
+    finite(s.respawn) &&
+    isWallet(s.cargo) &&
+    isShipSlots(s)
+  );
+}
+
+/** True when `r` is a rock the tick can move, mine and crack, with no trait the sim doesn't know. */
+function isRock(r: unknown): boolean {
+  return (
+    isTrait(r) &&
+    isObj(r) &&
+    isRawKind(r.kind) &&
+    isVec(r.pos) &&
+    isVec(r.vel) &&
+    finite(r.radius) &&
+    finite(r.hp) &&
+    finite(r.maxHp) &&
+    finite(r.units) &&
+    finite(r.belt)
+  );
+}
+
+/** True when `p` is a pickup the tick can drift, age and collect. */
+function isPickup(p: unknown): boolean {
+  return isObj(p) && isRawKind(p.kind) && isVec(p.pos) && isVec(p.vel) && finite(p.amount) && finite(p.age);
+}
+
+/** True when `b` has what belt regrowth and spawning read: finite radii, a target count and a weight per raw kind. */
+function isBelt(b: unknown): boolean {
+  if (!isObj(b) || !finite(b.inner) || !finite(b.outer) || !finite(b.initialCount)) return false;
+  const mix = b.mix;
+  return isObj(mix) && RAW_RESOURCES.every((k) => finite(mix[k]));
 }
 
 /** True when `h` has what the hazard tick reads: an RNG state, finite timers, and well-formed pending hazards. */
@@ -208,17 +257,16 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!isProfile(profile)) return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
+  // The tick steps these every frame, so a missing or non-finite one would turn NaN and stay that way.
   if (!isRng(run.rng) || !finite(run.nextId) || !finite(run.time) || !finite(run.runValue)) return null;
-  if (!Array.isArray(run.system.belts) || !isObj(run.system.station) || !isVec(run.system.station.pos)) return null;
-  // A trait the sim doesn't know would drive behaviour no rock can roll.
-  if (!run.rocks.every(isTrait)) return null;
+  if (!finite(run.regrowTimer)) return null;
+  const { belts, station } = run.system;
+  if (!Array.isArray(belts) || !belts.every(isBelt) || !isObj(station) || !isVec(station.pos)) return null;
+  if (!run.rocks.every(isRock) || !run.pickups.every(isPickup)) return null;
   if (!isModifierList(run.system.modifiers)) return null;
   // A wallet missing a resource column (e.g. alloy) would poison every later
-  // read with NaN, so the bank and each ship's cargo must be complete.
-  if (!isWallet(run.bank) || !run.ships.every((s) => isObj(s) && isWallet(s.cargo))) return null;
-  // The tick derives each ship's stats from its fitted slots, so every one must
-  // name a known component variant at a real tier.
-  if (!run.ships.every((s) => isObj(s) && isVec(s.pos) && isVec(s.vel) && isShipSlots(s))) return null;
+  // read with NaN, so the bank must be complete (ship cargo is checked by isShip).
+  if (!isWallet(run.bank) || !run.ships.every(isShip)) return null;
   if (!isBoard(run.contracts)) return null;
   if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
   if (!isRefinery(run.refinery)) return null;
