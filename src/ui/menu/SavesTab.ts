@@ -1,9 +1,19 @@
 // Saves tab: the 3 localStorage slots (load / save / new / delete), import
 // from a file or pasted text, export to compact text or a downloaded .json.
+// A slot whose save this build can't read shows why, offers its raw text, and
+// asks before anything replaces it.
 
 import { formatDuration } from '../../core/format';
 import type { SaveActions } from '../../session';
-import { SLOT_COUNT, exportCompact, exportText, parseImportText, readSlot, type SaveRecord } from '../../sim/save';
+import {
+  SLOT_COUNT,
+  exportCompact,
+  exportText,
+  parseImportText,
+  type SaveRecord,
+  type SlotStatus,
+  slotStatus,
+} from '../../sim/save';
 import type { GameState } from '../../sim/types';
 import { h } from '../dom';
 import type { MenuCtx } from './context';
@@ -36,9 +46,15 @@ function download(filename: string, text: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
+/** Minute-precision timestamp for download file names. */
+const stamp = (): string => new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
+
 function fileName(state: GameState, slot: number): string {
-  const d = new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-');
-  return `amh-slot${slot + 1}-sys${state.run.system.number}-${state.run.system.name.toLowerCase()}-${d}.json`;
+  return `amh-slot${slot + 1}-sys${state.run.system.number}-${state.run.system.name.toLowerCase()}-${stamp()}.json`;
+}
+
+function rawFileName(slot: number): string {
+  return `amh-slot${slot + 1}-unreadable-${stamp()}.json`;
 }
 
 export class SavesTab {
@@ -66,9 +82,15 @@ export class SavesTab {
     const cards: Node[] = [];
     for (let i = 0; i < SLOT_COUNT; i++) {
       const isActive = i === active;
+      const st = slotStatus(i);
+      // Unless the running game is kept unsaved on top of it, an unreadable save gets its own card.
+      if (st.kind === 'unreadable' && !(isActive && this.saves.saving())) {
+        cards.push(this.unreadableCard(i, st, isActive));
+        continue;
+      }
+      const stored = st.kind === 'ok' ? st.record : null;
       // The running game is shown live, not from storage.
-      const rec: SaveRecord | null = isActive ? { savedAt: Date.now(), state: this.saves.current() } : readSlot(i);
-      const stored = isActive ? readSlot(i) : rec;
+      const rec: SaveRecord | null = isActive ? { savedAt: Date.now(), state: this.saves.current() } : stored;
       const card = h('div', { class: `slotcard${isActive ? ' active' : ''}${rec ? '' : ' empty'}` });
       const head = h('div', { class: 'slothead' }, h('b', { text: `Slot ${i + 1}` }));
       if (isActive) head.append(h('span', { class: 'badge', text: 'RUNNING' }));
@@ -164,6 +186,77 @@ export class SavesTab {
       cards.push(card);
     }
     return [intro, ...cards];
+  }
+
+  /** A slot holding text this build can't load: the reason, its raw text, and confirmed ways to replace it. */
+  private unreadableCard(i: number, st: Extract<SlotStatus, { kind: 'unreadable' }>, running: boolean): HTMLElement {
+    const card = h('div', { class: 'slotcard unreadable' });
+    const head = h('div', { class: 'slothead' }, h('b', { text: `Slot ${i + 1}` }));
+    if (running) head.append(h('span', { class: 'badge', text: 'RUNNING · NOT SAVED' }));
+    head.append(h('span', { class: 'badge bad', text: "CAN'T LOAD" }));
+    card.append(
+      head,
+      h('div', { class: 'small', text: st.reason }),
+      h('div', {
+        class: 'small dim',
+        text: `${st.raw.length < 1024 ? `${st.raw.length} bytes` : `${(st.raw.length / 1024).toFixed(1)} KB`} kept as-is. Export the raw text to keep a copy, or to load it in a newer version.`,
+      }),
+    );
+    // Always confirmed: unlike a readable save, this one can't be re-exported later from its card's summary.
+    const replace =
+      (what: string, act: () => void): (() => void) =>
+      () => {
+        if (confirm(`${what} in slot ${i + 1}? The unreadable save there will be lost unless you exported it.`)) act();
+      };
+    const btns = h('div', { class: 'row' });
+    btns.append(
+      h('button', { text: 'Export raw…', onclick: () => this.rawWindow(i, st.raw) }),
+      h('button', {
+        text: 'Download raw',
+        title: 'Download the stored text exactly as it is',
+        onclick: () => download(rawFileName(i), st.raw),
+      }),
+    );
+    if (!running) {
+      btns.append(
+        h('button', {
+          text: 'New game',
+          title: 'Saves the running game, then starts a fresh one here',
+          onclick: replace('Start a new game', () => {
+            this.saves.newGame(i);
+            this.ctx.close();
+          }),
+        }),
+        h('button', { text: 'Import file…', onclick: replace('Import a save', () => this.importFile(i)) }),
+        h('button', { text: 'Paste text…', onclick: replace('Import a save', () => this.importWindow(i)) }),
+      );
+    }
+    btns.append(
+      h('button', {
+        class: 'danger',
+        text: 'Delete',
+        onclick: () => {
+          const then = running ? ' The running game will save there from now on.' : '';
+          if (confirm(`Delete the unreadable save in slot ${i + 1}? It is gone unless you exported it.${then}`)) {
+            this.saves.remove(i);
+            this.ctx.rerender();
+          }
+        },
+      }),
+    );
+    card.append(btns);
+    return card;
+  }
+
+  private rawWindow(slot: number, raw: string): void {
+    const dl = h('button', { text: 'Download', onclick: () => download(rawFileName(slot), raw) });
+    this.textWindow(
+      `Raw save text, slot ${slot + 1}`,
+      "This build can't load it. Keep a copy; a newer version may import it.",
+      raw,
+      true,
+      [dl],
+    );
   }
 
   private importFile(slot: number): void {
