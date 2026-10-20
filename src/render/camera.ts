@@ -21,6 +21,8 @@ export class CameraRig {
   private snapped = false;
   /** Zoom to go back to when the system map is toggled off. */
   private mapReturn = 420;
+  /** Whether the last ease still moved the view by a visible amount (zoom or follow glide). */
+  moving = false;
 
   constructor(
     private container: HTMLElement,
@@ -108,13 +110,18 @@ export class CameraRig {
 
   /** Eases the zoom toward its target and, while following, the center toward `focus`. */
   ease(dt: number, focus: Vec2 | null): void {
+    const zoomGap = Math.abs(this.targetHalfH - this.halfH);
     this.halfH += (this.targetHalfH - this.halfH) * (1 - damp(12, dt));
+    let glide = 0;
     if (this.follow && focus) {
+      glide = Math.hypot(focus.x - this.center.x, focus.z - this.center.z);
       const k = this.snapped ? 1 - damp(6, dt) : 1;
       this.center.x += (focus.x - this.center.x) * k;
       this.center.z += (focus.z - this.center.z) * k;
       this.snapped = true;
     }
+    // Half a pixel of zoom or pan is the threshold below which nobody can see the glide.
+    this.moving = zoomGap > this.halfH * 1e-3 || glide > this.wpp * 0.5;
   }
 
   /**

@@ -5,7 +5,7 @@ import './style.css';
 import { AudioEngine } from './audio/AudioEngine';
 import { TUNING } from './data/tuning';
 import { Input } from './input';
-import { pauseAudio, pauseBanner, pauseKind } from './pause';
+import { pauseAudio, pauseBanner, pauseKind, renderDue } from './pause';
 import { recordLoss } from './reloadGuard';
 import { Renderer } from './render/Renderer';
 import { GameSession } from './session';
@@ -40,6 +40,7 @@ const session = new GameSession(settings, {
   onSwitch: () => {
     commands.length = 0;
     renderer.follow = true;
+    renderNow = true;
     if (crashed) {
       crashed = false;
       hud.clearNotice();
@@ -80,6 +81,16 @@ const STEP = 1 / TUNING.simHz;
 let last = performance.now();
 let acc = 0;
 let hudAcc = 0;
+/** Frame time since the last render, handed to the renderer so throttled animations keep their speed. */
+let renderAcc = 0;
+/** Forces the next frame to render even while paused (a game was loaded or a command applied). */
+let renderNow = true;
+/** When the player last touched the mouse, wheel or keyboard; a paused scene renders every frame shortly after. */
+let lastInput = -Infinity;
+/** Seconds after input during which a paused scene still renders at the full frame rate. */
+const INPUT_GRACE = 0.5;
+for (const type of ['pointermove', 'pointerdown', 'pointerup', 'wheel', 'keydown', 'keyup'] as const)
+  window.addEventListener(type, () => (lastInput = performance.now()), { capture: true, passive: true });
 let contextLost = false;
 /** Set when a frame threw: the running game may be half-ticked, so it stops ticking and saving until another loads. */
 let crashed = false;
@@ -132,6 +143,7 @@ function step(now: number): void {
   } else if (paused) {
     // Menus still work while paused: purchases and refits apply immediately.
     acc = 0;
+    if (commands.length) renderNow = true;
     applyCommands(state, commands);
   } else {
     acc += dt;
@@ -144,12 +156,20 @@ function step(now: number): void {
     }
     if (steps === 8) acc = 0; // too far behind (tab was hidden): drop the backlog
   }
-  input.edgePan(dt);
+  if (input.edgePan(dt)) renderNow = true;
   input.updateHover();
   audio.consumeFx(state.out.fx, renderer.view);
   audio.updateContinuous(state, renderer.view, pauseAudio(paused));
   audio.updateMusic(state);
-  renderer.render(state, dt, input.moveMark);
+  // A frozen scene is nearly static, so a paused loop renders at a reduced rate unless something is moving:
+  // recent input, a camera glide or warp still playing, or fx waiting to be consumed (the renderer clears them).
+  renderAcc += dt;
+  const busy = renderNow || renderer.busy || state.out.fx.length > 0 || (now - lastInput) / 1000 < INPUT_GRACE;
+  if (renderDue(paused, renderAcc, busy)) {
+    renderer.render(state, Math.min(0.25, renderAcc), input.moveMark);
+    renderAcc = 0;
+    renderNow = false;
+  }
   hud.frame(dt, renderer.flash);
   hudAcc += dt;
   if (hudAcc >= 0.1) {

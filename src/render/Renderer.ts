@@ -94,6 +94,8 @@ export class Renderer {
   private streaks = new WarpStreaks();
   /** Set when a new system is built; the next frame compiles its shaders while the warp plays. */
   private warmup = false;
+  /** Set when a resize or settings change cleared or restyled the canvas; the next render clears it. */
+  private dirty = true;
   /** The camera's world rectangle this frame (shake included), reused for culling. */
   private readonly cullView: ViewRect = { x: 0, z: 0, halfW: 0, halfH: 0 };
 
@@ -208,6 +210,7 @@ export class Renderer {
     const w = Math.max(1, this.container.clientWidth);
     const h = Math.max(1, this.container.clientHeight);
     this.gl.setSize(w, h, false);
+    this.dirty = true;
     if (this.composer) {
       this.composer.setPixelRatio(this.gl.getPixelRatio());
       this.composer.setSize(w, h);
@@ -315,6 +318,7 @@ export class Renderer {
 
     if (this.viaComposer && this.composer) this.composer.render(dt);
     else this.gl.render(this.scene, this.cam.camera);
+    this.dirty = false;
   }
 
   /**
@@ -336,6 +340,14 @@ export class Renderer {
    */
   get info(): InfoSnapshot {
     return infoSnapshot(this.gl.info);
+  }
+
+  /**
+   * Whether the view is still animating on its own (warp, camera glide, shake, a pending shader warm-up)
+   * or the canvas needs redrawing after a resize, so a paused frame loop must render this frame.
+   */
+  get busy(): boolean {
+    return this.dirty || this.warpT < WARP_TOTAL || this.warmup || this.cam.moving || this.fx.shake > 0;
   }
 
   /** 0..1 white-out intensity during the warp transition, for the HUD overlay. */
