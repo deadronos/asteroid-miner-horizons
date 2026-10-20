@@ -117,7 +117,38 @@ export function steer(
   }
 }
 
-/** Arrival steering: decelerates into `target`. Returns true once there. */
+/**
+ * Star detour: when the straight line to `target` would cross the star's heat zone, steers for the point on a safe
+ * circle beside the line's closest approach instead and returns true. It re-aims every tick, so the route bends
+ * round the star in an arc. The safe circle shrinks to the target's own distance from the star, so a point inside
+ * it (a player's move order) is still reached, just by the shortest path that does not dip deeper.
+ */
+function starDetour(ctx: TickCtx, ship: Ship, st: ShipStats, target: Vec2, avoidId: number | null): boolean {
+  const safe = Math.min(ctx.state.run.system.heatRadius + TUNING.starRoutePad + st.size, len(target));
+  const dx = target.x - ship.pos.x;
+  const dz = target.z - ship.pos.z;
+  const l2 = dx * dx + dz * dz || 1;
+  // Closest point to the star (the origin) on the segment ship → target.
+  const t = Math.max(0, Math.min(1, -(ship.pos.x * dx + ship.pos.z * dz) / l2));
+  const cx = ship.pos.x + dx * t;
+  const cz = ship.pos.z + dz * t;
+  const c = Math.hypot(cx, cz);
+  if (c >= safe - 1e-6) return false;
+  // Straight through the centre: pick the side to the ship's left of the line.
+  const l = Math.sqrt(l2);
+  const nx = c > 1e-6 ? cx / c : -dz / l;
+  const nz = c > 1e-6 ? cz / c : dx / l;
+  const wp = ctx.index.waypoint;
+  wp.x = nx * (safe + TUNING.starRoutePad);
+  wp.z = nz * (safe + TUNING.starRoutePad);
+  steer(ctx, ship, st, wp.x - ship.pos.x, wp.z - ship.pos.z, ctx.assists.avoid, avoidId);
+  return true;
+}
+
+/**
+ * Arrival steering: decelerates into `target`, detouring round the star's heat zone on the way (see `starDetour`).
+ * Returns true once there.
+ */
 export function arrive(
   ctx: TickCtx,
   ship: Ship,
@@ -130,6 +161,7 @@ export function arrive(
   const dz = target.z - ship.pos.z;
   const d = Math.hypot(dx, dz);
   if (d <= stopDist) return true;
+  if (starDetour(ctx, ship, st, target, avoidId)) return false;
   // Slow down within the braking distance v²/2a.
   const brake = (st.speed * st.speed) / (2 * st.accel) + 20;
   const throttle = Math.min(1, (d - stopDist) / brake + 0.08);
@@ -141,13 +173,15 @@ export function arrive(
 export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): Rock[] | null {
   const d = dist(ship.pos, rock.pos);
   const reach = st.range + rock.radius;
+  const safe = rock.trait === 'volatile' ? volatileSafeDistance(rock) : 0;
   if (d > reach) {
     // Volatile rocks need a wider berth, but never past firing range.
-    const stand = Math.min(
-      rock.trait === 'volatile' ? Math.max(reach * 0.8, volatileSafeDistance(rock)) : reach * 0.8,
-      reach,
-    );
-    arrive(ctx, ship, st, rock.pos, stand, rock.id);
+    arrive(ctx, ship, st, rock.pos, Math.min(Math.max(reach * 0.8, safe), reach), rock.id);
+    return null;
+  }
+  if (d < safe - TUNING.volatileBackOffSlack && safe < reach) {
+    // Too close to a volatile rock to cut it: back out to the safe distance first.
+    backOff(ctx, ship, st, rock.pos, d);
     return null;
   }
   ship.beamOn = true;
@@ -173,6 +207,40 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
     });
   }
   return frags;
+}
+
+/** Full throttle straight away from `from`, which lies `d` away. */
+function backOff(ctx: TickCtx, ship: Ship, st: ShipStats, from: Vec2, d: number): void {
+  if (d > 1e-6) steer(ctx, ship, st, (ship.pos.x - from.x) / d, (ship.pos.z - from.z) / d, ctx.assists.avoid);
+  else steer(ctx, ship, st, 1, 0, ctx.assists.avoid);
+}
+
+/** True if `pos` lies inside the safe distance of a breaking volatile rock other than `exceptId`. */
+export function nearBlast(ctx: TickCtx, pos: Vec2, exceptId: number | null = null): boolean {
+  const danger = ctx.index.volatileDanger;
+  for (let i = 0; i < danger.length; i++) {
+    const r = danger[i]!;
+    if (r.id !== exceptId && ctx.index.rockById.has(r.id) && dist(pos, r.pos) < volatileSafeDistance(r)) return true;
+  }
+  return false;
+}
+
+/**
+ * Blast reflex for the drone and hauler AI: inside the safe distance of a volatile rock that is close to breaking
+ * (see `SimIndex.volatileDanger`), back straight out. Returns true if it steered the ship. It uses the same slack as
+ * `workRock`'s stand-off, so a drone cutting that rock from its stand distance carries on.
+ */
+export function dodgeBlast(ctx: TickCtx, ship: Ship, st: ShipStats): boolean {
+  const danger = ctx.index.volatileDanger;
+  for (let i = 0; i < danger.length; i++) {
+    const r = danger[i]!;
+    if (!ctx.index.rockById.has(r.id)) continue;
+    const d = dist(ship.pos, r.pos);
+    if (d >= volatileSafeDistance(r) - TUNING.volatileBackOffSlack) continue;
+    backOff(ctx, ship, st, r.pos, d);
+    return true;
+  }
+  return false;
 }
 
 /** A rock this ship's laser can cut that is not an outpost's host. */
@@ -268,10 +336,10 @@ export function formationSlot(out: Vec2, anchor: Vec2, id: number, radius: numbe
 
 /**
  * Drone brain, used when a drone has no manual order:
- * comet path or flare → get clear · hull below the autorepair threshold → repair at the station (#140) · full →
+ * comet path or flare → get clear · inside a breaking volatile rock's blast → back out · hull below the autorepair threshold → repair at the station (#140) · full →
  * return to station · loose pickups nearby → collect · else mine near the
  * anchor (the flagship in "assist" mode, the station in "auto" mode) · else follow the anchor. Targets in a comet
- * path or flare zone are skipped, and an unsafe anchor is waited out in place.
+ * path, a flare zone or a breaking volatile rock's blast are skipped, and an unsafe anchor is waited out in place.
  */
 export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const { run } = ctx.state;
@@ -286,6 +354,8 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     ship.aiTargetId = null;
     return;
   }
+
+  if (dodgeBlast(ctx, ship, st)) return;
 
   if (needsRepair(ship, st, ctx.auto)) {
     ship.aiTargetId = null;
@@ -306,7 +376,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   let best = 260 * 260;
   for (const p of run.pickups) {
     const d = distSq(ship.pos, p.pos);
-    if (d < best && dist(p.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, p.pos)) {
+    if (d < best && dist(p.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, p.pos) && !nearBlast(ctx, p.pos)) {
       best = d;
       pickup = p.pos;
     }
@@ -318,7 +388,13 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   if (st.dps > 0) {
     let rock = ship.aiTargetId != null ? ctx.index.rockById.get(ship.aiTargetId) : undefined;
-    if (rock && (!minable(ctx, st, rock) || dist(rock.pos, anchor) > TUNING.droneLeash || unsafe(ctx, rock.pos)))
+    if (
+      rock &&
+      (!minable(ctx, st, rock) ||
+        dist(rock.pos, anchor) > TUNING.droneLeash ||
+        unsafe(ctx, rock.pos) ||
+        nearBlast(ctx, rock.pos, rock.id))
+    )
       rock = undefined;
     if (!rock && ship.aiMode === 'assist' && fs.order?.kind === 'mine') {
       rock = ctx.index.rockById.get(fs.order.rockId);
@@ -330,9 +406,18 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
           ctx,
           ship.pos,
           500,
-          (r) => minable(ctx, st, r) && dist(r.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, r.pos),
+          (r) =>
+            minable(ctx, st, r) &&
+            dist(r.pos, anchor) < TUNING.droneLeash &&
+            !unsafe(ctx, r.pos) &&
+            !nearBlast(ctx, r.pos, r.id),
         ) ??
-        nearestRock(ctx, anchor, TUNING.droneLeash, (r) => minable(ctx, st, r) && !unsafe(ctx, r.pos)) ??
+        nearestRock(
+          ctx,
+          anchor,
+          TUNING.droneLeash,
+          (r) => minable(ctx, st, r) && !unsafe(ctx, r.pos) && !nearBlast(ctx, r.pos, r.id),
+        ) ??
         undefined;
     }
     if (rock) {
@@ -343,6 +428,6 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   }
 
   ship.aiTargetId = null;
-  if (unsafe(ctx, home)) steer(ctx, ship, st, 0, 0);
+  if (unsafe(ctx, home) || nearBlast(ctx, home)) steer(ctx, ship, st, 0, 0);
   else arrive(ctx, ship, st, home, 20);
 }

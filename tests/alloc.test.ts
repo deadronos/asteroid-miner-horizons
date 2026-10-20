@@ -24,7 +24,7 @@ describe('per-tick allocation', () => {
     const state = newGame(12345); // the bench's setup (scripts/bench.ts)
     state.profile.perks.bay = PERKS.bay.max;
     state.run.bank = { ore: 1e7, ice: 1e7, crystal: 1e5, alloy: 0, fuel: 0 };
-    runBot(state, { seconds: 120, warp: false }); // fills the fleet and warms the JIT
+    runBot(state, { seconds: 180, warp: false }); // fills the fleet and warms the JIT
     // Drones die and are rebought, so the count drifts; it is 9/9 at this point.
     expect(droneCount(state.run)).toBeGreaterThanOrEqual(fleetCap(state.profile) - 2);
 
