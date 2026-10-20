@@ -1,0 +1,771 @@
+{
+  "format": "amh-save",
+  "savedAt": 0,
+  "state": {
+    "version": 12,
+    "profile": {
+      "seed": 4242,
+      "warps": 0,
+      "data": 0,
+      "dataEarned": 0,
+      "perks": {
+        "yield": 0,
+        "optics": 0,
+        "thrust": 0,
+        "bay": 0,
+        "kit": 0,
+        "warp": 0,
+        "furnace": 0,
+        "hopper": 0
+      },
+      "stats": {
+        "time": 240.00000000008313,
+        "rocksBroken": 312,
+        "unitsMined": 1484.6666666666638,
+        "warps": 0,
+        "contracts": 5,
+        "refined": 157,
+        "outposts": 3,
+        "drones": 7,
+        "perks": 0,
+        "comets": 0,
+        "shipsLost": 2
+      },
+      "achievements": ["wingman", "firstCrack", "pioneer", "prospector", "contractor", "hardLessons", "smelter"]
+    },
+    "run": {
+      "system": {
+        "name": "Drapha",
+        "number": 1,
+        "starClass": "G",
+        "starRadius": 75,
+        "starColor": 16765562,
+        "heatRadius": 150,
+        "planets": [
+          {
+            "name": "Drapha I",
+            "orbitR": 307.70297817885876,
+            "radius": 26.320617329329252,
+            "angle": 8.264420376944715,
+            "speed": 0.016676826962735505,
+            "color": 5078481,
+            "ringed": false,
+            "moons": [
+              {
+                "orbitR": 66.13450255990028,
+                "radius": 6.6564689772203565,
+                "angle": 130.25016574326366,
+                "speed": 0.5322032201103866,
+                "color": 10134450
+              },
+              {
+                "orbitR": 43.80384577065706,
+                "radius": 4.366521117975935,
+                "angle": 85.4235884562271,
+                "speed": 0.3534132887609303,
+                "color": 10134450
+              }
+            ]
+          },
+          {
+            "name": "Drapha II",
+            "orbitR": 476.76535678096116,
+            "radius": 23.26086989697069,
+            "angle": 4.313308767444956,
+            "speed": 0.01043906156718731,
+            "color": 14271098,
+            "ringed": false,
+            "moons": [
+              {
+                "orbitR": 46.74454040825367,
+                "radius": 5.175151033094153,
+                "angle": 72.2050768209,
+                "speed": 0.28609971776604654,
+                "color": 10134450
+              }
+            ]
+          },
+          {
+            "name": "Drapha III",
+            "orbitR": 1748.4865749627352,
+            "radius": 23.122748639900237,
+            "angle": 3.6518480813693293,
+            "speed": 0.012985316656529904,
+            "color": 11836384,
+            "ringed": false,
+            "moons": []
+          }
+        ],
+        "belts": [
+          {
+            "inner": 610,
+            "outer": 870,
+            "mix": {
+              "ore": 0.72,
+              "ice": 0.28,
+              "crystal": 0
+            },
+            "initialCount": 160
+          },
+          {
+            "inner": 1160,
+            "outer": 1440,
+            "mix": {
+              "ore": 0.3,
+              "ice": 0.7,
+              "crystal": 0
+            },
+            "initialCount": 140
+          }
+        ],
+        "station": {
+          "pos": {
+            "x": -559.9638283265243,
+            "z": 840.5596415281326
+          },
+          "angle": 2.15846177200238
+        },
+        "richness": 1,
+        "modifiers": []
+      },
+      "rng": {
+        "s": 23327740
+      },
+      "nextId": 1148,
+      "time": 240.00000000008313,
+      "bank": {
+        "ore": 475.00000000000966,
+        "ice": 842.0666666666699,
+        "crystal": 36,
+        "alloy": 38,
+        "fuel": 50
+      },
+      "runValue": 1896.1000000000145,
+      "ships": [
+        {
+          "id": 301,
+          "name": "Horizon",
+          "hullId": "prospector",
+          "pos": {
+            "x": -550.0463571900979,
+            "z": 585.157519945452
+          },
+          "vel": {
+            "x": -7.159111888253128,
+            "z": 5.886407634942756
+          },
+          "angle": -0.05410667816469754,
+          "hull": 70.89047278882936,
+          "shield": 0,
+          "slots": [
+            {
+              "type": "laser",
+              "variant": "focused",
+              "tier": 2
+            },
+            {
+              "type": "engine",
+              "variant": "ion",
+              "tier": 2
+            },
+            {
+              "type": "cargo",
+              "variant": "standard",
+              "tier": 3
+            },
+            {
+              "type": "sensor",
+              "variant": "standard",
+              "tier": 2
+            }
+          ],
+          "cargo": {
+            "ore": 65.16666666666667,
+            "ice": 0,
+            "crystal": 0,
+            "alloy": 0,
+            "fuel": 0
+          },
+          "order": null,
+          "aiMode": "assist",
+          "beamOn": true,
+          "beamTargetId": null,
+          "aiTargetId": null,
+          "thrusting": false,
+          "collisionCd": 0,
+          "respawn": 0,
+          "autoRepair": false,
+          "autoUpgrade": false
+        },
+        {
+          "id": 304,
+          "name": "Hauler-1",
+          "hullId": "hauler",
+          "pos": {
+            "x": -488.13362727608256,
+            "z": -619.4284961711506
+          },
+          "vel": {
+            "x": 5.424491542972731,
+            "z": -4.158116245973591
+          },
+          "angle": 5.62837414564907,
+          "hull": 80,
+          "shield": 0,
+          "slots": [
+            {
+              "type": "engine",
+              "variant": "ion",
+              "tier": 1
+            },
+            null
+          ],
+          "cargo": {
+            "ore": 63,
+            "ice": 9,
+            "crystal": 0,
+            "alloy": 0,
+            "fuel": 0
+          },
+          "order": null,
+          "aiMode": "assist",
+          "beamOn": false,
+          "beamTargetId": null,
+          "aiTargetId": null,
+          "thrusting": false,
+          "collisionCd": 0,
+          "respawn": 0,
+          "autoRepair": false,
+          "autoUpgrade": false
+        },
+        {
+          "id": 305,
+          "name": "Drone-3",
+          "hullId": "drone",
+          "pos": {
+            "x": -516.6530006929645,
+            "z": 548.2537301586837
+          },
+          "vel": {
+            "x": 41.8053940541988,
+            "z": -25.873807500914225
+          },
+          "angle": -0.5305846469086258,
+          "hull": 4.902914025022646,
+          "shield": 0,
+          "slots": [
+            {
+              "type": "laser",
+              "variant": "focused",
+              "tier": 1
+            },
+            {
+              "type": "cargo",
+              "variant": "standard",
+              "tier": 1
+            }
+          ],
+          "cargo": {
+            "ore": 2,
+            "ice": 0,
+            "crystal": 0,
+            "alloy": 0,
+            "fuel": 0
+          },
+          "order": null,
+          "aiMode": "assist",
+          "beamOn": false,
+          "beamTargetId": null,
+          "aiTargetId": null,
+          "thrusting": true,
+          "collisionCd": 0,
+          "respawn": 0,
+          "autoRepair": true,
+          "autoUpgrade": false
+        },
+        {
+          "id": 306,
+          "name": "Drone-4",
+          "hullId": "drone",
+          "pos": {
+            "x": -518.3495848351632,
+            "z": 544.8975484809733
+          },
+          "vel": {
+            "x": 43.18220225359851,
+            "z": -24.243514118820855
+          },
+          "angle": -0.46783711483768275,
+          "hull": 2.177936386444935,
+          "shield": 0,
+          "slots": [
+            {
+              "type": "laser",
+              "variant": "focused",
+              "tier": 1
+            },
+            {
+              "type": "cargo",
+              "variant": "standard",
+              "tier": 1
+            }
+          ],
+          "cargo": {
+            "ore": 11.333333333333334,
+            "ice": 0,
+            "crystal": 0,
+            "alloy": 0,
+            "fuel": 0
+          },
+          "order": null,
+          "aiMode": "assist",
+          "beamOn": false,
+          "beamTargetId": null,
+          "aiTargetId": null,
+          "thrusting": true,
+          "collisionCd": 0,
+          "respawn": 0,
+          "autoRepair": false,
+          "autoUpgrade": true
+        },
+        {
+          "id": 689,
+          "name": "Drone-5",
+          "hullId": "drone",
+          "pos": {
+            "x": -520.7535505019223,
+            "z": 542.0407088047983
+          },
+          "vel": {
+            "x": 45.09096420866411,
+            "z": -24.34960978930983
+          },
+          "angle": -0.43232002483086357,
+          "hull": 34.093463585479185,
+          "shield": 0,
+          "slots": [
+            {
+              "type": "laser",
+              "variant": "focused",
+              "tier": 1
+            },
+            {
+              "type": "cargo",
+              "variant": "standard",
+              "tier": 1
+            }
+          ],
+          "cargo": {
+            "ore": 31.400000000000002,
+            "ice": 9,
+            "crystal": 0,
+            "alloy": 0,
+            "fuel": 0
+          },
+          "order": null,
+          "aiMode": "assist",
+          "beamOn": false,
+          "beamTargetId": null,
+          "aiTargetId": null,
+          "thrusting": true,
+          "collisionCd": 0,
+          "respawn": 0,
+          "autoRepair": false,
+          "autoUpgrade": false
+        },
+        {
+          "id": 1060,
+          "name": "Drone-6",
+          "hullId": "drone",
+          "pos": {
+            "x": -521.6004402404163,
+            "z": 637.2631016934945
+          },
+          "vel": {
+            "x": 45.36559807901177,
+            "z": -12.967656316857216
+          },
+          "angle": -0.31785379257286955,
+          "hull": 45,
+          "shield": 0,
+          "slots": [
+            {
+              "type": "laser",
+              "variant": "focused",
+              "tier": 2
+            },
+            {
+              "type": "cargo",
+              "variant": "standard",
+              "tier": 1
+            }
+          ],
+          "cargo": {
+            "ore": 12.600000000000001,
+            "ice": 0,
+            "crystal": 0,
+            "alloy": 0,
+            "fuel": 0
+          },
+          "order": null,
+          "aiMode": "assist",
+          "beamOn": false,
+          "beamTargetId": null,
+          "aiTargetId": null,
+          "thrusting": true,
+          "collisionCd": 0,
+          "respawn": 0,
+          "autoRepair": false,
+          "autoUpgrade": false
+        }
+      ],
+      "rocks": [
+        {
+          "id": 1,
+          "kind": "ore",
+          "size": 2,
+          "pos": {
+            "x": 786.6914460955057,
+            "z": 450.4295772016383
+          },
+          "vel": {
+            "x": -3.286991585552007,
+            "z": 6.176479083409661
+          },
+          "radius": 8.484377543907613,
+          "hp": 16.063616798030207,
+          "maxHp": 16.063616798030207,
+          "units": 2,
+          "belt": 0
+        },
+        {
+          "id": 2,
+          "kind": "ore",
+          "size": 2,
+          "pos": {
+            "x": 628.3251227754407,
+            "z": 308.04434961140004
+          },
+          "vel": {
+            "x": -2.824883002451771,
+            "z": 6.3985513984349485
+          },
+          "radius": 10.15522634331137,
+          "hp": 21.035254363527965,
+          "maxHp": 21.035254363527965,
+          "units": 3,
+          "belt": 0
+        },
+        {
+          "id": 3,
+          "kind": "ore",
+          "size": 1,
+          "pos": {
+            "x": 266.76247936754936,
+            "z": 820.7314495985821
+          },
+          "vel": {
+            "x": -6.579880674572588,
+            "z": 2.377716230960512
+          },
+          "radius": 21.82124492712319,
+          "hp": 66.25713344302538,
+          "maxHp": 66.25713344302538,
+          "units": 14,
+          "belt": 0
+        },
+        {
+          "id": 4,
+          "kind": "ore",
+          "size": 2,
+          "pos": {
+            "x": 795.1110816857777,
+            "z": -455.7724520887421
+          },
+          "vel": {
+            "x": 3.663662321469056,
+            "z": 5.960855523795096
+          },
+          "radius": 8.242432471131906,
+          "hp": 15.381420786621073,
+          "maxHp": 15.381420786621073,
+          "units": 2,
+          "belt": 0
+        },
+        {
+          "id": 5,
+          "kind": "ore",
+          "size": 2,
+          "pos": {
+            "x": -747.8053588930931,
+            "z": 262.02640009259926
+          },
+          "vel": {
+            "x": -2.545507390426249,
+            "z": -6.51606715847795
+          },
+          "radius": 9.080822716467083,
+          "hp": 17.786936404255588,
+          "maxHp": 17.786936404255588,
+          "units": 4,
+          "belt": 0,
+          "trait": "dense"
+        },
+        {
+          "id": 6,
+          "kind": "ore",
+          "size": 2,
+          "pos": {
+            "x": 418.5956994425614,
+            "z": 610.1536067095495
+          },
+          "vel": {
+            "x": -5.613968988588429,
+            "z": 4.172899098840086
+          },
+          "radius": 9.956182150170207,
+          "hp": 20.419852791810243,
+          "maxHp": 20.419852791810243,
+          "units": 4,
+          "belt": 0,
+          "trait": "magnetic"
+        },
+        {
+          "id": 8,
+          "kind": "ice",
+          "size": 0,
+          "pos": {
+            "x": 510.15112369724613,
+            "z": 605.0197194408744
+          },
+          "vel": {
+            "x": -5.18500208829949,
+            "z": 4.696204733987016
+          },
+          "radius": 32.295939929783344,
+          "hp": 119.29857319759054,
+          "maxHp": 119.29857319759054,
+          "units": 31,
+          "belt": 0
+        },
+        {
+          "id": 9,
+          "kind": "ore",
+          "size": 1,
+          "pos": {
+            "x": 470.93540455623423,
+            "z": -625.422569669492
+          },
+          "vel": {
+            "x": 5.735516176400147,
+            "z": 4.005134012083697
+          },
+          "radius": 22.8632989320904,
+          "hp": 71.0594265912713,
+          "maxHp": 71.0594265912713,
+          "units": 25,
+          "belt": 0,
+          "trait": "dense"
+        },
+        {
+          "id": 41,
+          "kind": "ore",
+          "size": 0,
+          "pos": {
+            "x": -659.1508628384096,
+            "z": -456.28611241984294
+          },
+          "vel": {
+            "x": 3.7781130278961648,
+            "z": -5.887785160678914
+          },
+          "radius": 30.282071220688522,
+          "hp": 108.31577749694141,
+          "maxHp": 108.31577749694141,
+          "units": 28,
+          "belt": 0
+        },
+        {
+          "id": 62,
+          "kind": "ore",
+          "size": 0,
+          "pos": {
+            "x": -494.4366651124932,
+            "z": -691.1151916372772
+          },
+          "vel": {
+            "x": 5.552551231950707,
+            "z": -4.256279745533926
+          },
+          "radius": 33.27589352335781,
+          "hp": 124.76935948299699,
+          "maxHp": 124.76935948299699,
+          "units": 33,
+          "belt": 0
+        },
+        {
+          "id": 75,
+          "kind": "ice",
+          "size": 0,
+          "pos": {
+            "x": -771.3590405485429,
+            "z": 938.383766562113
+          },
+          "vel": {
+            "x": -5.232401645298876,
+            "z": -3.86749222677693
+          },
+          "radius": 40.51851906394586,
+          "hp": 167.64619550362517,
+          "maxHp": 167.64619550362517,
+          "units": 64,
+          "belt": 0,
+          "trait": "magnetic"
+        }
+      ],
+      "pickups": [],
+      "selectedId": 301,
+      "regrowTimer": 3.016666666666661,
+      "contracts": {
+        "rng": {
+          "s": 844815293
+        },
+        "nextId": 10,
+        "offers": [
+          {
+            "id": 7,
+            "kind": "deliverIce",
+            "target": 90,
+            "progress": 0,
+            "timeLimit": 300,
+            "timeLeft": 113.49999999991171,
+            "reward": {
+              "ore": 78
+            },
+            "data": 0
+          },
+          {
+            "id": 8,
+            "kind": "deliverIce",
+            "target": 90,
+            "progress": 0,
+            "timeLimit": 300,
+            "timeLeft": 194.2499999999636,
+            "reward": {
+              "ore": 78
+            },
+            "data": 0
+          },
+          {
+            "id": 9,
+            "kind": "breakLarge",
+            "target": 5,
+            "progress": 0,
+            "timeLimit": 360,
+            "timeLeft": 229.24999999999145,
+            "reward": {
+              "ore": 65,
+              "ice": 44
+            },
+            "data": 0
+          }
+        ],
+        "active": {
+          "id": 6,
+          "kind": "deliverOre",
+          "target": 150,
+          "progress": 0,
+          "timeLimit": 300,
+          "timeLeft": 289.2500000000098,
+          "reward": {
+            "ice": 58
+          },
+          "data": 0
+        },
+        "completed": 5,
+        "failed": 0,
+        "rewardValue": 514
+      },
+      "refinery": {
+        "queue": [
+          {
+            "id": 2,
+            "recipe": "alloy",
+            "count": 62,
+            "total": 169,
+            "progress": 0.9999999999997847
+          }
+        ],
+        "nextId": 3,
+        "produced": {
+          "alloy": 107,
+          "fuel": 50
+        }
+      },
+      "hazards": {
+        "rng": {
+          "s": -897866444
+        },
+        "cometTimer": 85.55874555604532,
+        "comet": null,
+        "flareTimer": 127.18237807042897,
+        "flare": null,
+        "comets": 0,
+        "flares": 0
+      },
+      "automation": {
+        "outposts": [
+          {
+            "rockId": 62,
+            "kind": "ore",
+            "pos": {
+              "x": -494.4366651124932,
+              "z": -691.1151916372772
+            },
+            "stored": {
+              "ore": 70.78666666666679,
+              "ice": 0,
+              "crystal": 0,
+              "alloy": 0,
+              "fuel": 0
+            },
+            "reserve": 154.61333333350194
+          },
+          {
+            "rockId": 41,
+            "kind": "ore",
+            "pos": {
+              "x": -659.1508628384096,
+              "z": -456.28611241984294
+            },
+            "stored": {
+              "ore": 40.59999999999984,
+              "ice": 0,
+              "crystal": 0,
+              "alloy": 0,
+              "fuel": 0
+            },
+            "reserve": 105.00000000013465
+          },
+          {
+            "rockId": 75,
+            "kind": "ice",
+            "pos": {
+              "x": -771.3590405485429,
+              "z": 938.383766562113
+            },
+            "stored": {
+              "ore": 0,
+              "ice": 12.826666666666855,
+              "crystal": 0,
+              "alloy": 0,
+              "fuel": 0
+            },
+            "reserve": 504.7733333334654
+          }
+        ],
+        "extracted": 485.6133333330034
+      }
+    }
+  }
+}
