@@ -141,7 +141,11 @@ export function damageShip(state: GameState, ship: Ship, raw: number): void {
   out.fx.push({ t: 'explode', pos: { ...ship.pos } });
   profile.stats.shipsLost += 1;
   if (isFlagship(ship)) {
-    out.log.push({ level: 'major', text: `${ship.name} destroyed! Cargo lost. Rebuilding at the station…` });
+    out.log.push({
+      level: 'major',
+      text: `${ship.name} destroyed! Cargo lost. Rebuilding at the station…`,
+      event: 'shipLoss',
+    });
     ship.hull = 0;
     ship.cargo = emptyWallet();
     ship.respawn = TUNING.flagshipRespawn;
@@ -149,7 +153,7 @@ export function damageShip(state: GameState, ship: Ship, raw: number): void {
     ship.beamOn = false;
     ship.vel = v();
   } else {
-    out.log.push({ level: 'major', text: `${ship.name} was destroyed.` });
+    out.log.push({ level: 'major', text: `${ship.name} was destroyed.`, event: 'shipLoss' });
     removeItem(run.ships, ship);
     if (run.selectedId === ship.id) run.selectedId = flagship(run).id;
   }

@@ -106,6 +106,7 @@ export function updateContracts(state: GameState, dt: number): void {
     state.out.log.push({
       level: 'major',
       text: `Contract complete: ${describeContract(c)}. +${formatCost(c.reward)}${hd}`,
+      event: 'contractDone',
     });
     board.active = null;
     return;
@@ -114,7 +115,7 @@ export function updateContracts(state: GameState, dt: number): void {
   c.timeLeft -= dt;
   if (c.timeLeft <= 0) {
     board.failed++;
-    state.out.log.push({ level: 'warn', text: `Contract failed: ${describeContract(c)}.` });
+    state.out.log.push({ level: 'warn', text: `Contract failed: ${describeContract(c)}.`, event: 'contractFail' });
     board.active = null;
   }
 }

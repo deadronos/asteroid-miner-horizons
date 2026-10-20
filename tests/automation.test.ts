@@ -50,6 +50,7 @@ describe('deployOutpost', () => {
     expect(s.run.bank.ore).toBe(1000 - TUNING.outpostCost.ore);
     expect(s.run.bank.alloy).toBe(1000 - TUNING.outpostCost.alloy);
     expect(lastLog(s)).toMatchObject({ level: 'info' });
+    expect(lastLog(s)).toMatchObject({ event: 'outpost' });
   });
 
   it('clears mine orders and drone targets on the host rock', () => {

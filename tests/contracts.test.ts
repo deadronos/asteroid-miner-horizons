@@ -244,8 +244,13 @@ describe('contract payout and timers', () => {
     const bankBefore = { ...state.run.bank };
     const runValueBefore = state.run.runValue;
 
+    state.out.log.length = 0;
     updateContracts(state, DT);
 
+    expect(state.out.log.at(-1)).toMatchObject({
+      level: 'major',
+      event: 'contractDone',
+    });
     expect(RESOURCES.filter((r) => (reward[r] ?? 0) > 0)).toHaveLength(2);
     for (const r of RESOURCES) expect(state.run.bank[r]).toBeCloseTo(bankBefore[r] + (reward[r] ?? 0), 9);
     expect(state.run.contracts.rewardValue).toBeCloseTo(walletValue(reward), 9);
@@ -263,6 +268,8 @@ describe('contract payout and timers', () => {
     expect(state.run.contracts.failed).toBe(1);
     expect(state.run.contracts.active).toBeNull();
     expect(state.out.log.some((l) => l.level === 'warn' && l.text.includes('Contract failed'))).toBe(true);
+    const failed = state.out.log.find((l) => l.text.includes('Contract failed'))!;
+    expect(failed).toMatchObject({ level: 'warn', event: 'contractFail' });
   });
 
   it('completes on the tick its timer would expire', () => {

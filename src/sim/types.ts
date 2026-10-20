@@ -264,12 +264,17 @@ export type Fx =
   | { t: 'warp' }
   | { t: 'hazard'; kind: 'comet' | 'flare'; phase: 'warn' | 'start'; pos?: Vec2 };
 
+/** Explicit event identities the audio layer keys on (details stay in `text`). */
+export type LogEvent = 'research' | 'contractDone' | 'contractFail' | 'outpost' | 'shipLoss';
+
 export interface LogEntry {
   /** info: routine · warn: rejected command / danger · major: milestones and losses */
   level: 'info' | 'warn' | 'major';
   text: string;
   /** Set on an achievement unlock, which the HUD also shows as a toast. */
   achievement?: AchievementId;
+  /** Explicit event the audio layer cues (see src/audio/sfx.ts). */
+  event?: LogEvent;
   /** Any other line the HUD also shows as a toast (the offline-progress summary). */
   toast?: { kicker: string; title: string; detail: string };
 }

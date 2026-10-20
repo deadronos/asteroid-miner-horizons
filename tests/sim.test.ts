@@ -8,7 +8,7 @@ import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
 import { destroyRock } from '../src/sim/mining';
 import { deserialize, exportText, parseImport, serialize } from '../src/sim/save';
-import { flagship, shipStats } from '../src/sim/ships';
+import { damageShip, flagship, isFlagship, makeShip, shipStats } from '../src/sim/ships';
 import { tick } from '../src/sim/update';
 import type { GameState } from '../src/sim/types';
 import { DT, runFor } from './helpers';
@@ -230,5 +230,33 @@ describe('multiple games', () => {
     // above, since `tick` rebuilds the index from its own state every tick.
     expect(i1).not.toBe(i2);
     expect(i1.rockHash).not.toBe(i2.rockHash);
+  });
+});
+
+describe('ship loss', () => {
+  it('flags a drone removal and a flagship rebuild with the same identity', () => {
+    const state = newGame(2);
+    const drone = makeShip(state.run, state.profile, 'drone', 'Drone', {
+      x: 200,
+      z: 0,
+    });
+    state.run.ships.push(drone);
+    state.out.log.length = 0;
+
+    damageShip(state, drone, 9999);
+    expect(state.run.ships).not.toContain(drone);
+    expect(state.out.log.at(-1)).toMatchObject({
+      level: 'major',
+      event: 'shipLoss',
+    });
+
+    const flagshipShip = state.run.ships.find(isFlagship)!;
+    state.out.log.length = 0;
+    damageShip(state, flagshipShip, 9999);
+    expect(flagshipShip.respawn).toBeGreaterThan(0);
+    expect(state.out.log.at(-1)).toMatchObject({
+      level: 'major',
+      event: 'shipLoss',
+    });
   });
 });

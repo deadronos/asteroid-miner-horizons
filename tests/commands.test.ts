@@ -227,6 +227,10 @@ describe('command handlers', () => {
     send(s, { t: 'buyPerk', perk: 'optics' });
     expect(s.profile.perks.optics).toBe(1);
     expect(s.profile.data).toBe(4);
+    expect(s.out.log.at(-1)).toMatchObject({
+      level: 'major',
+      event: 'research',
+    });
   });
   it('warp', () => {
     const s = newGame(1);

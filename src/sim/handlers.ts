@@ -87,7 +87,11 @@ export const handlers: Handlers = {
     profile.data -= cost;
     profile.perks[cmd.perk] += 1;
     profile.stats.perks += 1;
-    out.log.push({ level: 'major', text: `Researched ${PERKS[cmd.perk].name} ${profile.perks[cmd.perk]}.` });
+    out.log.push({
+      level: 'major',
+      text: `Researched ${PERKS[cmd.perk].name} ${profile.perks[cmd.perk]}.`,
+      event: 'research',
+    });
     for (const s of run.ships) clampToStats(state, s);
   },
 
@@ -348,6 +352,7 @@ export const handlers: Handlers = {
     out.log.push({
       level: 'info',
       text: `Outpost deployed on a large ${rock.kind} asteroid (${Math.round(outpost.reserve)} units in reserve).`,
+      event: 'outpost',
     });
   },
 
