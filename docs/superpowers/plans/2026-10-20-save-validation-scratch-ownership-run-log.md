@@ -64,8 +64,9 @@
   `scripts/bot.ts` and the hazard tests.
 - **Task 1 fix was amended** into the single task commit rather than added as a second commit, since the branch was
   local and unreviewed by anyone else at the time.
-- **Task 2 minor deferred:** the escape regression test's comment says "away from the path" where the direction is
-  lateral to the comet's line of travel. Left for the final review to triage; it is a comment, not behaviour.
+- **Task 2 minor triaged:** the escape regression test's "away from the path" wording is accurate for perpendicular
+  egress and needs no change. The new test calls `dodgeHazards` then `arrive` directly; the existing multi-tick
+  `steps out of a pending comet path` test covers the end-to-end `droneThink` path.
 
 ## Reviewer findings
 
@@ -73,6 +74,13 @@
 | --- | --- | --- |
 | 1 | Fuzz round-trip assertion `not.toBe(undefined)` never fails | Accepted, fixed to `not.toBeNull()` |
 | 1 | `isObj` JSDoc dropped "(arrays included)" | Accepted, restored |
-| 2 | Escape-test comment wording | Deferred as minor |
-| 1 | `isWallet` accepted NaN/Infinity (`typeof` instead of `finite`) | Accepted, fixed; added bank/cargo NaN/Inf corruption cases and wallet path in fuzz |
-| 2 | Run-log overstated new regression test as chaining `droneThink → dodgeHazards → arrive` | Accepted, corrected |
+| 2 | Escape-test comment wording | Triaged: no fix needed (accurate for perpendicular egress) |
+| final | `isWallet` accepted NaN/Infinity (`typeof` instead of `finite`) | Accepted, fixed; added bank/cargo NaN/Inf corruption cases and wallet path in fuzz |
+| final | Run-log overstated new regression test as chaining `droneThink → dodgeHazards → arrive` | Accepted, corrected |
+
+## Final review
+
+The whole-branch review found one Important issue (`isWallet` accepted non-finite values) and one documentation
+accuracy issue. Both were fixed in `b7eb4df`; the scoped re-review reported all findings addressed with no new
+breakage. Final `npm run check`: 56 files, 839 tests passing.
+
