@@ -2,9 +2,12 @@ import { describe, expect, it } from 'vitest';
 import {
   alarmLevel,
   beamHums,
+  CENTER_CUTOFF,
+  EDGE_CUTOFF,
   EDGE_GAIN,
   MAX_HUMS,
   MAX_VOICES,
+  MIN_CUTOFF,
   PAN_WIDTH,
   PRESETS,
   RateLimiter,
@@ -89,6 +92,27 @@ describe('spatial mixing', () => {
     expect(out).toBeLessThan(near);
     expect(out).toBeCloseTo(Math.sqrt(420 / 1600));
     expect(overview).toBeCloseTo(0.4);
+  });
+
+  it('dulls sources toward the edge and when zoomed out', () => {
+    expect(spatial({ x: 0, z: 0 }, view)[2]).toBe(CENTER_CUTOFF);
+    expect(spatial({ x: 800, z: 0 }, view)[2]).toBeCloseTo(EDGE_CUTOFF);
+    const mid = spatial({ x: 400, z: 0 }, view)[2];
+    expect(mid).toBeLessThan(CENTER_CUTOFF);
+    expect(mid).toBeGreaterThan(EDGE_CUTOFF);
+    const zoomed = spatial({ x: 0, z: 0 }, { ...view, halfW: 3200, halfH: 1600 })[2];
+    expect(zoomed).toBeCloseTo(CENTER_CUTOFF * Math.sqrt(420 / 1600) ** 1.5, 0);
+    expect(spatial({ x: 1e9, z: 0 }, { ...view, halfW: 160000, halfH: 80000 })[2]).toBe(MIN_CUTOFF);
+  });
+
+  it('carries the cutoff onto positional voices but keeps stings open', () => {
+    const streak = new Streak();
+    const near = voiceFor({ t: 'crack', pos: { x: 0, z: 0 }, kind: 'ore', radius: 10 }, view, streak, 0)!;
+    const far = voiceFor({ t: 'crack', pos: { x: 760, z: 0 }, kind: 'ore', radius: 10 }, view, streak, 0)!;
+    expect(near.cutoff).toBe(CENTER_CUTOFF);
+    expect(far.cutoff).toBeLessThan(near.cutoff);
+    expect(voiceFor({ t: 'warp' }, view, streak, 0)!.cutoff).toBe(CENTER_CUTOFF);
+    expect(voiceFor({ t: 'hazard', kind: 'flare', phase: 'warn' }, view, streak, 0)!.cutoff).toBe(CENTER_CUTOFF);
   });
 
   it('drops off-screen fx entirely but always plays warp', () => {
@@ -199,6 +223,15 @@ describe('beam hums', () => {
     expect(gains[3]).toBeCloseTo(0.15);
   });
 
+  it('dulls a beam hum toward the edge too', () => {
+    const state = beamState(8);
+    const centre = addBeam(state, 'drone', { x: 0, z: 0 });
+    const side = addBeam(state, 'drone', { x: -700, z: 0 });
+    const hums = beamHums(state.run, state.profile, view);
+    expect(hums.find((h) => h.shipId === centre.id)!.cutoff).toBe(CENTER_CUTOFF);
+    expect(hums.find((h) => h.shipId === side.id)!.cutoff).toBeLessThan(CENTER_CUTOFF);
+  });
+
   it('raises pitch with dps, kept inside the [60, 320] band', () => {
     const state = beamState(4);
     const weak = addBeam(state, 'drone', { x: 0, z: 0 });
@@ -224,11 +257,11 @@ describe('hazard sounds', () => {
 
   it('maps any warning to the alarm', () => {
     for (const kind of ['comet', 'flare'] as const)
-      expect(hz(kind, 'warn')).toEqual({ id: 'alarm', gain: 1, pan: 0, rate: 1 });
+      expect(hz(kind, 'warn')).toEqual({ id: 'alarm', gain: 1, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
   });
 
   it('thumps when a flare starts and is silent when a comet appears', () => {
-    expect(hz('flare', 'start')).toEqual({ id: 'impact', gain: 0.9, pan: 0, rate: 1 });
+    expect(hz('flare', 'start')).toEqual({ id: 'impact', gain: 0.9, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
     expect(hz('comet', 'start')).toBeNull();
   });
 

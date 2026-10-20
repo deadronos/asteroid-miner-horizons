@@ -13,6 +13,7 @@ import { MusicPlayer } from './MusicPlayer';
 import {
   alarmLevel,
   beamHums,
+  CENTER_CUTOFF,
   type ContinuousPolicy,
   MAX_HUMS,
   PRESETS,
@@ -149,7 +150,7 @@ export class AudioEngine {
   }
 
   ui(id: 'uiClick' | 'uiDeny'): void {
-    this.play({ id, gain: 1, pan: 0, rate: 1 });
+    this.play({ id, gain: 1, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
   }
 
   /** Plays sounds for this frame's sim fx. Read-only: the renderer drains the list. */
@@ -260,7 +261,7 @@ export class AudioEngine {
       return;
     }
     if (now < this.nextAlarm) return;
-    this.play({ id: 'alarm', gain: 0.35 + 0.5 * level, pan: 0, rate: 1 });
+    this.play({ id: 'alarm', gain: 0.35 + 0.5 * level, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
     this.nextAlarm = now + ALARM_INTERVAL;
   }
 

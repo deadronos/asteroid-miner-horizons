@@ -85,8 +85,16 @@ export interface Voice {
   pan: number;
   /** Playback rate (pitch): 1 = as rendered. */
   rate: number;
+  /** Lowpass cutoff (Hz) for this voice. */
+  cutoff: number;
 }
 
+/** Lowpass cutoff (Hz) at the screen centre: effectively open. */
+export const CENTER_CUTOFF = 18000;
+/** Lowpass cutoff (Hz) at the screen edge and beyond: audibly darker. */
+export const EDGE_CUTOFF = 3200;
+/** Cutoff floor when the camera is zoomed far out. */
+export const MIN_CUTOFF = 900;
 /** Gain at the screen edge relative to the centre: on-screen sources still fall off gently. */
 export const EDGE_GAIN = 0.6;
 /** Widest stereo position, reached at the left/right screen edge. */
@@ -100,15 +108,19 @@ const MIN_ZOOM_GAIN = 0.4;
  * Positional mix from the source's place relative to the camera centre and
  * zoom: full volume at the centre, EDGE_GAIN at the screen edge, silent half a
  * screen beyond it; zooming out past the default makes everything quieter.
- * Pan follows the horizontal screen position. Returns [gain, pan].
+ * Pan follows the horizontal screen position. Returns [gain, pan, cutoff].
  */
-export function spatial(pos: Vec2, view: View): [number, number] {
+export function spatial(pos: Vec2, view: View): [number, number, number] {
   const dx = (pos.x - view.center.x) / view.halfW;
   const dz = (pos.z - view.center.z) / view.halfH;
   const r = Math.max(Math.abs(dx), Math.abs(dz));
   const place = r <= 1 ? 1 - (1 - EDGE_GAIN) * r : EDGE_GAIN * Math.max(0, 1 - (r - 1) * 2);
   const zoom = Math.max(MIN_ZOOM_GAIN, Math.min(1, Math.sqrt(REF_HALF_H / view.halfH)));
-  return [place * zoom, Math.max(-1, Math.min(1, dx)) * PAN_WIDTH];
+  const cutoff = Math.max(
+    MIN_CUTOFF,
+    Math.min(CENTER_CUTOFF, CENTER_CUTOFF * (EDGE_CUTOFF / CENTER_CUTOFF) ** Math.min(1, r) * zoom ** 1.5),
+  );
+  return [place * zoom, Math.max(-1, Math.min(1, dx)) * PAN_WIDTH, cutoff];
 }
 
 /** Tracks quick runs of pickups so each blip in a streak climbs in pitch. */
@@ -126,28 +138,28 @@ export class Streak {
 
 /** Maps one sim fx to a sound, or null if it's inaudible from here. */
 export function voiceFor(fx: Fx, view: View, streak: Streak, now: number): Voice | null {
-  if (fx.t === 'warp') return { id: 'warp', gain: 1, pan: 0, rate: 1 };
+  if (fx.t === 'warp') return { id: 'warp', gain: 1, pan: 0, rate: 1, cutoff: CENTER_CUTOFF };
   if (fx.t === 'hazard') {
-    if (fx.phase === 'warn') return { id: 'alarm', gain: 1, pan: 0, rate: 1 };
-    return fx.kind === 'flare' ? { id: 'impact', gain: 0.9, pan: 0, rate: 1 } : null;
+    if (fx.phase === 'warn') return { id: 'alarm', gain: 1, pan: 0, rate: 1, cutoff: CENTER_CUTOFF };
+    return fx.kind === 'flare' ? { id: 'impact', gain: 0.9, pan: 0, rate: 1, cutoff: CENTER_CUTOFF } : null;
   }
-  const [g, pan] = spatial(fx.pos, view);
+  const [g, pan, cutoff] = spatial(fx.pos, view);
   if (g <= 0.02) return null;
   const jitter = 0.94 + Math.random() * 0.12;
   switch (fx.t) {
     case 'crack': {
       // Bigger rocks: louder and lower.
       const size = Math.min(1, fx.radius / 40);
-      return { id: 'crack', gain: g * (0.45 + 0.65 * size), pan, rate: (1.5 - 0.75 * size) * jitter };
+      return { id: 'crack', gain: g * (0.45 + 0.65 * size), pan, rate: (1.5 - 0.75 * size) * jitter, cutoff };
     }
     case 'collect':
-      return { id: 'collect', gain: g * 0.8, pan, rate: streak.next(now) };
+      return { id: 'collect', gain: g * 0.8, pan, rate: streak.next(now), cutoff };
     case 'dock':
-      return { id: 'dock', gain: g, pan, rate: 1 };
+      return { id: 'dock', gain: g, pan, rate: 1, cutoff };
     case 'impact':
-      return { id: 'impact', gain: g, pan, rate: jitter };
+      return { id: 'impact', gain: g, pan, rate: jitter, cutoff };
     case 'explode':
-      return { id: 'explode', gain: g, pan, rate: jitter };
+      return { id: 'explode', gain: g, pan, rate: jitter, cutoff };
   }
 }
 
@@ -172,6 +184,8 @@ export interface BeamHum {
   pan: number;
   /** Oscillator pitch in Hz, derived from the beam's DPS. */
   freq: number;
+  /** Lowpass cutoff (Hz) for this hum's filter. */
+  cutoff: number;
 }
 
 /**
@@ -182,11 +196,11 @@ export function beamHums(run: Run, profile: Profile, view: View, max = MAX_HUMS)
   const hums: BeamHum[] = [];
   for (const ship of run.ships) {
     if (!isAlive(ship) || !ship.beamOn || ship.beamTargetId == null) continue;
-    const [gain, pan] = spatial(ship.pos, view);
+    const [gain, pan, cutoff] = spatial(ship.pos, view);
     if (gain <= 0.02) continue;
     // Mine harder, hum higher: the pitch lets a mixed fleet be told apart by ear.
     const dps = shipStats(ship, profile).dps;
-    hums.push({ shipId: ship.id, gain, pan, freq: Math.min(320, Math.max(60, 70 + 2.2 * dps)) });
+    hums.push({ shipId: ship.id, gain, pan, freq: Math.min(320, Math.max(60, 70 + 2.2 * dps)), cutoff });
   }
   // Loudest first; ties by id so a fleet keeps a stable voice assignment frame to frame.
   hums.sort((a, b) => b.gain - a.gain || a.shipId - b.shipId);
