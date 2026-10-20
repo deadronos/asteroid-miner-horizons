@@ -93,6 +93,12 @@ export class Menu {
     }
   }
 
+  /** Opens the menu on the Saves tab. */
+  openSaves(): void {
+    this.toggle(true);
+    this.show('saves');
+  }
+
   /** Esc handling: close a text window first, then the menu. Returns true if it consumed the key. */
   escape(): boolean {
     if (this.overlay) {
