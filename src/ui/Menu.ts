@@ -33,11 +33,13 @@ function focusables(root: HTMLElement): HTMLElement[] {
   );
 }
 
-/** The element to return focus to: whatever opened the menu, else the gear button. */
-function openerOf(modal: HTMLElement): HTMLElement | null {
+/** The top bar's ⚙ button, where focus lands when nothing better is left to return to. */
+const gearButton = (): HTMLElement | null => document.querySelector<HTMLElement>('button.gear');
+
+/** The focused element, unless focus is on nothing (`<body>`) or on `except`. */
+function focused(except?: HTMLElement): HTMLElement | null {
   const active = document.activeElement;
-  if (active instanceof HTMLElement && active !== document.body && active !== modal) return active;
-  return document.querySelector<HTMLElement>('button.gear');
+  return active instanceof HTMLElement && active !== document.body && active !== except ? active : null;
 }
 
 export const GEAR_SVG =
@@ -53,6 +55,8 @@ export class Menu {
   private render: Record<Tab, () => Node[]>;
   private controls: ControlsTab;
   private returnTo: HTMLElement | null = null;
+  /** The control that opened the current text window, refocused when it closes. */
+  private overlayReturn: HTMLElement | null = null;
 
   constructor(root: HTMLElement, saves: SaveActions, settings: SettingsStore, getState: () => GameState) {
     const ctx: MenuCtx = {
@@ -60,7 +64,7 @@ export class Menu {
       rerender: () => this.rerender(),
       close: () => this.toggle(false),
       showOverlay: (el) => this.showOverlay(el),
-      closeOverlay: () => this.closeOverlay(),
+      closeOverlay: () => this.closeOverlay(true),
     };
     const savesTab = new SavesTab(saves, ctx);
     this.controls = new ControlsTab(ctx);
@@ -101,9 +105,10 @@ export class Menu {
     });
     // Listen on the window: a tab switch or rerender can drop focus to <body>,
     // which must not let Tab escape into the page behind the dialog.
+    // An open text window covers the menu, so the cycle stays inside it.
     window.addEventListener('keydown', (e) => {
-      if (e.key !== 'Tab' || !this.open) return;
-      const items = focusables(this.el);
+      if (e.key !== 'Tab' || !this.open || e.defaultPrevented || e.ctrlKey || e.altKey || e.metaKey) return;
+      const items = focusables(this.overlay ?? this.el);
       const next =
         items[nextFocusIndex(items.length, items.indexOf(document.activeElement as HTMLElement), e.shiftKey)];
       e.preventDefault();
@@ -119,7 +124,7 @@ export class Menu {
   toggle(force?: boolean): void {
     const open = force ?? !this.open;
     const wasOpen = this.open;
-    if (open && !wasOpen) this.returnTo = openerOf(this.el);
+    if (open && !wasOpen) this.returnTo = focused(this.el) ?? gearButton();
     this.el.classList.toggle('hidden', !open);
     if (open) {
       this.show(this.tab);
@@ -134,14 +139,18 @@ export class Menu {
 
   /** Returns focus to the opener, falling back to the gear button if it is gone. */
   private restoreFocus(): void {
-    const target = this.returnTo?.isConnected ? this.returnTo : document.querySelector<HTMLElement>('button.gear');
+    const target = this.returnTo?.isConnected ? this.returnTo : gearButton();
     this.returnTo = null;
     target?.focus();
   }
 
   /** Opens the menu on the Saves tab. */
   openSaves(): void {
-    this.toggle(true);
+    if (!this.open) {
+      this.tab = 'saves';
+      this.toggle(true);
+      return;
+    }
     this.show('saves');
     this.tabs.get('saves')?.focus();
   }
@@ -149,7 +158,7 @@ export class Menu {
   /** Esc handling: close a text window first, then the menu. Returns true if it consumed the key. */
   escape(): boolean {
     if (this.overlay) {
-      this.closeOverlay();
+      this.closeOverlay(true);
       return true;
     }
     if (this.open) {
@@ -167,18 +176,32 @@ export class Menu {
     this.body.replaceChildren(...this.render[tab]());
   }
 
+  /** Re-renders the open tab, keeping keyboard focus at the same position when its control was replaced. */
   private rerender(): void {
-    if (this.open) this.show(this.tab);
+    if (!this.open) return;
+    const at = focusables(this.box).indexOf(document.activeElement as HTMLElement);
+    this.show(this.tab);
+    if (at < 0 || focused()?.isConnected) return;
+    const items = focusables(this.box);
+    items[Math.min(at, items.length - 1)]?.focus();
   }
 
   private showOverlay(el: HTMLElement): void {
+    const opener = this.overlay ? this.overlayReturn : focused();
     this.closeOverlay();
+    this.overlayReturn = opener;
     this.overlay = el;
     this.box.append(el);
   }
 
-  private closeOverlay(): void {
+  /** Removes the text window; `restore` returns focus to the control that opened it (else the active tab). */
+  private closeOverlay(restore = false): void {
+    const hadOverlay = this.overlay !== null;
     this.overlay?.remove();
     this.overlay = null;
+    const opener = this.overlayReturn;
+    this.overlayReturn = null;
+    if (!restore || !hadOverlay) return;
+    (opener?.isConnected ? opener : this.tabs.get(this.tab))?.focus();
   }
 }
