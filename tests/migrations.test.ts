@@ -273,6 +273,34 @@ describe('load through the production registry', () => {
     }
   });
 
+  it('rejects a profile whose warp count, data or seed the next warp cannot use', () => {
+    // A save with no warp count used to load, then throw in the warp command (system number NaN).
+    const noWarps = saveCurrent();
+    delete (noWarps.profile as Partial<SaveData['profile']>).warps;
+    expect(deserialize(JSON.stringify(noWarps))).toBeNull();
+
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['warps null', { warps: null }],
+      ['warps a string', { warps: '3' }],
+      ['warps negative', { warps: -1 }],
+      ['warps fractional', { warps: 1.5 }],
+      ['data a string', { data: 'lots' }],
+      ['data missing', { data: undefined }],
+      ['dataEarned missing', { dataEarned: undefined }],
+      ['dataEarned null', { dataEarned: null }],
+      ['seed missing', { seed: undefined }],
+    ];
+    expect(deserialize(JSON.stringify(saveCurrent()))).not.toBeNull();
+    for (const [label, patch] of cases) {
+      expect(deserialize(JSON.stringify(merge(patch)(saveCurrent()))), `case: ${label}`).toBeNull();
+    }
+    // typeof Infinity is 'number' too; an overflowing literal is the only way JSON carries one.
+    for (const k of ['seed', 'warps', 'data', 'dataEarned']) {
+      const text = JSON.stringify(merge({ [k]: '__INF__' })(saveCurrent())).replace('"__INF__"', '1e999');
+      expect(deserialize(text), `case: ${k} Infinity`).toBeNull();
+    }
+  });
+
   it('rejects a current save whose contract board has no offers array', () => {
     expect(deserialize(JSON.stringify(saveCurrent({ contracts: {} })))).toBeNull();
   });

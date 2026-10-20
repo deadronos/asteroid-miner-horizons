@@ -3,8 +3,9 @@
 // save credits offline progress for the time since it was written, then saves
 // at once so a reload cannot credit the same absence twice. A slot whose save
 // can't be read is never written over unasked: startup moves to an empty slot,
-// or runs unsaved when there is none. `main.ts` only wires the renderer, HUD,
-// input and loop around this.
+// or runs unsaved when there is none. Nor is a good save replaced by one that
+// would not load back. `main.ts` only wires the renderer, HUD, input and loop
+// around this.
 
 import { newGame } from './sim/create';
 import { SimIndex } from './sim/index';
@@ -13,6 +14,7 @@ import {
   activeSlot,
   clearSlot,
   firstEmptySlot,
+  loadsBack,
   migrateLegacy,
   readSlot,
   type SaveRecord,
@@ -51,6 +53,8 @@ export class GameSession implements SaveActions {
   private unsaved = false;
   /** True once a failed write has been reported; cleared by the next successful one. */
   private writeWarned = false;
+  /** True once a game that would not load back has been reported; cleared once it would again. */
+  private brokenWarned = false;
   private autosaveTimer = 0;
   /** The interval the timer runs at, or null while stopped. */
   private armedSec: number | null = null;
@@ -247,12 +251,19 @@ export class GameSession implements SaveActions {
 
   /**
    * Write the running game to its slot, silently unless the write fails. A queued idle save is now redundant.
-   * Does nothing while unsaved or suspended after an error. True when the game was written.
+   * Does nothing while unsaved or suspended after an error, or when the save would not load back (the slot keeps
+   * its last good one). True when the game was written.
    */
   private persist(): boolean {
     this.cancelIdle?.();
     this.cancelIdle = null;
     if (this.unsaved || this.suspended) return false;
+    if (!loadsBack(this.state)) {
+      if (!this.brokenWarned) this.warnWouldNotLoad();
+      this.brokenWarned = true;
+      return false;
+    }
+    this.brokenWarned = false;
     if (writeSlot(this.slot, this.state)) {
       this.writeWarned = false;
       return true;
@@ -293,6 +304,13 @@ export class GameSession implements SaveActions {
     this.state.out.log.push({
       level: 'warn',
       text: `Couldn't save to slot ${i + 1}: browser storage is full or blocked. Export your save to keep a copy.`,
+    });
+  }
+
+  private warnWouldNotLoad(): void {
+    this.state.out.log.push({
+      level: 'warn',
+      text: `Not saving to slot ${this.slot + 1}: the running game has values that would not load back, so the last good save is kept. Export your save to keep a copy of this game.`,
     });
   }
 
