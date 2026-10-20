@@ -57,6 +57,9 @@ const corruptions: Corrupt[] = [
   ['hazard timer Infinity', (s) => (s.run.hazards.flareTimer = Infinity)],
   ['duplicate ship id', (s) => s.run.ships.push({ ...s.run.ships[0]! })],
   ['duplicate rock id', (s) => s.run.rocks.push({ ...s.run.rocks[0]! })],
+  ['bank alloy NaN', (s) => ((s.run.bank.alloy as unknown) = NaN)],
+  ['bank alloy Infinity', (s) => ((s.run.bank.alloy as unknown) = Infinity)],
+  ['ship cargo alloy NaN', (s) => ((s.run.ships[0]!.cargo.alloy as unknown) = NaN)],
 ];
 
 describe('validateState – corruptions return null', () => {
@@ -117,6 +120,7 @@ const FINITE_PATHS = [
   'run.time',
   'run.hazards.flareTimer',
   'run.hazards.cometTimer',
+  'run.bank.alloy',
 ] as const;
 
 /** Resolve a dot-path on an object. */

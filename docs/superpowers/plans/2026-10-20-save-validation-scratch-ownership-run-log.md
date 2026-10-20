@@ -44,6 +44,10 @@
 - Removed `avoid`, `home`, `escape`, `waypoint` from `SimIndex`. `steer`, `arrive`, `dodgeHazards` and `unsafe`
   now own locals; `formationSlot(anchor, id, radius)` returns a fresh vector; `inCometPath()` gives `unsafe` an
   allocation-free miss path while `cometPathEscape` keeps its out-parameter API.
+- The new regression test in `tests/pilot.test.ts` proves the no-clobber ownership invariant directly: it calls
+  `dodgeHazards` and `arrive` in sequence and asserts that the arrive result is not overwritten. The end-to-end
+  `droneThink → dodgeHazards → arrive` chain is covered by the existing multi-tick
+  `steps out of a pending comet path` test in `tests/hazards.test.ts`.
 - Allocation: the controller re-ran the budget test with a temporary stderr print (removed afterwards):
   **83,458 bytes/tick**, under the 112 KiB budget.
 - Balance: `npm run balance` produced identical numeric cells; only the generated header changed from
@@ -70,3 +74,5 @@
 | 1 | Fuzz round-trip assertion `not.toBe(undefined)` never fails | Accepted, fixed to `not.toBeNull()` |
 | 1 | `isObj` JSDoc dropped "(arrays included)" | Accepted, restored |
 | 2 | Escape-test comment wording | Deferred as minor |
+| 1 | `isWallet` accepted NaN/Infinity (`typeof` instead of `finite`) | Accepted, fixed; added bank/cargo NaN/Inf corruption cases and wallet path in fuzz |
+| 2 | Run-log overstated new regression test as chaining `droneThink → dodgeHazards → arrive` | Accepted, corrected |

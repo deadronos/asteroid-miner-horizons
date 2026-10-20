@@ -25,9 +25,9 @@ const isRawKind = (k: unknown): boolean => typeof k === 'string' && (RAW_RESOURC
 /** True when `x` is null or a finite number (an optional id the tick looks up). */
 const isIdOrNull = (x: unknown): boolean => x === null || finite(x);
 
-/** True when `w` is an object with a number under every `RESOURCES` key. */
+/** True when `w` is an object with a finite number under every `RESOURCES` key. */
 function isWallet(w: unknown): boolean {
-  return isObj(w) && RESOURCES.every((r) => typeof w[r] === 'number');
+  return isObj(w) && RESOURCES.every((r) => finite(w[r]));
 }
 
 /** True when every entry is a refine job the tick can process: a known recipe and sane numeric counters. */
