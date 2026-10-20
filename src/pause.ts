@@ -53,3 +53,23 @@ export function pauseAudio(kind: PauseKind | null): ContinuousPolicy {
   if (kind === 'unfocused') return ALARM_CONTINUOUS;
   return LIVE_CONTINUOUS;
 }
+
+/**
+ * Seconds between renders while the sim is frozen by each kind: the scene is
+ * nearly static, so redrawing it every frame only burns GPU. Unfocused is the
+ * slowest, since the player is not looking at it.
+ */
+export const PAUSED_FRAME_INTERVAL: Record<PauseKind, number> = Object.freeze({
+  manual: 1 / 12,
+  menu: 1 / 12,
+  unfocused: 1 / 4,
+});
+
+/**
+ * Whether this animation frame should render. Running, or `busy` (input, a camera
+ * glide, a warp, pending fx), always renders; otherwise a frozen sim renders once
+ * `sinceRender` seconds reach its kind's interval.
+ */
+export function renderDue(kind: PauseKind | null, sinceRender: number, busy: boolean): boolean {
+  return !kind || busy || sinceRender >= PAUSED_FRAME_INTERVAL[kind];
+}
