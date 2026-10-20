@@ -151,11 +151,15 @@ It goes away after the first warp; × hides it for that save.
     screen: off to one side means panned that way, and they get quieter and darker (a
     distance lowpass) with distance or zoom. A master limiter stops a busy fleet from
     clipping, and explosions, docking chimes and collects share one generated reverb, with
-    no audio files. Ambient music is generated live: warm and slow around M stars, neutral
-    at G, cold and sparse at B, crossfading on every warp and playing on through pauses.
-    Beam hums go quiet while the game is paused. The low-hull / overheat alarm also goes
-    quiet whenever you pause (`P`, or while a menu is open), but keeps sounding while the
-    window stays visible and loses focus (a hidden tab suspends all audio).
+    no audio files. Research purchases, achievements, contract completions and failures,
+    outpost deployments and ship losses each get their own short cue, and a burst plays a
+    single sound instead of a stack (the fleet-loss tone stays audible no matter where on
+    screen the explosion was). Ambient music is generated live: warm and slow around M
+    stars, neutral at G, cold and sparse at B, crossfading on every warp and playing on
+    through pauses. Beam hums go quiet while the game is paused. The low-hull / overheat
+    alarm also goes quiet whenever you pause (`P`, or while a menu is open), but keeps
+    sounding while the window stays visible and loses focus (a hidden tab suspends all
+    audio).
 
 ## Architecture
 

@@ -18,7 +18,10 @@ import {
   alarmLevel,
   beamHums,
   CENTER_CUTOFF,
+  CUES,
+  cueBatch,
   type ContinuousPolicy,
+  type CueKey,
   MAX_HUMS,
   PRESETS,
   RateLimiter,
@@ -320,8 +323,16 @@ export class AudioEngine {
     player.update(state.run.system.starClass, state.run.system.number, s.volMaster > 0 && s.volMusic > 0);
   }
 
-  /** Rejected commands (warn-level log lines) get a deny buzz. Read-only. */
+  /** Rejected commands buzz, and each event identity in the batch gets one cue. Read-only. */
   consumeLog(log: readonly LogEntry[]): void {
-    if (log.some((l) => l.level === 'warn')) this.ui('uiDeny');
+    const batch = cueBatch(log);
+    if (batch.deny) this.ui('uiDeny');
+    for (const key of batch.cues) this.playCue(key);
+  }
+
+  /** Plays a cue's preset once at the table gain, dead centre. */
+  private playCue(key: CueKey): void {
+    const cue = CUES[key];
+    this.play({ id: cue.id, gain: cue.gain, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
   }
 }
