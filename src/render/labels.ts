@@ -73,7 +73,8 @@ export class MapLabels {
   private sizes: { w: number; h: number }[] = [];
   private blockers: Box[] = [];
   private blockerAge = BLOCKER_REFRESH;
-  private key = '';
+  /** The system the labels were built for; compared by identity, since names repeat across games. */
+  private built: StarSystem | null = null;
   private shown = false;
 
   /** `readBlockers` returns the client rectangles labels must stay clear of (HUD panels). */
@@ -109,10 +110,9 @@ export class MapLabels {
     dt: number,
     toScreen: (p: Vec2) => { x: number; y: number },
   ): void {
-    const key = `${sys.name}#${sys.number}`;
-    if (this.key !== key) {
+    if (this.built !== sys) {
       this.build(sys);
-      this.key = key;
+      this.built = sys;
     }
     const opacity = labelOpacity(halfH);
     this.el.style.opacity = opacity.toFixed(3);
