@@ -20,6 +20,7 @@ export type Command =
   | { t: 'dock'; shipId: number }
   | { t: 'stop'; shipId: number }
   | { t: 'aiMode'; shipId: number; mode: AiMode }
+  | { t: 'shipAuto'; shipId: number; kind: 'repair' | 'upgrade'; on: boolean }
   | { t: 'install'; shipId: number; slot: number; comp: ComponentId; variant: VariantId }
   | { t: 'upgrade'; shipId: number; slot: number }
   | { t: 'remove'; shipId: number; slot: number }

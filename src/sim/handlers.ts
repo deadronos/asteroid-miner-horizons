@@ -213,6 +213,12 @@ export const handlers: Handlers = {
     ship.aiTargetId = null;
   }),
 
+  shipAuto: withShip((state, ship, cmd) => {
+    if (isFlagship(ship)) return fail(state, 'The flagship is flown by hand.');
+    if (cmd.kind === 'repair') ship.autoRepair = cmd.on;
+    else ship.autoUpgrade = cmd.on;
+  }),
+
   repair: withShip((state, ship) => {
     const cost = repairCost(state, ship);
     const block = refitBlock(state, ship);

@@ -10,7 +10,7 @@ import { recordLoss } from './reloadGuard';
 import { Renderer } from './render/Renderer';
 import { GameSession } from './session';
 import type { HazardLevel } from './data/hazards';
-import type { Assists } from './sim/assists';
+import type { Assists, FleetAuto } from './sim/assists';
 import type { Command } from './sim/commands';
 import { safeStorage } from './sim/save';
 import { applyCommands, tick } from './sim/update';
@@ -56,9 +56,11 @@ const input = new Input(
 
 let assists: Assists = { avoid: true, autoDock: true, chain: true };
 let hazards: HazardLevel = 'normal';
+let automation: FleetAuto = { repairAt: 0.5, reserve: 100 };
 function applySettings(): void {
   const s = settings.value;
   assists = { avoid: s.assistAvoid, autoDock: s.assistAutoDock, chain: s.assistChain };
+  automation = { repairAt: s.autoRepairAt, reserve: s.autoReserve };
   hazards = s.hazards;
   renderer.applySettings(s);
 }
@@ -100,7 +102,7 @@ function frame(now: number): void {
     const thrust = input.thrust();
     let steps = 0;
     while (acc >= STEP && steps < 8) {
-      tick(state, STEP, { thrust, commands, assists, hazards }, session.sim);
+      tick(state, STEP, { thrust, commands, assists, automation, hazards }, session.sim);
       acc -= STEP;
       steps++;
     }

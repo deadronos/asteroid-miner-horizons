@@ -7,6 +7,7 @@ import { HULLS } from '../data/hulls';
 import { RESOURCES, canAfford, emptyWallet, walletTotal, type Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { isDocked } from './economy';
+import { needsRepair } from './fleetAuto';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
 import { arrive, dodgeHazards, formationSlot, steer, unsafe, type TickCtx } from './pilot';
@@ -182,7 +183,8 @@ function pickSource(ctx: TickCtx, ship: Ship): number | null {
 }
 
 /**
- * Hauler brain, used when a hauler has no manual order: comet path or flare → get clear · full → unload at the
+ * Hauler brain, used when a hauler has no manual order: comet path or flare → get clear · hull below the autorepair
+ * threshold → repair at the station (#140) · full → unload at the
  * station · else load from the claimed (or the best) miner or outpost · else unload what it carries · else wait by
  * the station. Haulers never mine.
  */
@@ -193,6 +195,11 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const full = isHoldFull(ship, st);
   if (dodgeHazards(ctx, ship, st, full || carrying)) {
     ship.aiTargetId = null;
+    return;
+  }
+  if (needsRepair(ship, st, ctx.auto)) {
+    ship.aiTargetId = null;
+    if (!isDocked(run, ship)) haulTo(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
     return;
   }
 

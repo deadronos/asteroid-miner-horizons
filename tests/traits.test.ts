@@ -3,7 +3,7 @@ import { makeRng } from '../src/core/rng';
 import type { Vec2 } from '../src/core/vec';
 import { TRAITS, TRAIT_IDS, type RockTrait } from '../src/data/traits';
 import { TUNING } from '../src/data/tuning';
-import { DEFAULT_ASSISTS } from '../src/sim/assists';
+import { DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO } from '../src/sim/assists';
 import { newGame, newProfile, newRun } from '../src/sim/create';
 import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
@@ -221,7 +221,7 @@ describe('volatile stand-off', () => {
     state.run.rocks = [rock];
     const index = new SimIndex();
     index.rebuild(state);
-    const ctx: TickCtx = { state, index, dt: DT, assists: DEFAULT_ASSISTS, hazards: 'off' };
+    const ctx: TickCtx = { state, index, dt: DT, assists: DEFAULT_ASSISTS, auto: DEFAULT_FLEET_AUTO, hazards: 'off' };
     const st = index.stats.get(ship.id)!;
 
     const reach = st.range + rock.radius;

@@ -8,11 +8,12 @@ import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
 import { walletValue, RESOURCES, formatWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { updateAchievements } from './achievements';
-import { DEFAULT_ASSISTS, type Assists } from './assists';
+import { DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO, type Assists, type FleetAuto } from './assists';
 import { haulerThink, updateOutposts } from './automation';
 import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
+import { serviceDocked } from './fleetAuto';
 import { spawnBeltRock } from './generate';
 import { flareExposure, updateHazards } from './hazards';
 import type { SimIndex } from './index';
@@ -28,6 +29,8 @@ export interface TickInput {
   thrust: Vec2;
   commands: Command[];
   assists?: Assists;
+  /** Autorepair threshold and spending reserve; absent means the defaults. */
+  automation?: FleetAuto;
   /** Hazard difficulty; absent means 'off'. */
   hazards?: HazardLevel;
 }
@@ -76,6 +79,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     index,
     dt,
     assists: input.assists ?? DEFAULT_ASSISTS,
+    auto: input.automation ?? DEFAULT_FLEET_AUTO,
     hazards: level,
   };
 
@@ -173,7 +177,10 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
 
   ship.shield = Math.min(st.maxShield, ship.shield + st.shieldRegen * dt);
 
-  if (isDocked(run, ship) && walletTotal(ship.cargo) > 0) unload(state, ship);
+  if (isDocked(run, ship)) {
+    if (walletTotal(ship.cargo) > 0) unload(state, ship);
+    if (!isFlagship(ship)) serviceDocked(state, ctx.index, ship, st, ctx.auto);
+  }
 }
 
 function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {

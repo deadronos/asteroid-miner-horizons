@@ -1,7 +1,7 @@
 // Gameplay, Graphics and Interface tabs: plain settings forms.
 
 import { TUNING } from '../../data/tuning';
-import type { SettingsStore } from '../../settings';
+import { AUTO_RESERVE_VALUES, type SettingsStore } from '../../settings';
 import { rangeRow, section, selectRow, toggleRow } from './form';
 
 export function renderGameplay(settings: SettingsStore): Node[] {
@@ -39,6 +39,25 @@ export function renderGameplay(settings: SettingsStore): Node[] {
         ['harsh', 'Harsh: more often, hits harder'],
       ],
       'Comets cross the belts; flares burn ships near M and B stars.',
+    ),
+    section('Fleet automation'),
+    selectRow(
+      settings,
+      'autoRepairAt',
+      'Autorepair below',
+      [
+        [0.25, '25% hull'],
+        [0.5, '50% hull'],
+        [0.75, '75% hull'],
+      ],
+      'Ships with REPAIR on fly home to repair once their hull drops this low.',
+    ),
+    selectRow(
+      settings,
+      'autoReserve',
+      'Keep in reserve',
+      AUTO_RESERVE_VALUES.map((n) => [n, n ? `${n} of each resource` : 'Nothing']),
+      'REPAIR and UPGRADE only spend what the bank holds above this. Your own purchases ignore it.',
     ),
     section('Autopilot assists'),
     toggleRow(

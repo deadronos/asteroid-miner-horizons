@@ -31,6 +31,10 @@ export class SimIndex {
   readonly comets: Rock[] = [];
   /** Ids of rocks hosting an outpost, collected in `rebuild`; mining AI skips them. */
   readonly outpostRocks = new Set<number>();
+  /** Ships already told they are waiting docked for repair money, so the warning logs once per wait (#140). */
+  readonly repairWait = new Set<number>();
+  /** Run time each ship may take its next autoupgrade step (#140). Transient: a reload just allows one at once. */
+  readonly upgradeReadyAt = new Map<number, number>();
   /** Ids seen in the last `rebuild`, so the next one can prune the departed. */
   private readonly liveShipIds = new Set<number>();
 
@@ -57,6 +61,8 @@ export class SimIndex {
     }
     // A scrapped or destroyed ship's entry must not linger for the whole run.
     for (const id of this.stats.keys()) if (!this.liveShipIds.has(id)) this.stats.delete(id);
+    for (const id of this.upgradeReadyAt.keys()) if (!this.liveShipIds.has(id)) this.upgradeReadyAt.delete(id);
+    for (const id of this.repairWait) if (!this.liveShipIds.has(id)) this.repairWait.delete(id);
   }
 
   /** Drop every reference; used when the running game is swapped. */
@@ -67,5 +73,7 @@ export class SimIndex {
     this.outpostRocks.clear();
     this.stats.clear();
     this.liveShipIds.clear();
+    this.upgradeReadyAt.clear();
+    this.repairWait.clear();
   }
 }

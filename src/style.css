@@ -271,12 +271,22 @@ button.glow {
   font-size: 11.5px;
   text-align: right;
 }
-.shiprow .mode {
+.shiprow .ctl {
   grid-column: 1 / -1;
-  justify-self: start;
+  display: flex;
+  gap: 4px;
+}
+.shiprow .mode {
   font-size: 10.5px;
   padding: 1px 7px;
   letter-spacing: 0.06em;
+}
+.shiprow .mode.auto {
+  color: var(--dim);
+}
+.shiprow .mode.auto.on {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 button.buy {
   display: flex;

@@ -23,6 +23,7 @@ import V7_FIXTURE from './fixtures/save-v7.json?raw';
 import V8_FIXTURE from './fixtures/save-v8.json?raw';
 import V9_FIXTURE from './fixtures/save-v9.json?raw';
 import V10_FIXTURE from './fixtures/save-v10.json?raw';
+import V11_FIXTURE from './fixtures/save-v11.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -41,6 +42,8 @@ const currentRun = () => {
     ...s,
     cargo: { ...s.cargo, alloy: 0, fuel: 0 },
     slots: s.slots.map((f) => (f ? { ...f, variant: defaultVariant(f.type) } : null)),
+    autoRepair: false,
+    autoUpgrade: false,
   }));
   const system = { ...run.system, modifiers: [] };
   const hazards = newHazards(fixture.profile.seed, run.system.number);
@@ -54,6 +57,12 @@ const currentRun = () => {
     automation: newAutomation(),
   };
 };
+
+/** `run` with the v12 per-ship automation flags cleared; toEqual treats an undefined field as absent. */
+const sansShipAuto = <R extends { ships: object[] }>(run: R): R => ({
+  ...run,
+  ships: run.ships.map((s) => ({ ...s, autoRepair: undefined, autoUpgrade: undefined })),
+});
 
 /** A valid current-version save, with the given run overrides applied on top. */
 const saveCurrent = (run: Record<string, unknown> = {}): SaveData => {
@@ -666,7 +675,7 @@ describe('automation migration to v9', () => {
     const state = loadFrozen(V8_FIXTURE);
     const { automation, ...run } = state.run;
     expect(automation.outposts).toEqual([]);
-    expect(run).toEqual(before.run);
+    expect(sansShipAuto(run)).toEqual(before.run);
   });
 
   it('keeps a well-formed outpost through a round-trip', () => {
@@ -751,7 +760,7 @@ describe('lifetime stats migration to v11', () => {
     const loaded = loadFrozen(V10_FIXTURE);
     // toEqual treats an undefined field as absent, so this compares everything else.
     expect({ ...loaded.profile, stats: undefined, achievements: undefined }).toEqual(before.profile);
-    expect(loaded.run).toEqual(before.run);
+    expect(sansShipAuto(loaded.run)).toEqual(before.run);
   });
 
   it('unlocks what the seeded stats already reach on the first tick', () => {
@@ -780,5 +789,30 @@ describe('lifetime stats migration to v11', () => {
     }
     const good = { ...loaded.profile, achievements: ['firstJump'] };
     expect(parseImport(JSON.stringify({ version: SAVE_VERSION, profile: good, run: loaded.run })).ok).toBe(true);
+  });
+});
+
+describe('ship automation migration to v12', () => {
+  it.each([
+    ['v2', FIXTURE],
+    ['v10', V10_FIXTURE],
+    ['v11', V11_FIXTURE],
+  ])('loads the %s fixture with autorepair and autoupgrade off on every ship', (_label, raw) => {
+    const state = loadFrozen(raw);
+    expect(state.version).toBe(SAVE_VERSION);
+    for (const ship of state.run.ships) expect([ship.autoRepair, ship.autoUpgrade]).toEqual([false, false]);
+  });
+
+  it('keeps the v11 fixture otherwise unchanged', () => {
+    const before = JSON.parse(V11_FIXTURE).state;
+    const loaded = loadFrozen(V11_FIXTURE);
+    expect(loaded.profile).toEqual(before.profile);
+    expect(sansShipAuto(loaded.run)).toEqual(before.run);
+  });
+
+  it('rejects a current save whose ship flags are not booleans', () => {
+    const loaded = loadFrozen(V11_FIXTURE);
+    loaded.run.ships[1]!.autoRepair = 'yes' as unknown as boolean;
+    expect(parseImport(JSON.stringify({ format: 'amh-save', savedAt: 0, state: loaded })).ok).toBe(false);
   });
 });
