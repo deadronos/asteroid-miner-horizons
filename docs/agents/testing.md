@@ -25,7 +25,8 @@ special roles worth knowing before you change the code they guard:
 | `sim.test.ts`        | Determinism (same seed + commands → same serialised state), save round-trip  |
 | `commands.test.ts`   | Every command handler, including rejections                                  |
 | `migrations.test.ts` | Each save version step, against the fixtures in `tests/fixtures/`            |
-| `alloc.test.ts`      | Per-tick allocation; the regression net for hot-path changes                 |
+| `alloc.test.ts`      | Mean bytes allocated per tick with a full fleet, against a fixed budget      |
+| `inPlace.test.ts`    | `ships`, `rocks` and `pickups` are compacted in place, never reassigned      |
 | `stats.test.ts`      | Derived ship stats as a snapshot; update it only when the change is intended |
 | `bot.test.ts`        | The balance bot's decisions                                                  |
 
@@ -48,8 +49,9 @@ tests; `tests/__snapshots__/` holds snapshots.
 - **Sim tests drive the tick directly** through `tests/helpers.ts`: `runTicks(state, n, opts)` for an exact tick
   count, `runFor(state, seconds, opts)` for sim time (it accumulates `t += DT`, so it can run one tick more than
   `seconds / DT`), with `commands`, `hazards`, `assists` or a shared `index` in `opts`. Do not spin up `main.ts`.
-- **`alloc.test.ts` guards allocation.** Reuse buffers and instances rather than allocating per tick; that test
-  is the regression net for hot-path changes.
+- **Reuse buffers and instances rather than allocating per tick.** `alloc.test.ts` fails when the mean
+  allocation per tick grows past its budget; that catches a new per-rock or per-ship allocation, but not a single
+  extra array copy. `inPlace.test.ts` catches a `filter`/`map` that reassigns `run.ships`, `rocks` or `pickups`.
 
 ## Headless bot harness
 
