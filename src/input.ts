@@ -77,7 +77,8 @@ export class Input {
   }
 
   private onKey(e: KeyboardEvent): void {
-    if (this.blocked()) return;
+    // The title screen owns the keyboard, except for Esc while a higher menu (Settings) is open.
+    if (this.blocked() && !(e.code === 'Escape' && this.hud.menu.open)) return;
     // Typing into form fields (save text, selects) must not fly the ship.
     if (['SELECT', 'TEXTAREA', 'INPUT'].includes((e.target as HTMLElement)?.tagName) && e.code !== 'Escape') return;
     if (e.code === 'Escape') {
