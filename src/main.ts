@@ -16,6 +16,7 @@ import { safeStorage } from './sim/save';
 import { applyCommands, tick } from './sim/update';
 import { SettingsStore } from './settings';
 import { Hud } from './ui/Hud';
+import { TitleScreen } from './ui/TitleScreen';
 
 const settings = new SettingsStore();
 const app = document.getElementById('app')!;
@@ -50,6 +51,10 @@ const session = new GameSession(settings, {
 
 const hud = new Hud(app, () => session.state, { send, saves: session }, settings);
 renderer.labelBlockers = () => hud.blockerRects();
+const title = new TitleScreen(session, settings, {
+  openSettings: () => hud.menu.toggle(),
+  onDismiss: () => session.start(),
+});
 let manualPause = false;
 const input = new Input(
   renderer,
@@ -58,6 +63,7 @@ const input = new Input(
   send,
   settings,
   () => (manualPause = !manualPause),
+  () => title.open,
 );
 
 let assists: Assists = { avoid: true, autoDock: true, chain: true };
@@ -72,10 +78,6 @@ function applySettings(): void {
 }
 settings.onChange(applySettings);
 applySettings();
-
-// Autosave on the chosen interval (re-armed when it changes), plus a save on
-// tab hide / close.
-session.start();
 
 const STEP = 1 / TUNING.simHz;
 let last = performance.now();
@@ -127,15 +129,17 @@ function step(now: number): void {
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
   const s = settings.value;
-  const paused = pauseKind({
-    manual: manualPause,
-    pauseInMenus: s.pauseInMenus,
-    pauseUnfocused: s.pauseUnfocused,
-    menuOpen: hud.menu.open,
-    researchOpen: hud.researchOpen,
-    focused: document.hasFocus(),
-  });
-  hud.setPaused(pauseBanner(paused));
+  const paused = title.open
+    ? 'manual'
+    : pauseKind({
+        manual: manualPause,
+        pauseInMenus: s.pauseInMenus,
+        pauseUnfocused: s.pauseUnfocused,
+        menuOpen: hud.menu.open,
+        researchOpen: hud.researchOpen,
+        focused: document.hasFocus(),
+      });
+  hud.setPaused(title.open ? null : pauseBanner(paused));
   if (crashed) {
     // Nothing more may change the broken game; only loading another (via the menu) recovers.
     acc = 0;
@@ -182,7 +186,8 @@ function step(now: number): void {
 // resetting would reload forever, so after too many losses in a short window the page stays up instead.
 renderer.onContextLost = () => {
   contextLost = true;
-  session.saveNow();
+  // The title screen freezes the sim, so the boot game must not be written; dismissal starts autosave.
+  if (!title.open) session.saveNow();
   if (!recordLoss(safeStorage('sessionStorage'), Date.now())) {
     hud.showNotice('Graphics keep resetting — try lowering quality or disabling anti-aliasing, then reload', {
       label: 'Reload',
@@ -198,5 +203,5 @@ requestAnimationFrame(frame);
 
 // Debug hook for automated checks in the browser console.
 Object.assign(window, {
-  __amh: { state: () => session.state, send, settings, renderer, audio, info: () => renderer.info },
+  __amh: { state: () => session.state, send, settings, renderer, audio, info: () => renderer.info, title },
 });

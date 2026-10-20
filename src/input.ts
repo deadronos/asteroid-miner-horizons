@@ -25,6 +25,7 @@ export class Input {
     private readonly send: (c: Command) => void,
     private readonly settings: SettingsStore,
     private readonly onPause: () => void,
+    private readonly blocked: () => boolean = () => false,
   ) {
     const canvas = renderer.canvas;
     window.addEventListener('keydown', (e) => this.onKey(e));
@@ -76,6 +77,8 @@ export class Input {
   }
 
   private onKey(e: KeyboardEvent): void {
+    // The title screen owns the keyboard, except for Esc while a higher menu (Settings) is open.
+    if (this.blocked() && !(e.code === 'Escape' && this.hud.menu.open)) return;
     // Typing into form fields (save text, selects) must not fly the ship.
     if (['SELECT', 'TEXTAREA', 'INPUT'].includes((e.target as HTMLElement)?.tagName) && e.code !== 'Escape') return;
     if (e.code === 'Escape') {
