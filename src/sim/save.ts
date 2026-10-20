@@ -245,13 +245,15 @@ function isLifetime(p: Profile): boolean {
   );
 }
 
-/** True when `p` has a seed, a warp count, data totals, a finite level for every perk, and well-formed lifetime stats. */
+/** True when `p` has a seed, a warp count, data totals, a finite level for every perk, well-formed lifetime stats and a first-steps flag. */
 function isProfile(p: Profile | undefined): p is Profile {
   if (!p || !finite(p.seed) || !isObj(p.perks)) return false;
   // The next warp numbers its system from the warp count, and research spends data.
   if (!Number.isInteger(p.warps) || p.warps < 0 || !finite(p.data) || !finite(p.dataEarned)) return false;
   // Stats, costs and the refinery read every perk level, so each must be a finite number.
   if (!PERK_IDS.every((k) => finite(p.perks[k]))) return false;
+  // The HUD reads the first-steps flag on every refresh.
+  if (typeof p.goalsDismissed !== 'boolean') return false;
   // The tick adds to every stat and the Stats tab looks up every unlocked achievement.
   return isLifetime(p);
 }

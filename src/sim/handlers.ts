@@ -311,6 +311,7 @@ export const handlers: Handlers = {
       return fail(state, 'Not enough resources for that component.');
     if (cur) refundFitted(state, cur);
     ship.slots[cmd.slot] = { type: cmd.comp, variant: cmd.variant, tier: 1 };
+    state.profile.stats.installs += 1;
     clampToStats(state, ship);
     state.out.log.push({
       level: 'info',
@@ -347,6 +348,12 @@ export const handlers: Handlers = {
       level: 'info',
       text: `Outpost deployed on a large ${rock.kind} asteroid (${Math.round(outpost.reserve)} units in reserve).`,
     });
+  },
+
+  dismissGoals: (state) => {
+    if (state.profile.goalsDismissed) return;
+    state.profile.goalsDismissed = true;
+    state.out.log.push({ level: 'info', text: 'First steps hidden. The help box still lists the controls.' });
   },
 
   abandonContract: (state) => {

@@ -70,6 +70,26 @@ describe('command handlers', () => {
     s.run.bank.ore = 1000;
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
     expect(fs.slots[2]).toEqual({ type: 'shield', variant: 'standard', tier: 1 });
+    expect(s.profile.stats.installs).toBe(1);
+  });
+  it('a rejected install does not count toward the installs stat', () => {
+    const { s, fs } = fs1();
+    s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn' });
+    expect(fs.slots[2]).toBeNull();
+    expect(s.profile.stats.installs).toBe(0);
+  });
+  it('dismissGoals hides the first-steps checklist once, logging one line', () => {
+    const { s } = fs1();
+    expect(s.profile.goalsDismissed).toBe(false);
+    const n = s.out.log.length;
+    send(s, { t: 'dismissGoals' });
+    expect(s.profile.goalsDismissed).toBe(true);
+    expect(s.out.log.length).toBe(n + 1);
+    send(s, { t: 'dismissGoals' });
+    expect(s.profile.goalsDismissed).toBe(true);
+    expect(s.out.log.length).toBe(n + 1);
   });
   it('install fits the chosen variant at tier 1', () => {
     const { s, fs } = fs1();
@@ -407,7 +427,7 @@ describe('command handlers', () => {
     s.run.selectedId = 0;
     handlers.select(s, { t: 'select', shipId: fs.id });
     expect(s.run.selectedId).toBe(fs.id);
-    expect(Object.keys(handlers)).toHaveLength(21);
+    expect(Object.keys(handlers)).toHaveLength(22);
   });
 
   it('warp leaves outposts behind with a warning', () => {

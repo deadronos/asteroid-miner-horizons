@@ -96,6 +96,14 @@ export const migrations: Record<number, Migration> = {
     }
     return d;
   },
+  // v13 added the `installs` stat and the first-steps dismissal (#171). Past
+  // installs were never counted, so the stat starts at 0; the checklist starts
+  // shown, and only ever appears before the first warp.
+  12: (d) => {
+    d.profile.stats.installs = 0;
+    d.profile.goalsDismissed = false;
+    return d;
+  },
 };
 
 export interface MigrateOptions {

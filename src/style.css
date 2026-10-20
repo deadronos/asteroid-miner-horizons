@@ -438,6 +438,58 @@ button.buy small {
   color: var(--txt);
 }
 
+/* First steps (top centre, below the pause and hazard banner slots) */
+#goals {
+  top: 144px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 290px;
+  font-size: 12px;
+}
+#goals .head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#goals .head h3 {
+  margin: 0;
+}
+#goals .close {
+  padding: 0 6px;
+  line-height: 1.3;
+}
+#goals ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+#goals .goal {
+  padding: 2px 0;
+  color: var(--dim);
+}
+#goals .goal.cur {
+  color: var(--txt);
+}
+#goals .goal.done {
+  color: var(--accent);
+}
+#goals .mark {
+  display: inline-block;
+  width: 1.3em;
+}
+#goals .how {
+  display: none;
+  padding-left: 1.3em;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+#goals .goal.cur .how {
+  display: block;
+}
+#goals .hint {
+  margin: 6px 0 0;
+}
+
 /* Tooltip */
 .tooltip {
   position: fixed;
@@ -541,6 +593,14 @@ button.buy small {
   }
   #log {
     max-height: 90px;
+  }
+  /* Only the next goal and the hint fit between the side panels. */
+  #goals {
+    width: min(290px, calc(100vw - 480px));
+    min-width: 170px;
+  }
+  #goals .goal:not(.cur) {
+    display: none;
   }
 }
 

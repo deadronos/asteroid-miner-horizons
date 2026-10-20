@@ -251,6 +251,8 @@ export interface Profile {
   stats: LifetimeStats;
   /** Unlocked achievements, in unlock order. */
   achievements: AchievementId[];
+  /** The player closed the first-steps checklist (#171); it stays hidden for this save. */
+  goalsDismissed: boolean;
 }
 
 export type Fx =
