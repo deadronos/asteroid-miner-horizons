@@ -59,7 +59,8 @@ tests; `tests/__snapshots__/` holds snapshots.
 - `scripts/harness.ts` — `runBot(state, opts)` steps the sim at a fixed 60 Hz, lets the bot decide every 15
   ticks, and drains `out.fx`/`out.log` so long runs don't grow memory.
 - `npm run bench` — times the `tick()` call with a full fleet; over budget warns, never fails.
-- `npm run balance` — plays seeds × warps and writes `docs/balance.md`.
+- `npm run balance` — plays 10 seeds × 10 warps and writes `docs/balance.md`. CI regenerates it and warns
+  (does not fail) when the committed report differs; the header line is ignored.
 
 `bot.test.ts` covers bot decisions. If you add a game system, consider teaching the bot to use it so the
 balance report reflects it — otherwise the numbers silently ignore your feature.

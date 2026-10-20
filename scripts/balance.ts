@@ -6,7 +6,7 @@
 // checked against the ≥40% target from #46.
 //
 //   npm run balance
-//   npm run balance -- --seeds 10 --warps 5 --out docs/balance.md
+//   npm run balance -- --seeds 10 --warps 10 --out docs/balance.md
 //   npm run balance -- --hazards normal --out /tmp/hazards.md   (hazards are off by default)
 //
 // The per-warp table counts seeds whose time more than doubles (> 2× prev), and
@@ -186,6 +186,9 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
   let commit = 'unknown';
   try {
     commit = execSync('git rev-parse --short HEAD', { encoding: 'utf8' }).trim();
+    // Uncommitted sim or harness changes mean HEAD did not produce these numbers.
+    if (execSync('git status --porcelain -- src scripts package-lock.json', { encoding: 'utf8' }).trim())
+      commit += '-dirty';
   } catch {
     // Not a git checkout.
   }
@@ -374,7 +377,7 @@ async function playAll(seedList: number[], warps: number, hazards: HazardLevel):
 
 if (isMainThread) {
   const seeds = Number(arg('seeds', '10'));
-  const warps = Number(arg('warps', '5'));
+  const warps = Number(arg('warps', '10'));
   const seedStart = Number(arg('seed-start', '1000'));
   const out = arg('out', 'docs/balance.md');
   const hazards = arg('hazards', 'off') as HazardLevel;
