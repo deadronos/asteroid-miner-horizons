@@ -51,7 +51,10 @@ const session = new GameSession(settings, {
 
 const hud = new Hud(app, () => session.state, { send, saves: session }, settings);
 renderer.labelBlockers = () => hud.blockerRects();
-const title = new TitleScreen(session, settings, { openSettings: () => hud.menu.toggle() });
+const title = new TitleScreen(session, settings, {
+  openSettings: () => hud.menu.toggle(),
+  onDismiss: () => session.start(),
+});
 let manualPause = false;
 const input = new Input(
   renderer,
@@ -75,10 +78,6 @@ function applySettings(): void {
 }
 settings.onChange(applySettings);
 applySettings();
-
-// Autosave on the chosen interval (re-armed when it changes), plus a save on
-// tab hide / close.
-session.start();
 
 const STEP = 1 / TUNING.simHz;
 let last = performance.now();

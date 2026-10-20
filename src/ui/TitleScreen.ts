@@ -11,6 +11,8 @@ import { nextFocusIndex } from './focus';
 
 export interface TitleActions {
   openSettings(): void;
+  /** Called once when the screen is dismissed; main.ts starts autosave here. */
+  onDismiss?(): void;
 }
 
 /** One-line save summary for the boot screen. */
@@ -35,7 +37,7 @@ export class TitleScreen {
   constructor(
     private readonly saves: SaveActions,
     private readonly settings: SettingsStore,
-    actions: TitleActions,
+    private readonly actions: TitleActions,
   ) {
     const active = saves.active();
     const readable = slotStatus(active).kind === 'ok';
@@ -56,7 +58,7 @@ export class TitleScreen {
       }
       this.dismiss();
     });
-    this.settingsBtn.addEventListener('click', () => actions.openSettings());
+    this.settingsBtn.addEventListener('click', () => this.actions.openSettings());
 
     (readable ? this.continueBtn : this.newBtn).focus();
     this.el.addEventListener('keydown', (e) => {
@@ -84,6 +86,8 @@ export class TitleScreen {
 
   /** Hide the boot screen. Idempotent; the gear menu lives inside `#app`, so `#app` is never made inert. */
   dismiss(): void {
+    if (this.el.hidden) return;
     this.el.hidden = true;
+    this.actions.onDismiss?.();
   }
 }
