@@ -8,7 +8,9 @@
 // danger alarm) come from `updateContinuous`, which is called every frame with
 // a `ContinuousPolicy` selecting which layers may sound that frame (see
 // `pauseAudio`). Generative ambient music (`MusicPlayer`) plays into the music
-// bus via `updateMusic`.
+// bus via `updateMusic`. Every ~0.1 s `consumeLog` collapses the new log lines
+// and fires one rate-limited cue per event identity in the batch, after the deny
+// buzz for rejected-command warn lines.
 
 import type { SettingsStore } from '../settings';
 import type { Fx, GameState, LogEntry } from '../sim/types';
@@ -18,6 +20,8 @@ import {
   alarmLevel,
   beamHums,
   CENTER_CUTOFF,
+  cueBatch,
+  cueVoice,
   type ContinuousPolicy,
   MAX_HUMS,
   PRESETS,
@@ -320,8 +324,10 @@ export class AudioEngine {
     player.update(state.run.system.starClass, state.run.system.number, s.volMaster > 0 && s.volMusic > 0);
   }
 
-  /** Rejected commands (warn-level log lines) get a deny buzz. Read-only. */
+  /** Rejected commands buzz, and each event identity in the batch gets one cue. Read-only. */
   consumeLog(log: readonly LogEntry[]): void {
-    if (log.some((l) => l.level === 'warn')) this.ui('uiDeny');
+    const batch = cueBatch(log);
+    if (batch.deny) this.ui('uiDeny');
+    for (const key of batch.cues) this.play(cueVoice(key));
   }
 }

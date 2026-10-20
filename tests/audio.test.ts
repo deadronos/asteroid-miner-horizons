@@ -3,6 +3,9 @@ import {
   alarmLevel,
   beamHums,
   CENTER_CUTOFF,
+  CUES,
+  cueBatch,
+  cueVoice,
   EDGE_CUTOFF,
   EDGE_GAIN,
   MAX_HUMS,
@@ -11,6 +14,7 @@ import {
   PAN_WIDTH,
   PRESETS,
   RateLimiter,
+  type CueKey,
   type SoundId,
   Streak,
   spatial,
@@ -50,12 +54,148 @@ describe('rate limiter', () => {
 
   it('caps simultaneous voices and frees them on release', () => {
     const l = new RateLimiter();
-    const ids: SoundId[] = ['crack', 'collect', 'dock', 'impact', 'explode', 'warp', 'uiClick', 'uiDeny'];
+    const ids: SoundId[] = [
+      'crack',
+      'collect',
+      'dock',
+      'impact',
+      'explode',
+      'warp',
+      'uiClick',
+      'uiDeny',
+      'research',
+      'achievement',
+      'contractDone',
+      'contractFail',
+      'outpost',
+      'loss',
+    ];
     let started = 0;
     for (let i = 0; i < 40; i++) if (l.allow(ids[i % ids.length]!, i)) started++;
     expect(started).toBe(MAX_VOICES);
     l.release();
     expect(l.allow('crack', 100)).toBe(true);
+  });
+});
+
+describe('event cues', () => {
+  const keys = ['research', 'achievement', 'contractDone', 'contractFail', 'outpost', 'shipLoss'] as CueKey[];
+
+  it('maps every cue key to its own preset at its pinned level', () => {
+    // oxlint-disable-next-line unicorn/no-array-sort -- the sorted copies are test-local
+    expect(Object.keys(CUES).sort()).toEqual([...keys].sort());
+    expect(new Set(keys.map((k) => CUES[k])).size).toBe(keys.length);
+    const levels = Object.fromEntries(keys.map((k) => [k, PRESETS[CUES[k]][0]]));
+    expect(levels).toEqual({
+      research: 0.5,
+      achievement: 0.7,
+      contractDone: 0.6,
+      contractFail: 0.45,
+      outpost: 0.55,
+      shipLoss: 0.7,
+    });
+  });
+
+  it('plays each cue dead centre at gain 1, so the preset level is applied once', () => {
+    for (const k of keys) {
+      expect(cueVoice(k)).toEqual({ id: CUES[k], gain: 1, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
+    }
+  });
+
+  it('plays a failed contract as its own cue without the deny buzz', () => {
+    expect(cueBatch([{ level: 'warn', text: 'Contract failed: …', event: 'contractFail' }])).toEqual({
+      deny: false,
+      cues: ['contractFail'],
+    });
+    expect(
+      cueBatch([
+        { level: 'warn', text: 'Contract failed: …', event: 'contractFail' },
+        { level: 'warn', text: 'Not enough resources in the station bank' },
+      ]),
+    ).toEqual({ deny: true, cues: ['contractFail'] });
+  });
+
+  it('lets an achievement unlocked with a contract payout replace the payout chime', () => {
+    expect(
+      cueBatch([
+        { level: 'major', text: 'Contract complete: …', event: 'contractDone' },
+        { level: 'major', text: 'Achievement unlocked: Contractor. …', achievement: 'contractor' },
+      ]),
+    ).toEqual({ deny: false, cues: ['achievement'] });
+  });
+
+  it('collapses a same-batch burst to one cue per identity', () => {
+    expect(
+      cueBatch([
+        { level: 'major', text: 'A was destroyed.', event: 'shipLoss' },
+        { level: 'major', text: 'B was destroyed.', event: 'shipLoss' },
+        { level: 'major', text: 'C was destroyed.', event: 'shipLoss' },
+      ]),
+    ).toEqual({ deny: false, cues: ['shipLoss'] });
+  });
+
+  it('keeps the deny flag for warn lines and gathers achievement plus event identities in order', () => {
+    expect(
+      cueBatch([
+        { level: 'info', text: 'Researched Optics 1.', event: 'research' },
+        { level: 'warn', text: 'Not enough resources in the station bank' },
+        {
+          level: 'info',
+          text: 'Outpost deployed on a large …',
+          event: 'outpost',
+        },
+        {
+          level: 'major',
+          text: 'Achievement unlocked: …',
+          achievement: 'firstCrack',
+        },
+      ]),
+    ).toEqual({
+      deny: true,
+      cues: ['research', 'outpost', 'achievement'],
+    });
+  });
+
+  it('paces research through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('research', 0)).toBe(true);
+    expect(l.allow('research', 0.14)).toBe(false);
+    expect(l.allow('research', 0.15)).toBe(true);
+  });
+
+  it('paces achievement through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('achievement', 0)).toBe(true);
+    expect(l.allow('achievement', 0.49)).toBe(false);
+    expect(l.allow('achievement', 0.5)).toBe(true);
+  });
+
+  it('paces contractDone through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('contractDone', 0)).toBe(true);
+    expect(l.allow('contractDone', 0.29)).toBe(false);
+    expect(l.allow('contractDone', 0.3)).toBe(true);
+  });
+
+  it('paces contractFail through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('contractFail', 0)).toBe(true);
+    expect(l.allow('contractFail', 0.29)).toBe(false);
+    expect(l.allow('contractFail', 0.3)).toBe(true);
+  });
+
+  it('paces outpost through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('outpost', 0)).toBe(true);
+    expect(l.allow('outpost', 0.29)).toBe(false);
+    expect(l.allow('outpost', 0.3)).toBe(true);
+  });
+
+  it('paces loss through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('loss', 0)).toBe(true);
+    expect(l.allow('loss', 0.39)).toBe(false);
+    expect(l.allow('loss', 0.4)).toBe(true);
   });
 });
 

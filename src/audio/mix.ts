@@ -39,6 +39,9 @@ export const REVERB_SEND: Readonly<Partial<Record<SoundId, number>>> = Object.fr
   explode: 0.32,
   dock: 0.22,
   collect: 0.12,
+  achievement: 0.22,
+  contractDone: 0.22,
+  loss: 0.32,
 });
 
 /**
