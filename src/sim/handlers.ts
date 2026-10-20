@@ -7,7 +7,7 @@ import { v } from '../core/vec';
 import { COMPONENTS, isVariant, variantDef, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
-import { credit, formatCost, pay } from '../data/resources';
+import { credit, emptyWallet, formatCost, formatWallet, pay } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { makeOutpost, outpostAt, outpostBlock } from './automation';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
@@ -155,14 +155,29 @@ export const handlers: Handlers = {
       // Bought slots carry over, up to the new hull's cap, and fitted parts keep their indices.
       const n = Math.min(h.maxSlots, Math.max(h.slots, old.length));
       fs.hullId = cmd.hullId;
-      fs.slots = Array.from({ length: n }, (_, i) => old[i] ?? null);
-      // Parts that no longer fit are refunded at half value.
+      const slots = Array.from({ length: n }, (_, i) => old[i] ?? null);
+      // Parts past the new cap move into free slots below it, in order; only what still has no room is
+      // refunded at half value.
+      const refund = emptyWallet();
+      let free = 0;
       for (let i = n; i < old.length; i++) {
         const extra = old[i];
-        if (extra) refundFitted(state, extra);
+        if (!extra) continue;
+        while (free < n && slots[free]) free++;
+        if (free < n) slots[free++] = extra;
+        else credit(refund, scrapValue(extra));
       }
+      fs.slots = slots;
+      credit(run.bank, refund);
       fs.hull = frac * shipStats(fs, profile).maxHull;
-      out.log.push({ level: 'major', text: `Flagship refitted onto a ${h.name} hull.` });
+      clampToStats(state, fs);
+      const parts = formatWallet(refund);
+      out.log.push({
+        level: 'major',
+        text: parts
+          ? `Flagship refitted onto a ${h.name} hull. Parts that no longer fit were scrapped for ${parts}.`
+          : `Flagship refitted onto a ${h.name} hull.`,
+      });
     } else {
       const st = run.system.station.pos;
       const n = droneCount(run) + 1;
@@ -283,11 +298,15 @@ export const handlers: Handlers = {
     const t = slotTarget(state, ship, cmd.slot);
     if (!t) return;
     const { cur } = t;
-    if (cur?.type === cmd.comp)
+    if (cur?.type === cmd.comp) {
+      const fitted = variantDef(cur.type, cur.variant).name;
       return fail(
         state,
-        `${ship.name}: slot ${cmd.slot + 1} already holds a ${COMPONENTS[cmd.comp].name}. Remove it before fitting ${variantDef(cmd.comp, cmd.variant).name}.`,
+        cur.variant === cmd.variant
+          ? `${ship.name}: slot ${cmd.slot + 1} already holds a ${fitted}.`
+          : `${ship.name}: slot ${cmd.slot + 1} already holds a ${fitted}. Remove it before fitting ${variantDef(cmd.comp, cmd.variant).name}.`,
       );
+    }
     if (!pay(state.run.bank, variantDef(cmd.comp, cmd.variant).cost(1)))
       return fail(state, 'Not enough resources for that component.');
     if (cur) refundFitted(state, cur);

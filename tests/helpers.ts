@@ -2,6 +2,7 @@
 // thrust, and apply a single command directly.
 
 import type { HazardLevel } from '../src/data/hazards';
+import { RESOURCES, type Cost, type Wallet } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import type { Assists } from '../src/sim/assists';
 import { applyCommand, type Command } from '../src/sim/commands';
@@ -43,3 +44,8 @@ export function runFor(state: GameState, seconds: number, opts: RunOpts = {}): v
 
 /** Applies one command immediately, outside a tick. */
 export const send = (state: GameState, cmd: Command): void => applyCommand(state, cmd);
+
+/** Per-resource change from `before` to `after`, for asserting exact refunds and charges. */
+export function bankDelta(before: Wallet, after: Wallet): Cost {
+  return Object.fromEntries(RESOURCES.map((r) => [r, after[r] - before[r]])) as Cost;
+}
