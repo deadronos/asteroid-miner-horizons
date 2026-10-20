@@ -64,6 +64,22 @@
    `tsconfig` has `types: []` (the same pattern as `tests/layers.test.ts`), and its regexes
    tolerate oxfmt wrapping the metadata attributes.
 
+## Final review follow-up
+
+The whole-branch review returned "ready to merge" with three polish items, applied in the
+closing commit:
+
+1. **Context-loss save guard.** `renderer.onContextLost` now skips `session.saveNow()`
+   while the title is open, so a GPU reset on the boot screen cannot write the untouched
+   0 s game behind the player's back — the last path that could write while the title was
+   up.
+2. **Stronger metadata assertions.** The metadata test now pins the exact description and
+   `og:description` text, the exact `og:url` and `twitter:card` values, and `theme-color`,
+   not just tag presence.
+3. **Comment correction.** The Tab-trap comment now states the real reason it is safe:
+   while the gear menu is open, focus is inside it, so its keydowns never bubble through
+   `#boot`.
+
 ## Acceptance criteria (issue #163)
 
 - **First paint shows a styled screen rather than a blank canvas.** Static `#boot` markup

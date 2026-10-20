@@ -10,15 +10,22 @@ const { readFileSync } = (
 ).process.getBuiltinModule('node:fs');
 
 const html = readFileSync(new URL('../index.html', import.meta.url), 'utf8');
+// Attribute values span lines in the source; collapse whitespace so each tag can be matched as one string.
+const head = html.replace(/\s+/g, ' ');
+const DESCRIPTION =
+  'Mine asteroids, command a drone fleet and warp across a procedural star system in this top-down sci-fi mining sim.';
 
 describe('document metadata', () => {
   it('has a description, theme colour, favicon and social tags', () => {
-    expect(html).toMatch(/<meta\s+name="description"\s+content="[^"]+"/);
-    expect(html).toContain('<meta name="theme-color" content="#03060d"');
-    expect(html).toMatch(/<link\s+rel="icon"\s+href="data:image\/svg\+xml,/);
+    expect(head).toContain(`<meta name="description" content="${DESCRIPTION}"`);
+    expect(head).toContain(`<meta property="og:description" content="${DESCRIPTION}"`);
+    expect(head).toContain('<meta property="og:url" content="https://deadronos.github.io/asteroid-miner-horizons/"');
+    expect(head).toContain('<meta name="twitter:card" content="summary"');
+    expect(head).toContain('<meta name="theme-color" content="#03060d"');
+    expect(head).toMatch(/<link rel="icon" href="data:image\/svg\+xml,/);
     for (const property of ['og:title', 'og:description', 'og:type', 'og:site_name', 'og:url'])
-      expect(html).toContain(`property="${property}"`);
-    expect(html).toContain('name="twitter:card"');
+      expect(head).toContain(`property="${property}"`);
+    expect(head).toContain('name="twitter:card"');
   });
 });
 

@@ -62,7 +62,7 @@ export class TitleScreen {
 
     (readable ? this.continueBtn : this.newBtn).focus();
     this.el.addEventListener('keydown', (e) => {
-      // The gear menu's trap (a window listener) runs first when it is open, so it owns Tab then.
+      // While the gear menu is open focus is inside it, so its keydown never bubbles through #boot.
       if (e.key !== 'Tab' || e.defaultPrevented) return;
       const buttons = [this.continueBtn, this.newBtn, this.settingsBtn].filter((b) => !b.hidden);
       if (buttons.length === 0) return;

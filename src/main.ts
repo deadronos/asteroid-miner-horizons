@@ -186,7 +186,8 @@ function step(now: number): void {
 // resetting would reload forever, so after too many losses in a short window the page stays up instead.
 renderer.onContextLost = () => {
   contextLost = true;
-  session.saveNow();
+  // The title screen freezes the sim, so the boot game must not be written; dismissal starts autosave.
+  if (!title.open) session.saveNow();
   if (!recordLoss(safeStorage('sessionStorage'), Date.now())) {
     hud.showNotice('Graphics keep resetting — try lowering quality or disabling anti-aliasing, then reload', {
       label: 'Reload',
