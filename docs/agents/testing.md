@@ -10,7 +10,8 @@ npx vitest                        # watch mode
 npm run check                     # format:check + lint + typecheck + tests — the gate
 ```
 
-There is no Vitest config file, so tests run in the default **node** environment: no jsdom, no real browser, no
+Vitest is configured by the `test` block in `vite.config.ts`: it collects only `tests/**/*.test.ts` (never the
+copies under `.claude/worktrees/`) and keeps the default **node** environment: no jsdom, no real browser, no
 WebGL. Tests still import three.js where it is useful, because geometry and math classes construct fine
 without a renderer.
 
