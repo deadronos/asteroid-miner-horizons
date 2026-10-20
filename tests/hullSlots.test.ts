@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { HULL_IDS, HULLS } from '../src/data/hulls';
 import { COMPONENT_IDS } from '../src/data/components';
+import { RESOURCES, type Cost } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
-import { slotCost } from '../src/sim/economy';
+import { scrapValue, slotCost } from '../src/sim/economy';
 import { flagship, makeShip } from '../src/sim/ships';
+import type { Fitted } from '../src/sim/types';
 import { send } from './helpers';
 
 const rich = () => {
@@ -83,5 +85,48 @@ describe('slot expansion (#141)', () => {
     expect(fs.slots).toHaveLength(8);
     send(s, { t: 'buyHull', hullId: 'prospector' });
     expect(fs.slots).toHaveLength(6);
+  });
+
+  it('a flagship refit keeps fitted parts at their slot indices', () => {
+    const s = rich();
+    const fs = flagship(s.run);
+    fs.slots = [
+      null,
+      { type: 'shield', variant: 'standard', tier: 1 },
+      { type: 'cargo', variant: 'standard', tier: 1 },
+      null,
+    ];
+    send(s, { t: 'buyHull', hullId: 'excavator' });
+    expect(fs.slots).toEqual([
+      null,
+      { type: 'shield', variant: 'standard', tier: 1 },
+      { type: 'cargo', variant: 'standard', tier: 1 },
+      null,
+      null,
+      null,
+    ]);
+    expect(fs.slots.filter((f) => f)).toHaveLength(2);
+  });
+
+  it('a flagship refit refunds fitted parts beyond the new hull cap', () => {
+    const s = rich();
+    const fs = flagship(s.run);
+    send(s, { t: 'buyHull', hullId: 'excavator' });
+    send(s, { t: 'buySlot', shipId: fs.id });
+    send(s, { t: 'buySlot', shipId: fs.id }); // Excavator at 8
+    const sensor: Fitted = { type: 'sensor', variant: 'standard', tier: 1 };
+    const cargo: Fitted = { type: 'cargo', variant: 'standard', tier: 1 };
+    fs.slots[6] = sensor;
+    fs.slots[7] = cargo;
+    const before = { ...s.run.bank };
+    send(s, { t: 'buyHull', hullId: 'prospector' }); // Prospector caps at 6
+    expect(fs.slots).toHaveLength(6);
+    const refund = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    for (const f of [sensor, cargo]) {
+      const value = scrapValue(f);
+      for (const r of RESOURCES) refund[r] += value[r] ?? 0;
+    }
+    const delta = Object.fromEntries(RESOURCES.map((r) => [r, s.run.bank[r] - before[r]])) as Cost;
+    expect(delta).toEqual(refund);
   });
 });

@@ -151,13 +151,16 @@ export const handlers: Handlers = {
     if (h.role === 'flagship') {
       const fs = flagship(run);
       const frac = fs.hull / shipStats(fs, profile).maxHull;
-      const old = fs.slots.filter((s) => s);
-      // Bought slots carry over, up to the new hull's cap.
-      const n = Math.min(h.maxSlots, Math.max(h.slots, fs.slots.length));
+      const old = fs.slots;
+      // Bought slots carry over, up to the new hull's cap, and fitted parts keep their indices.
+      const n = Math.min(h.maxSlots, Math.max(h.slots, old.length));
       fs.hullId = cmd.hullId;
       fs.slots = Array.from({ length: n }, (_, i) => old[i] ?? null);
       // Parts that no longer fit are refunded at half value.
-      for (const extra of old.slice(n)) refundFitted(state, extra!);
+      for (let i = n; i < old.length; i++) {
+        const extra = old[i];
+        if (extra) refundFitted(state, extra);
+      }
       fs.hull = frac * shipStats(fs, profile).maxHull;
       out.log.push({ level: 'major', text: `Flagship refitted onto a ${h.name} hull.` });
     } else {
@@ -280,7 +283,11 @@ export const handlers: Handlers = {
     const t = slotTarget(state, ship, cmd.slot);
     if (!t) return;
     const { cur } = t;
-    if (cur?.type === cmd.comp) return;
+    if (cur?.type === cmd.comp)
+      return fail(
+        state,
+        `${ship.name}: slot ${cmd.slot + 1} already holds a ${COMPONENTS[cmd.comp].name}. Remove it before fitting ${variantDef(cmd.comp, cmd.variant).name}.`,
+      );
     if (!pay(state.run.bank, variantDef(cmd.comp, cmd.variant).cost(1)))
       return fail(state, 'Not enough resources for that component.');
     if (cur) refundFitted(state, cur);
