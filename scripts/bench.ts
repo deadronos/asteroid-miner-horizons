@@ -1,8 +1,8 @@
 // Headless tick benchmark (#12). A full fleet (flagship + max drones, all
 // kept busy by the bot) runs 10 sim minutes in one system; only the tick()
-// call is timed. Then the resulting save is written to a slot 100 times (the
-// autosave cost) and exported compactly. Over budget prints a GitHub Actions
-// warning but never fails.
+// call is timed. Then the resulting save is checked to load back and written
+// to a slot 100 times (the autosave cost) and exported compactly. Over budget
+// prints a GitHub Actions warning but never fails.
 //
 //   npm run bench                     # print results
 //   npm run bench -- --json out.json  # also write them as JSON
@@ -11,7 +11,7 @@
 import { writeFileSync } from 'node:fs';
 import { newGame } from '../src/sim/create';
 import { PERKS } from '../src/data/perks';
-import { exportCompact, writeSlot } from '../src/sim/save';
+import { exportCompact, loadsBack, writeSlot } from '../src/sim/save';
 import { droneCount, fleetCap } from '../src/sim/ships';
 import { runBot } from './harness';
 
@@ -53,6 +53,7 @@ Object.defineProperty(globalThis, 'localStorage', {
 const saveTimes = new Float64Array(SAVE_RUNS);
 for (let i = 0; i < SAVE_RUNS; i++) {
   const t0 = performance.now();
+  if (!loadsBack(state)) throw new Error('the bench save would not load back');
   writeSlot(0, state);
   saveTimes[i] = performance.now() - t0;
 }

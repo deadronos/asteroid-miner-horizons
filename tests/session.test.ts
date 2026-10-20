@@ -162,6 +162,30 @@ describe('GameSession write failures', () => {
     expect(failures()).toBe(2);
   });
 
+  it('keeps the last good save when the running game would not load back, warning once', () => {
+    const s = new GameSession(settings());
+    atTime(s.state, 4);
+    s.saveNow();
+    const bad = (): number => s.state.out.log.filter((e) => e.text.includes('would not load back')).length;
+
+    // JSON writes NaN as null, which the load rejects, so this save would leave the slot unreadable.
+    atTime(s.state, 9);
+    s.state.run.ships[0]!.pos.x = NaN;
+    s.saveNow();
+    s.saveNow();
+    expect(slotStatus(0)).toMatchObject({ kind: 'ok', record: { state: { run: { time: 4 } } } });
+    expect(bad()).toBe(1);
+    expect(s.state.out.log.filter((e) => e.text.includes('Saved to slot'))).toHaveLength(1);
+    expect(s.state.out.log.find((e) => e.text.includes('would not load back'))).toMatchObject({ level: 'warn' });
+
+    s.state.run.ships[0]!.pos.x = 0;
+    s.saveNow();
+    expect(readSlot(0)!.state.run.time).toBe(9);
+    s.state.run.ships[0]!.pos.x = NaN;
+    s.saveNow();
+    expect(bad()).toBe(2);
+  });
+
   it('reports a failed import instead of claiming success', () => {
     const s = new GameSession(settings());
     store.setItem = () => {

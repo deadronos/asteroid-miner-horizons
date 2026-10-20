@@ -257,8 +257,14 @@ function updatePickups(state: GameState, index: SimIndex, dt: number): void {
     if (best) {
       const st = stats.get(best.id)!;
       const pull = TUNING.tractorSpeed * (0.4 + 0.6 * (1 - bestD / st.magnet));
-      p.vel.x = best.vel.x + ((best.pos.x - p.pos.x) / bestD) * pull;
-      p.vel.z = best.vel.z + ((best.pos.z - p.pos.z) / bestD) * pull;
+      // A pickup sitting exactly on the ship has no direction to be pulled in (0 / 0), so it just rides along.
+      if (bestD < 1e-6) {
+        p.vel.x = best.vel.x;
+        p.vel.z = best.vel.z;
+      } else {
+        p.vel.x = best.vel.x + ((best.pos.x - p.pos.x) / bestD) * pull;
+        p.vel.z = best.vel.z + ((best.pos.z - p.pos.z) / bestD) * pull;
+      }
       if (bestD < TUNING.pickupCollectRadius + st.size) {
         const take = Math.min(cargoFree(best, st), p.amount);
         best.cargo[p.kind] += take;

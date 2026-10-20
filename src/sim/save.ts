@@ -59,6 +59,14 @@ export function deserialize(json: string, opts?: MigrateOptions): GameState | nu
   }
 }
 
+/**
+ * True when `state` would load back from its own save. JSON writes NaN and Infinity as null, so a game a bug left
+ * holding one would otherwise be saved as text the load rejects.
+ */
+export function loadsBack(state: GameState): boolean {
+  return deserialize(serialize(state)) !== null;
+}
+
 /** True for any non-null object (arrays included); narrows so fields can be read as `unknown`. */
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object';
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
@@ -237,9 +245,11 @@ function isLifetime(p: Profile): boolean {
   );
 }
 
-/** True when `p` has a seed, a finite level for every perk, and well-formed lifetime stats. */
+/** True when `p` has a seed, a warp count, data totals, a finite level for every perk, and well-formed lifetime stats. */
 function isProfile(p: Profile | undefined): p is Profile {
-  if (!p || typeof p.seed !== 'number' || !isObj(p.perks)) return false;
+  if (!p || !finite(p.seed) || !isObj(p.perks)) return false;
+  // The next warp numbers its system from the warp count, and research spends data.
+  if (!Number.isInteger(p.warps) || p.warps < 0 || !finite(p.data) || !finite(p.dataEarned)) return false;
   // Stats, costs and the refinery read every perk level, so each must be a finite number.
   if (!PERK_IDS.every((k) => finite(p.perks[k]))) return false;
   // The tick adds to every stat and the Stats tab looks up every unlocked achievement.

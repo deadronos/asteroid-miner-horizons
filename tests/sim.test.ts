@@ -81,6 +81,19 @@ describe('mining loop', () => {
     expect(docked).toBeCloseTo(collected, 6);
     expect(docked).toBeCloseTo(s.run.runValue, 6);
   });
+
+  it('keeps a pickup sitting exactly on a ship finite', () => {
+    const s = newGame(7);
+    const ship = flagship(s.run);
+    const st = s.run.system.station.pos;
+    ship.pos = { x: st.x + 40, z: st.z };
+    ship.vel = { x: 0, z: 0 };
+    // More than the hold takes, so the pickup survives the tick with whatever velocity the tractor gave it.
+    s.run.pickups.push({ id: 9001, kind: 'ore', amount: 1e6, pos: { ...ship.pos }, vel: { x: 0, z: 0 }, age: 0 });
+    tick(s, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+    const p = s.run.pickups.find((q) => q.id === 9001)!;
+    expect([p.pos.x, p.pos.z, p.vel.x, p.vel.z].every(Number.isFinite)).toBe(true);
+  });
 });
 
 describe('progression', () => {
