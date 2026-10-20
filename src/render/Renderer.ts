@@ -262,9 +262,7 @@ export class Renderer {
     this.gl.info.reset();
     const { run } = state;
     const sys = run.system;
-    const key = `${sys.name}#${sys.number}`;
-    if (this.system.key !== key) {
-      this.system.build(sys);
+    if (this.system.sync(sys)) {
       this.warmup = true;
       this.flareGlow = 0;
       this.backdrop.setSystem(state.profile.seed + sys.number);
