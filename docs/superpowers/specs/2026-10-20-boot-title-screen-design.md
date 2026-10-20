@@ -28,10 +28,17 @@ The screen is a full-viewport card over a dark star-field gradient with:
 
 ### The session still loads before the title screen appears
 
-`GameSession` keeps its current behaviour: it loads the active slot, credits offline
-progress and starts autosave at the same point as today. The title screen is a view over
-that session, not a second boot path. This is what keeps the session/autosave flow free
-of regressions and makes **Continue** instant.
+`GameSession` keeps its current behaviour on construction: it loads the active slot and
+credits offline progress. The title screen is a view over that session, not a second boot
+path, which makes **Continue** instant.
+
+**Ruling — autosave starts when the title is dismissed.** The boot game is frozen and the
+player has not chosen anything yet, so writing it on the autosave timer would create a
+save behind the title and make the first **New game** click ask to erase an untouched
+0 s game. `main.ts` therefore calls `session.start()` from the title's dismiss callback
+instead of before the loop. The interval, page-hide save and offline credit are unchanged
+once the game starts; a title left open writes nothing. Cost if wrong: no autosave while
+the title is up, when the sim is frozen and there is nothing to save anyway.
 
 **Ruling — no auto-load bypass setting.** The issue offers a setting for returning
 players; the title screen always appears. A returning player clicks Continue, which is
@@ -110,9 +117,11 @@ renderer internals, HUD panels, autosave timing.
 4. **Settings cannot be reached, or closing it loses the title.** The gear menu is a
    higher layer (`z-index: 30`) than the boot card (`28`); the browser pass opens and
    closes it with the title still up.
-5. **Autosave/session regressions.** `GameSession` is unchanged; the existing
-   `tests/session.test.ts`, `tests/settings.test.ts` and the full suite run after each
-   task, and the browser pass reloads into Continue with the same system/time.
+5. **Autosave/session regressions.** `GameSession` is unchanged; only `session.start()`
+   moves to the dismiss callback. The existing `tests/session.test.ts`,
+   `tests/settings.test.ts` and the full suite run after each task, and the browser pass
+   reloads into Continue with the same system/time. A title left open must leave storage
+   untouched.
 6. **Metadata is malformed or a tag is missed.** `tests/indexHtml.test.ts` asserts the
    description, theme colour, favicon and each Open Graph/Twitter tag, and the browser
    pass reads the live `<head>`.

@@ -7,6 +7,9 @@ warp to a fresh system and spend Horizon Data on permanent research.
 
 **Play it online:** <https://deadronos.github.io/asteroid-miner-horizons/>
 
+The first screen offers **Continue** for the active save, **New game** and **Settings**; your
+first click also unlocks audio.
+
 ## Quick start
 
 ```bash

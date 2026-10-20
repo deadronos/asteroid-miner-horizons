@@ -12,7 +12,7 @@
 
 ## Global Constraints
 
-- **`GameSession`, `src/sim/**`, the save format and the settings shape are not touched.** The session still loads, credits offline progress and arms autosave exactly when it does today.
+- **`GameSession`, `src/sim/**`, the save format and the settings shape are not touched.** The session still loads and credits offline progress on construction, but `session.start()` moves from before the loop to the title's dismiss callback, so an untouched boot game is never autosaved and the first New game cannot prompt to erase a 0 s save.
 - **The boot markup and its critical CSS live in `index.html`**, not in a module-created element, so the styled screen is the first paint. `#boot` sits after `#app` and uses `z-index: 28` (above the pause banner at 25, below the gear modal at 30).
 - **Continue is shown only when `slotStatus(saves.active()).kind === 'ok'`.** New game re-reads the active slot at click time and calls `session.newGame(active)` only for a readable save; it never clears an unreadable one.
 - **While the title is open:** the tick does not run (manual-pause path), the pause banner is suppressed, `Input.onKey` returns immediately, and Tab cycles through the visible boot buttons. `#app` is **not** inert, because the gear menu lives inside it and Settings must remain usable. The renderer and HUD still run.
@@ -137,6 +137,8 @@ metadata, and nothing else in the repo changed.
   ```ts
   export interface TitleActions {
     openSettings(): void;
+    /** Called once when the screen is dismissed; `main.ts` starts autosave here. */
+    onDismiss?(): void;
   }
 
   /** One-line save summary for the boot screen. */
@@ -190,14 +192,17 @@ metadata, and nothing else in the repo changed.
     return early when `e.defaultPrevented` (the gear menu's trap runs first when it is
     open), otherwise cycle `[continue, newGame, settings].filter((b) => !b.hidden)` with
     `nextFocusIndex` from `./focus` and `e.preventDefault()`.
-  - `dismiss()` sets `el.hidden = true`, idempotently. Do **not** set `#app.inert`: the
-    gear menu lives inside `#app` and Settings must stay clickable.
+  - `dismiss()` sets `el.hidden = true`, calls `actions.onDismiss?.()`, idempotently. Do
+    **not** set `#app.inert`: the gear menu lives inside `#app` and Settings must stay
+    clickable.
   - `get open()` returns `!el.hidden`.
 - [ ] **Step 4: Run the test and see it pass.** Run `npx vitest run tests/title.test.ts`.
   Expected: PASS.
 - [ ] **Step 5: Wire `src/main.ts`.**
   - Import `TitleScreen` and construct it after `hud`:
-    `const title = new TitleScreen(session, settings, { openSettings: () => hud.menu.toggle() });`
+    `const title = new TitleScreen(session, settings, { openSettings: () => hud.menu.toggle(), onDismiss: () => session.start() });`
+  - Delete the early `session.start();` that currently precedes the loop; autosave now
+    begins on dismissal.
   - Pass a final argument to `new Input(...)`: `() => title.open`.
   - In `step`, compute `const paused = title.open ? 'manual' : pauseKind({...})` and call
     `hud.setPaused(title.open ? null : pauseBanner(paused))`. Leave the rest of the loop
@@ -230,11 +235,14 @@ changed.
     hidden, New game and Settings are visible, and the card fits at 1440x900 and 1024x768.
   - **First paint:** `#boot` has a non-transparent background and the title is readable
     without waiting for a click; no console errors and no `favicon.ico` 404.
-  - **Freeze:** `__amh.title.open === true`; record `__amh.state().run.time`, wait ~1 s,
-    record it again and assert it is unchanged; press `R` and assert the research panel
-    did not open; press Tab and assert focus stays on a visible boot button.
-  - **New game:** click it; `#boot` hidden, `__amh.audio.state === 'running'` (first click
-    unlocked audio), and `run.time` starts advancing.
+  - **Freeze and no autosave:** `__amh.title.open === true`; record
+    `__amh.state().run.time`, wait ~1 s, record it again and assert it is unchanged; wait
+    past the 10 s autosave interval and assert `localStorage` still has no save keys; press
+    `R` and assert the research panel did not open; press Tab and assert focus stays on a
+    visible boot button.
+  - **New game (fresh):** click it; no native confirm appears, `#boot` hidden,
+    `__amh.audio.state === 'running'` (first click unlocked audio), and `run.time` starts
+    advancing. The save keys appear only after dismissal.
   - **Reload into Continue:** wait for an autosave, record system/time, reload, assert
     Continue is visible and the summary names the slot/system/time; click Continue and
     assert the same system/time is still there.
