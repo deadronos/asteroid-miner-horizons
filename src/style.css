@@ -592,6 +592,9 @@ button.tab.active {
 .slotcard.empty {
   border-style: dashed;
 }
+.slotcard.unreadable {
+  border-color: var(--bad);
+}
 .slotcard .row {
   margin-top: 6px;
 }
@@ -611,6 +614,10 @@ button.tab.active {
   background: var(--accent);
   border-radius: 4px;
   padding: 1px 5px;
+}
+.badge.bad {
+  color: #fff;
+  background: var(--bad);
 }
 .textwin {
   position: absolute;

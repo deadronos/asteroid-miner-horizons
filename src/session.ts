@@ -1,13 +1,25 @@
 // The playing session: which save slot is running, the live GameState, and
 // every way it changes (load, new game, import, delete, autosave). Loading a
 // save credits offline progress for the time since it was written, then saves
-// at once so a reload cannot credit the same absence twice. `main.ts` only
-// wires the renderer, HUD, input and loop around this.
+// at once so a reload cannot credit the same absence twice. A slot whose save
+// can't be read is never written over unasked: startup moves to an empty slot,
+// or runs unsaved when there is none. `main.ts` only wires the renderer, HUD,
+// input and loop around this.
 
 import { newGame } from './sim/create';
 import { SimIndex } from './sim/index';
 import { applyOffline } from './sim/offline';
-import { activeSlot, clearSlot, migrateLegacy, readSlot, type SaveRecord, setActiveSlot, writeSlot } from './sim/save';
+import {
+  activeSlot,
+  clearSlot,
+  firstEmptySlot,
+  migrateLegacy,
+  readSlot,
+  type SaveRecord,
+  setActiveSlot,
+  slotStatus,
+  writeSlot,
+} from './sim/save';
 import type { GameState } from './sim/types';
 import type { SettingsStore } from './settings';
 
@@ -15,6 +27,8 @@ import type { SettingsStore } from './settings';
 export interface SaveActions {
   active(): number;
   current(): GameState;
+  /** False while the running game sits on a slot holding an unreadable save, which it must not overwrite. */
+  saving(): boolean;
   saveNow(): void;
   load(slot: number): void;
   newGame(slot: number): void;
@@ -33,6 +47,10 @@ export interface GameSessionHooks {
 export class GameSession implements SaveActions {
   private running: GameState;
   private slot: number;
+  /** True while the running game must not be written: its slot holds a save this build can't read. */
+  private unsaved = false;
+  /** True once a failed write has been reported; cleared by the next successful one. */
+  private writeWarned = false;
   private autosaveTimer = 0;
   /** The interval the timer runs at, or null while stopped. */
   private armedSec: number | null = null;
@@ -48,8 +66,10 @@ export class GameSession implements SaveActions {
   ) {
     migrateLegacy();
     this.slot = activeSlot();
-    const rec = readSlot(this.slot);
+    const st = slotStatus(this.slot);
+    const rec = st.kind === 'ok' ? st.record : null;
     this.running = rec?.state ?? newGame();
+    if (st.kind === 'unreadable') this.avoidUnreadable(st.reason);
     if (this.running.run.time > 0) this.logLoaded(this.slot);
     if (rec) this.creditOffline(rec.savedAt);
     // Only a change to the interval restarts the timer, so unrelated settings
@@ -72,10 +92,17 @@ export class GameSession implements SaveActions {
     return this.state;
   }
 
+  saving(): boolean {
+    return !this.unsaved;
+  }
+
   /** Save now, with the notice the menu shows. */
   saveNow(): void {
-    this.persist();
-    this.state.out.log.push({ level: 'info', text: `Saved to slot ${this.slot + 1}.` });
+    if (this.unsaved) {
+      this.warnUnsaved();
+      return;
+    }
+    if (this.persist()) this.state.out.log.push({ level: 'info', text: `Saved to slot ${this.slot + 1}.` });
   }
 
   /** Switch to the save in slot `i`, saving the running game first. */
@@ -92,19 +119,30 @@ export class GameSession implements SaveActions {
     // Save the old game unless this restarts its own slot, which the new game
     // overwrites anyway.
     if (i === this.slot) clearSlot(i);
-    else this.persist();
+    else this.persist(); // a no-op while unsaved, so an unreadable slot is kept
     this.adopt(i);
   }
 
   /** Copy an imported record into slot `i`; the running game is untouched. */
   importTo(i: number, rec: SaveRecord): void {
-    writeSlot(i, rec.state);
-    this.state.out.log.push({ level: 'info', text: `Imported a save into slot ${i + 1}.` });
+    // The unsaved running game sits on slot `i`; replacing that save would leave it with nowhere to go.
+    if (this.unsaved && i === this.slot) return;
+    if (writeSlot(i, rec.state))
+      this.state.out.log.push({ level: 'info', text: `Imported a save into slot ${i + 1}.` });
+    else this.warnWriteFailed(i);
   }
 
-  /** Delete slot `i`, unless it holds the running game. */
+  /**
+   * Delete slot `i`, unless it holds the running game. Deleting the unreadable save the unsaved running game sits
+   * on is allowed, and lets the running game save there from then on.
+   */
   remove(i: number): void {
     if (i !== this.slot) clearSlot(i);
+    else if (this.unsaved) {
+      clearSlot(i);
+      this.unsaved = false;
+      this.persist();
+    }
   }
 
   /** Autosave on the interval, plus a save when the tab is hidden or closed. Idempotent. */
@@ -112,7 +150,9 @@ export class GameSession implements SaveActions {
     if (this.armedSec !== null) return;
     this.armAutosave();
     if (typeof document === 'undefined' || typeof window === 'undefined') return;
-    const persist = (): void => this.persist();
+    const persist = (): void => {
+      this.persist();
+    };
     const onHide = (): void => {
       if (document.hidden) persist();
     };
@@ -144,6 +184,7 @@ export class GameSession implements SaveActions {
   /** Swap in `state` (a fresh game by default) as slot `i`, and persist it. */
   private adopt(i: number, state: GameState = newGame()): void {
     this.slot = i;
+    this.unsaved = false;
     setActiveSlot(i);
     this.running = state;
     this.clearIndex();
@@ -181,11 +222,55 @@ export class GameSession implements SaveActions {
     }
   }
 
-  /** Write the running game to its slot, silently. A queued idle save is now redundant. */
-  private persist(): void {
+  /**
+   * Write the running game to its slot, silently unless the write fails. A queued idle save is now redundant.
+   * Does nothing while unsaved. True when the game was written.
+   */
+  private persist(): boolean {
     this.cancelIdle?.();
     this.cancelIdle = null;
-    writeSlot(this.slot, this.state);
+    if (this.unsaved) return false;
+    if (writeSlot(this.slot, this.state)) {
+      this.writeWarned = false;
+      return true;
+    }
+    if (!this.writeWarned) this.warnWriteFailed(this.slot);
+    this.writeWarned = true;
+    return false;
+  }
+
+  /**
+   * The active slot holds a save this build can't read. Start the fresh game in the first empty slot, or, with
+   * none free, keep it unsaved so the stored text survives for export or a newer build.
+   */
+  private avoidUnreadable(reason: string): void {
+    const bad = this.slot + 1;
+    const free = firstEmptySlot();
+    if (free >= 0) {
+      this.slot = free;
+      setActiveSlot(free);
+      this.state.out.log.push({
+        level: 'warn',
+        text: `Slot ${bad} couldn't be loaded: ${reason} It is kept untouched; this new game is in slot ${free + 1}.`,
+      });
+    } else {
+      this.unsaved = true;
+      this.warnUnsaved(reason);
+    }
+  }
+
+  private warnUnsaved(reason?: string): void {
+    this.state.out.log.push({
+      level: 'warn',
+      text: `Not saving: slot ${this.slot + 1} holds a save this build can't load.${reason ? ` ${reason}` : ''} Export or delete it in Saves to save this game.`,
+    });
+  }
+
+  private warnWriteFailed(i: number): void {
+    this.state.out.log.push({
+      level: 'warn',
+      text: `Couldn't save to slot ${i + 1}: browser storage is full or blocked. Export your save to keep a copy.`,
+    });
   }
 
   /** Credits the fleet's income since `savedAt` (if the setting allows) and saves, so it is credited once. */
