@@ -700,7 +700,12 @@ kbd {
   width: max-content;
   max-width: min(560px, calc(100vw - 32px));
 }
-/* Only the notice's button takes clicks; the banner itself stays click-through. */
+/* A notice with buttons sits at the bottom, clear of the menu it may open (the Saves tab after an error). */
+.paused.gfx-reset.actionable {
+  top: auto;
+  bottom: 24px;
+}
+/* Only the notice's buttons take clicks; the banner itself stays click-through. */
 .paused.gfx-reset.actionable button {
   pointer-events: auto;
   margin-left: 12px;

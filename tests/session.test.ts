@@ -350,3 +350,58 @@ describe('GameSession idle autosave', () => {
     expect(queued.size).toBe(0);
   });
 });
+
+describe('GameSession autosave suspension', () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  it('keeps the last good save through the interval, Save now and switching away', () => {
+    writeSlot(1, newGame(3));
+    const s = new GameSession(settings(10));
+    atTime(s.state, 4);
+    s.saveNow();
+    s.start();
+
+    // The loop hit an error: the running game may be half-ticked.
+    atTime(s.state, 9);
+    s.suspendAutosave();
+    expect(s.autosaveSuspended).toBe(true);
+    vi.advanceTimersByTime(60_000);
+    idle();
+    const before = s.state.out.log.length;
+    s.saveNow();
+    expect(s.state.out.log.slice(before)).toMatchObject([{ level: 'warn' }]);
+    s.load(1);
+
+    expect(readSlot(0)!.state.run.time).toBe(4);
+    s.stop();
+  });
+
+  it('drops an idle save that was already queued', () => {
+    const s = new GameSession(settings(10));
+    atTime(s.state, 5);
+    s.start();
+    vi.advanceTimersByTime(10_000);
+    s.suspendAutosave();
+    idle();
+
+    expect(readSlot(0)).toBeNull();
+    s.stop();
+  });
+
+  it('resumes saving once another game is running', () => {
+    writeSlot(1, newGame(3));
+    const s = new GameSession(settings(10));
+    s.start();
+    s.suspendAutosave();
+
+    s.load(1);
+    expect(s.autosaveSuspended).toBe(false);
+    atTime(s.state, 12);
+    vi.advanceTimersByTime(10_000);
+    idle();
+
+    expect(readSlot(1)!.state.run.time).toBe(12);
+    s.stop();
+  });
+});

@@ -9,6 +9,8 @@
 
 import { ACHIEVEMENTS, STAT_KEYS } from '../data/achievements';
 import { COMPONENTS, isVariant, type ComponentId } from '../data/components';
+import { CONTRACTS } from '../data/contracts';
+import { HULLS } from '../data/hulls';
 import { MODIFIERS } from '../data/modifiers';
 import { PERK_IDS } from '../data/perks';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
@@ -66,6 +68,9 @@ const isRng = (r: unknown): boolean => isObj(r) && finite(r.s);
 /** True when `k` names a raw resource a rock, pickup or belt can carry. */
 const isRawKind = (k: unknown): boolean => typeof k === 'string' && (RAW_RESOURCES as readonly string[]).includes(k);
 
+/** True when `x` is null or a finite number (an optional id the tick looks up). */
+const isIdOrNull = (x: unknown): boolean => x === null || finite(x);
+
 /** True when `w` is an object with a number under every `RESOURCES` key. */
 function isWallet(w: unknown): boolean {
   return isObj(w) && RESOURCES.every((r) => typeof w[r] === 'number');
@@ -113,13 +118,31 @@ function isShipSlots(s: unknown): boolean {
   return isObj(s) && Array.isArray(s.slots) && s.slots.every(isFitted);
 }
 
+/** True when `o` is no order, or one `runOrder` can follow: a move with a target, a mine with a rock id, or dock. */
+function isOrder(o: unknown): boolean {
+  if (o === null) return true;
+  if (!isObj(o)) return false;
+  if (o.kind === 'move') return isVec(o.to);
+  if (o.kind === 'mine') return finite(o.rockId);
+  return o.kind === 'dock';
+}
+
 /**
- * True when `s` has everything the tick moves or reads each frame: position, velocity, the scalars it steps
- * (a missing one turns NaN for good; a NaN hull can never reach 0), complete cargo and known fitted slots.
+ * True when `s` has everything the tick moves or reads each frame: a known hull, position, velocity, the scalars
+ * it steps (a missing one turns NaN for good; a NaN hull can never reach 0), a followable order and AI mode,
+ * complete cargo and known fitted slots.
  */
 function isShip(s: unknown): boolean {
   return (
     isObj(s) &&
+    finite(s.id) &&
+    typeof s.name === 'string' &&
+    typeof s.hullId === 'string' &&
+    Object.hasOwn(HULLS, s.hullId) &&
+    isOrder(s.order) &&
+    (s.aiMode === 'assist' || s.aiMode === 'auto') &&
+    isIdOrNull(s.aiTargetId) &&
+    isIdOrNull(s.beamTargetId) &&
     isVec(s.pos) &&
     isVec(s.vel) &&
     finite(s.angle) &&
@@ -139,6 +162,8 @@ function isRock(r: unknown): boolean {
   return (
     isTrait(r) &&
     isObj(r) &&
+    finite(r.id) &&
+    (r.size === 0 || r.size === 1 || r.size === 2) &&
     isRawKind(r.kind) &&
     isVec(r.pos) &&
     isVec(r.vel) &&
@@ -221,9 +246,67 @@ function isProfile(p: Profile | undefined): p is Profile {
   return isLifetime(p);
 }
 
-/** True when the contract board has everything the tick walks: offers, the id counter and the RNG state. */
+/** True when `c` is a contract the tick can age, complete and describe: a known kind, finite numbers, a sane reward. */
+function isContract(c: unknown): boolean {
+  if (!isObj(c)) return false;
+  const reward = c.reward;
+  return (
+    finite(c.id) &&
+    typeof c.kind === 'string' &&
+    Object.hasOwn(CONTRACTS, c.kind) &&
+    finite(c.target) &&
+    finite(c.progress) &&
+    finite(c.timeLimit) &&
+    finite(c.timeLeft) &&
+    finite(c.data) &&
+    isObj(reward) &&
+    !Array.isArray(reward) &&
+    Object.entries(reward).every(([k, n]) => (RESOURCES as readonly string[]).includes(k) && finite(n))
+  );
+}
+
+/** True when the contract board has everything the tick walks: offers, the active contract, counters and RNG state. */
 function isBoard(b: unknown): boolean {
-  return isObj(b) && Array.isArray(b.offers) && typeof b.nextId === 'number' && isRng(b.rng);
+  return (
+    isObj(b) &&
+    Array.isArray(b.offers) &&
+    b.offers.every(isContract) &&
+    (b.active === null || isContract(b.active)) &&
+    finite(b.nextId) &&
+    finite(b.completed) &&
+    finite(b.failed) &&
+    finite(b.rewardValue) &&
+    isRng(b.rng)
+  );
+}
+
+/** True when `p` is a planet (or moon) the tick can turn: a finite angle and speed, and turnable moons. */
+function isOrbiter(p: unknown, moons: boolean): boolean {
+  if (!isObj(p) || !finite(p.angle) || !finite(p.speed)) return false;
+  return !moons || (Array.isArray(p.moons) && p.moons.every((m) => isOrbiter(m, false)));
+}
+
+/** True when the system's star, planets and scalars are what the tick, hazards and contracts read. */
+function isSystem(sys: unknown): boolean {
+  if (!isObj(sys)) return false;
+  const { belts, station, planets } = sys;
+  return (
+    typeof sys.name === 'string' &&
+    finite(sys.number) &&
+    (sys.starClass === 'M' || sys.starClass === 'G' || sys.starClass === 'B') &&
+    finite(sys.starRadius) &&
+    finite(sys.heatRadius) &&
+    finite(sys.richness) &&
+    Array.isArray(planets) &&
+    planets.every((p) => isOrbiter(p, true)) &&
+    // Comets roll a belt to cross, so there must be at least one.
+    Array.isArray(belts) &&
+    belts.length > 0 &&
+    belts.every(isBelt) &&
+    isObj(station) &&
+    isVec(station.pos) &&
+    isModifierList(sys.modifiers)
+  );
 }
 
 /**
@@ -261,11 +344,9 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
     return null;
   // The tick steps these every frame, so a missing or non-finite one would turn NaN and stay that way.
   if (!isRng(run.rng) || !finite(run.nextId) || !finite(run.time) || !finite(run.runValue)) return null;
-  if (!finite(run.regrowTimer)) return null;
-  const { belts, station } = run.system;
-  if (!Array.isArray(belts) || !belts.every(isBelt) || !isObj(station) || !isVec(station.pos)) return null;
+  if (!finite(run.regrowTimer) || !finite(run.selectedId)) return null;
+  if (!isSystem(run.system)) return null;
   if (!run.rocks.every(isRock) || !run.pickups.every(isPickup)) return null;
-  if (!isModifierList(run.system.modifiers)) return null;
   // A wallet missing a resource column (e.g. alloy) would poison every later
   // read with NaN, so the bank must be complete (ship cargo is checked by isShip).
   if (!isWallet(run.bank) || !run.ships.every(isShip)) return null;

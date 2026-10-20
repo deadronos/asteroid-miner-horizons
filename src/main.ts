@@ -34,11 +34,16 @@ app.addEventListener('click', (e) => {
 });
 
 // The session owns the running game and its save slot. Switching games drops
-// any queued command and re-centres the camera on the new flagship.
+// any queued command, re-centres the camera on the new flagship and lifts a
+// loop-error stop (the new game has not failed).
 const session = new GameSession(settings, {
   onSwitch: () => {
     commands.length = 0;
     renderer.follow = true;
+    if (crashed) {
+      crashed = false;
+      hud.clearNotice();
+    }
   },
 });
 
@@ -76,10 +81,37 @@ let last = performance.now();
 let acc = 0;
 let hudAcc = 0;
 let contextLost = false;
+/** Set when a frame threw: the running game may be half-ticked, so it stops ticking and saving until another loads. */
+let crashed = false;
+
+/** Stops the sim after an error and offers a way out; the loop keeps running so the menus still work. */
+function onLoopError(err: unknown): void {
+  if (crashed) return;
+  crashed = true;
+  console.error(err);
+  session.suspendAutosave();
+  const msg = err instanceof Error ? err.message : String(err);
+  hud.showNotice(
+    `The game hit an error and stopped (${msg}). Saving is off, so slot ${session.active() + 1} keeps its last save.`,
+    [
+      { label: 'Reload', onClick: () => location.reload() },
+      { label: 'Export save', onClick: () => hud.menu.openSaves() },
+    ],
+  );
+}
 
 function frame(now: number): void {
   // Lost context: stop ticking and stop scheduling frames; the reload follows.
   if (contextLost) return;
+  try {
+    step(now);
+  } catch (err) {
+    onLoopError(err);
+  }
+  requestAnimationFrame(frame);
+}
+
+function step(now: number): void {
   const state = session.state;
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
@@ -93,7 +125,11 @@ function frame(now: number): void {
     focused: document.hasFocus(),
   });
   hud.setPaused(pauseBanner(paused));
-  if (paused) {
+  if (crashed) {
+    // Nothing more may change the broken game; only loading another (via the menu) recovers.
+    acc = 0;
+    commands.length = 0;
+  } else if (paused) {
     // Menus still work while paused: purchases and refits apply immediately.
     acc = 0;
     applyCommands(state, commands);
@@ -121,7 +157,6 @@ function frame(now: number): void {
     audio.consumeLog(state.out.log);
     hud.refresh();
   }
-  requestAnimationFrame(frame);
 }
 // A lost WebGL context leaves a black canvas: save, then reload into the same game. A GPU that keeps
 // resetting would reload forever, so after too many losses in a short window the page stays up instead.

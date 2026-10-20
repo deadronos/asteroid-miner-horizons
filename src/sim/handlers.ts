@@ -65,7 +65,7 @@ const withShip =
 
 /**
  * Rejects a refit that isn't docked/alive (warn-and-return, like before) and a
- * slot index that is out of bounds (silent no-op, like before); otherwise the
+ * slot index that is out of bounds or not an integer (silent no-op); otherwise the
  * slot's current fitting, which may be null.
  */
 function slotTarget(state: GameState, ship: Ship, slot: number): { cur: Fitted | null } | null {
@@ -74,7 +74,7 @@ function slotTarget(state: GameState, ship: Ship, slot: number): { cur: Fitted |
     fail(state, block);
     return null;
   }
-  if (slot < 0 || slot >= ship.slots.length) return null;
+  if (!Number.isInteger(slot) || slot < 0 || slot >= ship.slots.length) return null;
   return { cur: ship.slots[slot] ?? null };
 }
 

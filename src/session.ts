@@ -39,6 +39,8 @@ export class GameSession implements SaveActions {
   /** Cancels the autosave waiting for an idle moment, or null when none is queued. */
   private cancelIdle: (() => void) | null = null;
   private detach: (() => void) | null = null;
+  /** True after the loop hit an error: the running game may be broken, so it must not overwrite its slot. */
+  private suspended = false;
   /** Per-session derived state for the running game; never serialized. */
   readonly sim = new SimIndex();
 
@@ -72,8 +74,27 @@ export class GameSession implements SaveActions {
     return this.state;
   }
 
+  /** True while saves of the running game are suspended (see `suspendAutosave`). */
+  get autosaveSuspended(): boolean {
+    return this.suspended;
+  }
+
+  /**
+   * Stop every save of the running game (interval, idle, page hide and Save now) so a game left broken by an
+   * error cannot overwrite the last good save. Loading another slot or starting a new game resumes saving.
+   */
+  suspendAutosave(): void {
+    this.suspended = true;
+    this.cancelIdle?.();
+    this.cancelIdle = null;
+  }
+
   /** Save now, with the notice the menu shows. */
   saveNow(): void {
+    if (this.suspended) {
+      this.state.out.log.push({ level: 'warn', text: 'Saving is off after an error; export the save instead.' });
+      return;
+    }
     this.persist();
     this.state.out.log.push({ level: 'info', text: `Saved to slot ${this.slot + 1}.` });
   }
@@ -146,6 +167,7 @@ export class GameSession implements SaveActions {
     this.slot = i;
     setActiveSlot(i);
     this.running = state;
+    this.suspended = false;
     this.clearIndex();
     this.hooks.onSwitch?.();
     this.persist();
@@ -181,10 +203,11 @@ export class GameSession implements SaveActions {
     }
   }
 
-  /** Write the running game to its slot, silently. A queued idle save is now redundant. */
+  /** Write the running game to its slot, silently, unless saving is suspended. A queued idle save is now redundant. */
   private persist(): void {
     this.cancelIdle?.();
     this.cancelIdle = null;
+    if (this.suspended) return;
     writeSlot(this.slot, this.state);
   }
 

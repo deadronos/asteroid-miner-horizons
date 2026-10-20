@@ -95,6 +95,20 @@ describe('command handlers', () => {
     expect(fs.slots[2]).toBeNull();
     expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
   });
+  it('ignores a non-integer slot index', () => {
+    const { s, fs } = fs1();
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0, alloy: 0, fuel: 0 };
+    const bankBefore = JSON.stringify(s.run.bank);
+    const slotsBefore = JSON.stringify(fs.slots);
+    for (const slot of [1.5, NaN, Infinity]) {
+      send(s, { t: 'install', shipId: fs.id, slot, comp: 'shield', variant: 'standard' });
+      send(s, { t: 'upgrade', shipId: fs.id, slot });
+      send(s, { t: 'remove', shipId: fs.id, slot });
+    }
+    expect(Object.keys(fs.slots)).toEqual(fs.slots.map((_, i) => String(i)));
+    expect(JSON.stringify(fs.slots)).toBe(slotsBefore);
+    expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
+  });
   it('upgrade', () => {
     const { s, fs } = fs1();
     s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0, alloy: 0, fuel: 0 };

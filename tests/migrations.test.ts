@@ -283,6 +283,99 @@ describe('load through the production registry', () => {
     expect(deserialize(saveWithBoard({ offers: [], nextId: 'x', rng: { s: 1 } }))).toBeNull(); // bad counter
   });
 
+  it('ticks a save with every order kind and a full contract board', () => {
+    const run = currentRun();
+    const [ship, ...rest] = run.ships;
+    const offer = {
+      id: 1,
+      kind: 'deliverOre',
+      target: 50,
+      progress: 0,
+      timeLimit: 300,
+      timeLeft: 60,
+      reward: { ice: 5 },
+      data: 0,
+    };
+    const contracts = { ...run.contracts, offers: [offer], active: { ...offer, id: 2, kind: 'breakLarge' }, nextId: 3 };
+    const orders = [
+      { kind: 'move', to: { x: 10, z: 20 } },
+      { kind: 'mine', rockId: run.rocks[0].id },
+      { kind: 'dock' },
+    ];
+    for (const order of orders) {
+      const r = parseImport(
+        JSON.stringify(saveCurrent({ ships: [{ ...ship, order, aiMode: 'auto' }, ...rest], contracts })),
+      );
+      if (!r.ok) throw new Error(`expected the ${order.kind} save to load`);
+      const tickOnce = () => tick(r.record.state, 1 / 60, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+      expect(tickOnce).not.toThrow();
+    }
+  });
+
+  it('rejects malformed ship orders, AI state and contracts before any tick reads them', () => {
+    const run = currentRun();
+    const ship = run.ships[0];
+    const rock = run.rocks[0];
+    const offer = {
+      id: 1,
+      kind: 'deliverOre',
+      target: 50,
+      progress: 0,
+      timeLimit: 300,
+      timeLeft: 60,
+      reward: { ice: 5 },
+      data: 0,
+    };
+    const withShip = (patch: Record<string, unknown>) => ({ ships: [{ ...ship, ...patch }] });
+    const withBoard = (patch: Record<string, unknown>) => ({ contracts: { ...run.contracts, ...patch } });
+    const withSystem = (patch: Record<string, unknown>) => ({ system: { ...run.system, ...patch } });
+    const planet = run.system.planets[0];
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['move order without a target', withShip({ order: { kind: 'move' } })],
+      ['move order with a corrupt target', withShip({ order: { kind: 'move', to: { x: 1 } } })],
+      ['mine order without a rock id', withShip({ order: { kind: 'mine' } })],
+      ['unknown order kind', withShip({ order: { kind: 'warp' } })],
+      ['non-object order', withShip({ order: 'dock' })],
+      ['missing ship.order', withShip({ order: undefined })],
+      ['unknown ship.aiMode', withShip({ aiMode: 'berserk' })],
+      ['missing ship.aiMode', withShip({ aiMode: undefined })],
+      ['corrupt ship.aiTargetId', withShip({ aiTargetId: 'rock' })],
+      ['corrupt ship.beamTargetId', withShip({ beamTargetId: {} })],
+      ['unknown ship.hullId', withShip({ hullId: 'dreadnought' })],
+      ['missing ship.id', withShip({ id: undefined })],
+      ['missing ship.name', withShip({ name: undefined })],
+      ['missing rock.id', { rocks: [{ ...rock, id: undefined }] }],
+      ['unknown rock.size', { rocks: [{ ...rock, size: 3 }] }],
+      ['null contract offer', withBoard({ offers: [null] })],
+      ['offer missing timeLeft', withBoard({ offers: [{ ...offer, timeLeft: undefined }] })],
+      ['offer of an unknown kind', withBoard({ offers: [{ ...offer, kind: 'smuggle' }] })],
+      ['offer with a non-numeric reward', withBoard({ offers: [{ ...offer, reward: { ore: 'lots' } }] })],
+      ['offer with an unknown reward resource', withBoard({ offers: [{ ...offer, reward: { gold: 1 } }] })],
+      ['empty active contract', withBoard({ active: {} })],
+      ['active contract missing progress', withBoard({ active: { ...offer, progress: undefined } })],
+      ['missing contracts.active', withBoard({ active: undefined })],
+      ['missing contracts.completed', withBoard({ completed: undefined })],
+      ['missing contracts.rewardValue', withBoard({ rewardValue: undefined })],
+      ['missing run.selectedId', { selectedId: undefined }],
+      ['missing system.planets', withSystem({ planets: undefined })],
+      ['planet missing speed', withSystem({ planets: [{ ...planet, speed: undefined }] })],
+      ['moon missing angle', withSystem({ planets: [{ ...planet, moons: [{ angle: undefined, speed: 1 }] }] })],
+      ['planet missing moons', withSystem({ planets: [{ ...planet, moons: undefined }] })],
+      ['missing system.number', withSystem({ number: undefined })],
+      ['unknown system.starClass', withSystem({ starClass: 'X' })],
+      ['missing system.heatRadius', withSystem({ heatRadius: undefined })],
+      ['no belts', withSystem({ belts: [] })],
+    ];
+    // The well-formed offer is accepted, so its cases fail on the field alone.
+    expect(deserialize(JSON.stringify(saveCurrent(withBoard({ offers: [offer], active: offer }))))).not.toBeNull();
+    for (const [label, patch] of cases) {
+      expect(parseImport(JSON.stringify(saveCurrent(patch))), `case: ${label}`).toEqual({
+        ok: false,
+        error: 'This is not an Asteroid Miner Horizons save.',
+      });
+    }
+  });
+
   it('rejects a current save whose run has no refinery', () => {
     expect(deserialize(JSON.stringify(saveCurrent({ refinery: undefined })))).toBeNull();
   });
