@@ -145,13 +145,14 @@ It goes away after the first warp; × hides it for that save.
   - _Controls_: rebind every action (primary + secondary key). A key bound to another
     action is moved, and the help box follows your bindings.
   - _Audio_: master/effects/music volume. Sounds are positioned by where they are on
-    screen: off to one side means panned that way and quieter, and zooming out softens
-    the whole mix. Ambient music is generated live, with no audio files: warm and slow
-    around M stars, neutral at G, cold and sparse at B, crossfading on every warp and
-    playing on through pauses. Beam hums go quiet while the game is paused. The low-hull /
-    overheat alarm also goes quiet whenever you pause (`P`, or while a menu is open), but
-    keeps sounding while the window stays visible and loses focus (a hidden tab suspends
-    all audio).
+    screen: off to one side means panned that way, and they get quieter and darker (a
+    distance lowpass) with distance or zoom. A master limiter stops a busy fleet from
+    clipping, and explosions, docking chimes and collects share one generated reverb, with
+    no audio files. Ambient music is generated live: warm and slow around M stars, neutral
+    at G, cold and sparse at B, crossfading on every warp and playing on through pauses.
+    Beam hums go quiet while the game is paused. The low-hull / overheat alarm also goes
+    quiet whenever you pause (`P`, or while a menu is open), but keeps sounding while the
+    window stays visible and loses focus (a hidden tab suspends all audio).
 
 ## Architecture
 
