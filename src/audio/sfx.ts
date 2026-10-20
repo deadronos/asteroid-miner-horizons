@@ -6,10 +6,25 @@
 import { len, type Vec2 } from '../core/vec';
 import { flareExposure } from '../sim/hazards';
 import { isAlive, selectedShip, shipStats } from '../sim/ships';
-import type { Fx, Profile, Run } from '../sim/types';
+import type { Fx, LogEntry, LogEvent, Profile, Run } from '../sim/types';
 import type { ZzfxParams } from './zzfx';
 
-export type SoundId = 'crack' | 'collect' | 'dock' | 'impact' | 'explode' | 'warp' | 'uiClick' | 'uiDeny' | 'alarm';
+export type SoundId =
+  | 'crack'
+  | 'collect'
+  | 'dock'
+  | 'impact'
+  | 'explode'
+  | 'warp'
+  | 'uiClick'
+  | 'uiDeny'
+  | 'alarm'
+  | 'research'
+  | 'achievement'
+  | 'contractDone'
+  | 'contractFail'
+  | 'outpost'
+  | 'loss';
 
 /** ZzFX presets. Randomness is 0 so each renders once and is cached; variety comes from `rate`. */
 export const PRESETS: Record<SoundId, ZzfxParams> = {
@@ -31,6 +46,18 @@ export const PRESETS: Record<SoundId, ZzfxParams> = {
   uiDeny: [0.35, 0, 220, 0, 0.05, 0.1, 2, 1, -4, 0, -60, 0.05, 0, 0, 0, 0, 0, 0.7, 0, 0, 1800],
   // Gentle two-tone chime, low enough to sit under the mix and repeat without grating.
   alarm: [0.5, 0, 320, 0.01, 0.07, 0.26, 0, 1.3, 0, 0, 150, 0.07, 0, 0, 0, 0, 0.1, 0.9],
+  // Short rising three-note arpeggio (660 → 880 → 1100) for research buys.
+  research: [0.5, 0, 660, 0.01, 0.05, 0.14, 0, 1.4, 0, 0, 220, 0.06, 0.075, 0, 0, 0, 0.09, 0.7],
+  // Bright fanfare: two notes up a fourth with an echo tail.
+  achievement: [0.7, 0, 880, 0.01, 0.1, 0.42, 0, 1.1, 0, 0, 330, 0.09, 0.16, 0, 0, 0, 0.15, 0.8],
+  // Major-key two-note "paid" chime, brighter and faster than the achievement fanfare.
+  contractDone: [0.6, 0, 740, 0.01, 0.08, 0.3, 0, 1.2, 0, 0, 370, 0.09, 0.12, 0, 0, 0, 0.12, 0.75],
+  // Clean falling minor pair: the opposite of "paid".
+  contractFail: [0.45, 0, 440, 0.01, 0.06, 0.32, 0, 1, 0, 0, -110, 0.08],
+  // Thud plus a short confirming tone: something placed.
+  outpost: [0.55, 0, 130, 0.005, 0.03, 0.22, 0, 1.5, -2, 0, 260, 0.07, 0, 0.35],
+  // Low mourning tone layered under the positional explosion.
+  loss: [0.7, 0, 90, 0.02, 0.12, 0.55, 0, 1, -1.1, 0, 45, 0.16, 0, 0.12, 0, 0.04],
 };
 
 /** Minimum seconds between two plays of the same sound. */
@@ -45,6 +72,12 @@ const MIN_GAP: Record<SoundId, number> = {
   uiDeny: 0.2,
   // Short, because the alarm itself paces its ~1.1 s repeats.
   alarm: 0.3,
+  research: 0.15,
+  achievement: 0.5,
+  contractDone: 0.3,
+  contractFail: 0.3,
+  outpost: 0.3,
+  loss: 0.4,
 };
 
 export const MAX_VOICES = 12;
@@ -68,6 +101,36 @@ export class RateLimiter {
   release(): void {
     this.voices = Math.max(0, this.voices - 1);
   }
+}
+
+export type CueKey = LogEvent | 'achievement';
+
+/** One preset and its pinned gain for an event identity. */
+export interface Cue {
+  id: SoundId;
+  gain: number;
+}
+
+/** Which preset and how loud per event identity; placement is always centre. */
+export const CUES: Readonly<Record<CueKey, Cue>> = {
+  research: { id: 'research', gain: 0.5 },
+  achievement: { id: 'achievement', gain: 0.7 },
+  contractDone: { id: 'contractDone', gain: 0.6 },
+  contractFail: { id: 'contractFail', gain: 0.45 },
+  outpost: { id: 'outpost', gain: 0.55 },
+  shipLoss: { id: 'loss', gain: 0.7 },
+};
+
+/** Warn lines and one cue voice per event identity found in a log batch. */
+export function cueBatch(log: readonly LogEntry[]): { deny: boolean; cues: CueKey[] } {
+  const cues = new Set<CueKey>();
+  let deny = false;
+  for (const l of log) {
+    if (l.level === 'warn') deny = true;
+    if (l.achievement) cues.add('achievement');
+    if (l.event) cues.add(l.event);
+  }
+  return { deny, cues: [...cues] };
 }
 
 /** What part of the world is on screen: center and half extents in world units. */

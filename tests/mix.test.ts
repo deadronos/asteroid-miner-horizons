@@ -14,10 +14,19 @@ describe('limiter settings', () => {
 });
 
 describe('reverb send table', () => {
-  it('sends only explosions, docking chimes and collects', () => {
-    expect(REVERB_SEND).toEqual({ explode: 0.32, dock: 0.22, collect: 0.12 });
+  it('sends only the positional milestones and the event chimes', () => {
+    expect(REVERB_SEND).toEqual({
+      explode: 0.32,
+      dock: 0.22,
+      collect: 0.12,
+      achievement: 0.22,
+      contractDone: 0.22,
+      loss: 0.32,
+    });
+    expect(REVERB_SEND.research).toBeUndefined();
+    expect(REVERB_SEND.outpost).toBeUndefined();
+    expect(REVERB_SEND.contractFail).toBeUndefined();
     expect(REVERB_SEND.alarm).toBeUndefined();
-    expect(REVERB_SEND.crack).toBeUndefined();
     expect(REVERB_SEND.uiClick).toBeUndefined();
   });
 });
