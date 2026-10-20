@@ -11,3 +11,13 @@ export interface Assists {
 }
 
 export const DEFAULT_ASSISTS: Assists = { avoid: true, autoDock: true, chain: true };
+
+/** Player-chosen limits for per-ship autorepair and autoupgrade (#140, from Settings). */
+export interface FleetAuto {
+  /** Autorepair sends a ship home once its hull falls below this share of max (0–1). */
+  repairAt: number;
+  /** Automation never spends a resource below this many units in the bank. */
+  reserve: number;
+}
+
+export const DEFAULT_FLEET_AUTO: FleetAuto = { repairAt: 0.5, reserve: 100 };

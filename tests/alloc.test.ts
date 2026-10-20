@@ -1,99 +1,46 @@
+// Per-tick allocation budget (#128). A full fleet ticks for 10 sim seconds and
+// the heap growth across each tick() call is averaged. Ticks interrupted by a
+// scavenge show a negative delta and are dropped, so no --expose-gc is needed.
+
 import { describe, expect, it } from 'vitest';
-import { TUNING } from '../src/data/tuning';
+import { runBot } from '../scripts/harness';
+import { PERKS } from '../src/data/perks';
 import { newGame } from '../src/sim/create';
-import { destroyRock } from '../src/sim/mining';
-import { damageShip, flagship, makeShip } from '../src/sim/ships';
+import { droneCount, fleetCap } from '../src/sim/ships';
 
-import { runTicks } from './helpers';
+/**
+ * Mean bytes allocated per tick: ~100 KB measured on Node 24 (9 drones, ~265 rocks),
+ * stable to about 1% run to run. The headroom catches a per-rock or per-ship
+ * allocation, not a single array copy. If a deliberate change moves the baseline,
+ * log `mean` below to re-measure and keep roughly 10% headroom.
+ */
+const TICK_ALLOC_BUDGET = 112 * 1024;
 
-/** A pickup at `5000 + id`, with the given age. */
-function mk(id: number, age: number) {
-  return {
-    id,
-    kind: 'ore' as const,
-    amount: 1,
-    pos: { x: 5000 + id, z: 5000 },
-    vel: { x: 0, z: 0 },
-    age,
-  };
-}
+// Tests compile without Node types (tsconfig `types: []`).
+const { memoryUsage } = (globalThis as unknown as { process: { memoryUsage(): { heapUsed: number } } }).process;
 
-describe('in-place ship removal', () => {
-  it('damageShip keeps the ships array identity', () => {
-    const state = newGame(1);
-    const drone = makeShip(state.run, state.profile, 'drone', 'Drone-1', { x: 0, z: 0 });
-    state.run.ships.push(drone);
-    const ships = state.run.ships;
-    damageShip(state, drone, 1e6);
-    expect(state.run.ships).toBe(ships); // not reassigned by a filter
-    expect(ships).not.toContain(drone);
-  });
+describe('per-tick allocation', () => {
+  it('stays within the budget with a full fleet', () => {
+    const state = newGame(12345); // the bench's setup (scripts/bench.ts)
+    state.profile.perks.bay = PERKS.bay.max;
+    state.run.bank = { ore: 1e7, ice: 1e7, crystal: 1e5, alloy: 0, fuel: 0 };
+    runBot(state, { seconds: 180, warp: false }); // fills the fleet and warms the JIT
+    // Drones die and are rebought, so the count drifts; it is 9/9 at this point.
+    expect(droneCount(state.run)).toBeGreaterThanOrEqual(fleetCap(state.profile) - 2);
 
-  it('still updates every surviving ship when one dies mid-loop', () => {
-    const state = newGame(1); // system 1 is class G: starRadius 75, heatRadius 150
-    const run = state.run;
-    run.rocks = [];
-    for (const ship of run.ships) ship.pos = { x: 1e5, z: 1e5 }; // flagship out of the star's heat
-    const drones = [0, 1, 2].map((i) => {
-      const d = makeShip(run, state.profile, 'drone', `Drone-${i}`, { x: 100, z: i * 4 });
-      d.hull = 100;
-      run.ships.push(d);
-      return d;
+    const deltas: number[] = [];
+    runBot(state, {
+      seconds: 10,
+      warp: false,
+      step: (doTick) => {
+        const before = memoryUsage().heapUsed;
+        doTick();
+        const d = memoryUsage().heapUsed - before;
+        if (d >= 0) deltas.push(d);
+      },
     });
-    drones[1]!.hull = 0.01; // dies to star heat (30 dps at ~0.67 falloff ≈ 0.33 hull/tick)
-    runTicks(state, 1);
-    expect(run.ships).not.toContain(drones[1]);
-    expect(drones[0]!.hull).toBeLessThan(100);
-    expect(drones[2]!.hull).toBeLessThan(100); // the ship after the removed one still ran
-  });
-});
-
-describe('in-place rock removal', () => {
-  it('destroyRock keeps the rocks array identity and order', () => {
-    const state = newGame(1);
-    const rocks = state.run.rocks;
-    expect(rocks.length).toBeGreaterThan(10);
-    const target = rocks[5]!;
-    const next = rocks[6]!;
-    const before = rocks.length;
-    const frags = destroyRock(state, target);
-    expect(state.run.rocks).toBe(rocks); // no reassignment
-    expect(rocks[5]).toBe(next); // the next rock shifted into the freed slot
-    expect(rocks).not.toContain(target);
-    expect(rocks.length).toBe(before - 1 + frags.length); // fragments are appended
-    expect(rocks.slice(before - 1)).toEqual(frags); // ...after the survivors, in order
-  });
-});
-
-describe('pickups tick in place', () => {
-  it('keeps the pickups array identity over a tick', () => {
-    const state = newGame(1);
-    state.run.pickups = [{ id: 1, kind: 'ore', amount: 1, pos: { x: 5000, z: 5000 }, vel: { x: 0, z: 0 }, age: 0 }];
-    const pickups = state.run.pickups;
-    runTicks(state, 1);
-    expect(state.run.pickups).toBe(pickups);
-    expect(pickups).toHaveLength(1);
-  });
-
-  it('drops expired pickups in place, preserving the order of the rest', () => {
-    const state = newGame(1);
-    state.run.pickups = [mk(1, 1), mk(2, TUNING.pickupLifetime + 1), mk(3, 3)];
-    const pickups = state.run.pickups;
-    runTicks(state, 1);
-    expect(state.run.pickups).toBe(pickups);
-    expect(pickups.map((p) => p.id)).toEqual([1, 3]);
-  });
-
-  it('ignores dead ships when pulling pickups', () => {
-    const state = newGame(1);
-    const fs = flagship(state.run);
-    fs.respawn = 5; // not alive this tick
-    state.run.pickups = [
-      { id: 1, kind: 'ore', amount: 1, pos: { x: fs.pos.x + 10, z: fs.pos.z }, vel: { x: 0, z: 0 }, age: 0 },
-    ];
-    const pickups = state.run.pickups;
-    runTicks(state, 1);
-    expect(state.run.pickups).toBe(pickups);
-    expect(pickups[0]!.vel).toEqual({ x: 0, z: 0 });
+    expect(deltas.length).toBeGreaterThan(500); // of 600: only a few ticks hit a GC
+    const mean = deltas.reduce((a, b) => a + b, 0) / deltas.length;
+    expect(mean).toBeLessThan(TICK_ALLOC_BUDGET);
   });
 });

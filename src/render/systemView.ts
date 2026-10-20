@@ -1,5 +1,6 @@
 // Static-ish scenery for one star system: star, heat zone, planets, moons,
-// orbit lines, belt haze and the mining station. Rebuilt on warp.
+// orbit lines, belt haze and the mining station. Rebuilt whenever the run gets a
+// new system: warp, load or new game.
 
 import * as THREE from 'three';
 import { TUNING } from '../data/tuning';
@@ -24,16 +25,24 @@ export class SystemView {
   private beacons: THREE.Mesh[] = [];
   private starGlow: THREE.Sprite[] = [];
   private glowOpacity: number[] = [];
-  key = '';
+  /** The system this view was built from; compared by identity, since names repeat across games. */
+  private shown: StarSystem | null = null;
 
   constructor() {
     this.light = new THREE.PointLight(0xffffff, 3.2, 0, 0);
     this.light.position.set(0, 220, 0);
   }
 
-  build(sys: StarSystem): void {
+  /** Rebuilds for `sys` unless it is the system already shown; true when it rebuilt. */
+  sync(sys: StarSystem): boolean {
+    if (sys === this.shown) return false;
+    this.build(sys);
+    return true;
+  }
+
+  private build(sys: StarSystem): void {
     this.dispose();
-    this.key = `${sys.name}#${sys.number}`;
+    this.shown = sys;
     const g = this.group;
     this.light.color.setHex(sys.starColor).lerp(new THREE.Color(0xffffff), 0.55);
     g.add(this.light);
@@ -160,7 +169,7 @@ export class SystemView {
       v.body.rotation.y = time * 0.1;
       v.ring?.position.set(px, 0, pz);
       p.moons.forEach((m, j) => {
-        v.moons[j]!.position.set(px + Math.cos(m.angle) * m.orbitR, 0, pz + Math.sin(m.angle) * m.orbitR);
+        v.moons[j]?.position.set(px + Math.cos(m.angle) * m.orbitR, 0, pz + Math.sin(m.angle) * m.orbitR);
       });
     });
     this.stationRing.rotation.z = time * 0.25;

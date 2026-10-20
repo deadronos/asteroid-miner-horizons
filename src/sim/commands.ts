@@ -20,9 +20,11 @@ export type Command =
   | { t: 'dock'; shipId: number }
   | { t: 'stop'; shipId: number }
   | { t: 'aiMode'; shipId: number; mode: AiMode }
+  | { t: 'shipAuto'; shipId: number; kind: 'repair' | 'upgrade'; on: boolean }
   | { t: 'install'; shipId: number; slot: number; comp: ComponentId; variant: VariantId }
   | { t: 'upgrade'; shipId: number; slot: number }
   | { t: 'remove'; shipId: number; slot: number }
+  | { t: 'buySlot'; shipId: number }
   | { t: 'repair'; shipId: number }
   | { t: 'buyHull'; hullId: HullId }
   | { t: 'scrap'; shipId: number }
@@ -32,7 +34,8 @@ export type Command =
   | { t: 'cancelRefine'; jobId: number }
   | { t: 'acceptContract'; contractId: number }
   | { t: 'abandonContract' }
-  | { t: 'deployOutpost'; rockId: number };
+  | { t: 'deployOutpost'; rockId: number }
+  | { t: 'dismissGoals' };
 
 export function applyCommand(state: GameState, cmd: Command): void {
   // One cast: `handlers` is a mapped type, so `handlers[cmd.t]` is the handler for

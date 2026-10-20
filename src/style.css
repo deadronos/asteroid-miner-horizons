@@ -271,12 +271,22 @@ button.glow {
   font-size: 11.5px;
   text-align: right;
 }
-.shiprow .mode {
+.shiprow .ctl {
   grid-column: 1 / -1;
-  justify-self: start;
+  display: flex;
+  gap: 4px;
+}
+.shiprow .mode {
   font-size: 10.5px;
   padding: 1px 7px;
   letter-spacing: 0.06em;
+}
+.shiprow .mode.auto {
+  color: var(--dim);
+}
+.shiprow .mode.auto.on {
+  color: var(--accent);
+  border-color: var(--accent);
 }
 button.buy {
   display: flex;
@@ -428,6 +438,58 @@ button.buy small {
   color: var(--txt);
 }
 
+/* First steps (top centre, below the pause and hazard banner slots) */
+#goals {
+  top: 144px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 290px;
+  font-size: 12px;
+}
+#goals .head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+#goals .head h3 {
+  margin: 0;
+}
+#goals .close {
+  padding: 0 6px;
+  line-height: 1.3;
+}
+#goals ul {
+  list-style: none;
+  margin: 6px 0 0;
+  padding: 0;
+}
+#goals .goal {
+  padding: 2px 0;
+  color: var(--dim);
+}
+#goals .goal.cur {
+  color: var(--txt);
+}
+#goals .goal.done {
+  color: var(--accent);
+}
+#goals .mark {
+  display: inline-block;
+  width: 1.3em;
+}
+#goals .how {
+  display: none;
+  padding-left: 1.3em;
+  font-size: 11.5px;
+  color: var(--dim);
+}
+#goals .goal.cur .how {
+  display: block;
+}
+#goals .hint {
+  margin: 6px 0 0;
+}
+
 /* Tooltip */
 .tooltip {
   position: fixed;
@@ -442,6 +504,19 @@ button.buy small {
   font-size: 12px;
   white-space: nowrap;
   z-index: 20;
+}
+
+/* Text that only screen readers should announce (e.g. a dialog's name). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Research modal */
@@ -519,6 +594,14 @@ button.buy small {
   #log {
     max-height: 90px;
   }
+  /* Only the next goal and the hint fit between the side panels. */
+  #goals {
+    width: min(290px, calc(100vw - 480px));
+    min-width: 170px;
+  }
+  #goals .goal:not(.cur) {
+    display: none;
+  }
 }
 
 /* Gear menu */
@@ -582,6 +665,9 @@ button.tab.active {
 .slotcard.empty {
   border-style: dashed;
 }
+.slotcard.unreadable {
+  border-color: var(--bad);
+}
 .slotcard .row {
   margin-top: 6px;
 }
@@ -601,6 +687,10 @@ button.tab.active {
   background: var(--accent);
   border-radius: 4px;
   padding: 1px 5px;
+}
+.badge.bad {
+  color: #fff;
+  background: var(--bad);
 }
 .textwin {
   position: absolute;
@@ -690,7 +780,12 @@ kbd {
   width: max-content;
   max-width: min(560px, calc(100vw - 32px));
 }
-/* Only the notice's button takes clicks; the banner itself stays click-through. */
+/* A notice with buttons sits at the bottom, clear of the menu it may open (the Saves tab after an error). */
+.paused.gfx-reset.actionable {
+  top: auto;
+  bottom: 24px;
+}
+/* Only the notice's buttons take clicks; the banner itself stays click-through. */
 .paused.gfx-reset.actionable button {
   pointer-events: auto;
   margin-left: 12px;

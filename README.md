@@ -19,7 +19,7 @@ npm run lint       # oxlint (warnings fail); npm run lint:fix auto-fixes
 npm run format     # oxfmt formats in place; format:check only verifies
 npm run check      # everything CI runs except the build
 npm run bench      # headless tick benchmark: mean/p95 ms per tick
-npm run balance    # bot plays 10 seeds × 5 warps → docs/balance.md
+npm run balance    # bot plays 10 seeds × 10 warps → docs/balance.md
 ```
 
 Linting and formatting use the [Oxc](https://oxc.rs) toolchain: `oxlint` (config in
@@ -55,6 +55,10 @@ All keys can be rebound in ⚙ → Controls.
 **The loop:** mine → collect debris (fly close; the tractor pulls it in) → dock to unload
 → spend the bank on components and ships → automate with drones → refine ice into fuel → warp.
 
+A new save shows a **First steps** checklist that walks this loop up to the first warp, with a
+one-line hint for whatever is blocking you (full hold, no laser, idle drone, not enough fuel).
+It goes away after the first warp; × hides it for that save.
+
 ## Game systems
 
 - **Star systems** are generated from `(profile seed, system number)`. Each has a star
@@ -81,11 +85,21 @@ All keys can be rebound in ⚙ → Controls.
   each offer a sidegrade variant chosen when installing — Focused/Wide Beam and
   Standard Drive/Vector Thruster. Effects stack, so two lasers give twice the DPS.
   Refits, repairs and scrapping require the ship to be docked. Removing a part refunds
-  half its value.
-- **Fleet**: buy Mining Drones (2 slots) or Harvesters (3 slots). Drones auto-mine, sweep
+  half its value. A docked ship can buy extra slots, up to 6 on every hull (8 on the
+  Excavator); each slot costs 1.7× the one before, starting at 120 ore · 60 ice for a
+  3rd slot. Bought slots carry over when the flagship changes hull, up to the new cap.
+- **Fleet**: buy Mining Drones (2 slots) or Harvesters (3 slots), both expandable to 6. Drones auto-mine, sweep
   up debris and return to unload when full. In **Assist** mode they work near the
   flagship; in **Auto** mode they work near the station. Select one to give it manual
-  orders. The flagship can be refitted onto the 6-slot **Excavator** hull.
+  orders. The flagship can be refitted onto the 6-slot **Excavator** hull (expandable to 8).
+- **Autorepair & autoupgrade**: each drone and hauler row in the Fleet panel has **REPAIR**
+  and **UPGRADE** toggles (off by default). With REPAIR on, a ship below the hull threshold
+  (Menu → Gameplay, default 50%) flies home and repairs. With UPGRADE on, a docked ship
+  takes its cheapest next step every half second: fill an empty slot (drones: laser, cargo,
+  engine, armor, shield, sensor; haulers start with cargo), raise a part one tier, or buy a
+  slot. It never removes a part you fitted, so a hand-fitted build is kept. Both spend only
+  what the bank holds above the reserve (Menu → Gameplay, default 100 of each resource),
+  and repair comes first.
 - **Automation**: a **Hauler** takes a fleet slot but never mines. It skims drones once
   their holds are 30% full and empties outposts, then unloads at the station, so drones
   spend less time commuting. An **outpost** (120 ore · 30 ice · 15 alloy, up to 3) is
@@ -103,7 +117,7 @@ All keys can be rebound in ⚙ → Controls.
   refinery (Catalytic Furnace) and more batches per refinery cycle (Bulk Hoppers).
 - **Stats & achievements**: each save keeps lifetime stats that survive warps (time played,
   asteroids broken, units mined, warps, contracts, refined units, outposts, launches,
-  research, comets and ships lost) and 21 achievements unlocked from them. An unlock shows
+  flagship unloads, mining drones bought, components installed by hand, research, comets and ships lost) and 21 achievements unlocked from them. An unlock shows
   a toast and a log line; ⚙ → Stats lists the stats and each achievement's progress.
 - **Offline progress**: loading a save credits the fleet for the time it was closed, up to
   8 hours (absences under a minute are ignored). It is an estimate, not a replay: each

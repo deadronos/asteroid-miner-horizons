@@ -1,4 +1,4 @@
-// Fleet list (status, hull and cargo bars, AI mode), the outposts list and the shipyard.
+// Fleet list (status, hull and cargo bars, AI mode, autorepair/autoupgrade), the outposts list and the shipyard.
 
 import { HULLS, HULL_IDS } from '../../data/hulls';
 import { formatCost, walletTotal } from '../../data/resources';
@@ -56,17 +56,53 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           cb.el,
         );
         let mode: HTMLButtonElement | null = null;
-        if (!isFlagship(ship) && !isHauler(ship)) {
-          mode = h('button', {
-            class: 'mode',
-            onclick: (e) => {
-              e.stopPropagation();
-              const cur = findShip(st().run, id);
-              if (cur) ctx.send({ t: 'aiMode', shipId: id, mode: cur.aiMode === 'assist' ? 'auto' : 'assist' });
-            },
-          });
-          mode.dataset.title = 'Assist: work near the flagship · Auto: work near the station';
-          row.append(mode);
+        let repair: HTMLButtonElement | null = null;
+        let upgrade: HTMLButtonElement | null = null;
+        if (!isFlagship(ship)) {
+          const ctl = h('div', { class: 'ctl' });
+          if (!isHauler(ship)) {
+            mode = h('button', {
+              class: 'mode',
+              onclick: (e) => {
+                e.stopPropagation();
+                const cur = findShip(st().run, id);
+                if (cur) ctx.send({ t: 'aiMode', shipId: id, mode: cur.aiMode === 'assist' ? 'auto' : 'assist' });
+              },
+            });
+            mode.dataset.title = 'Assist: work near the flagship · Auto: work near the station';
+            ctl.append(mode);
+          }
+          const toggle = (kind: 'repair' | 'upgrade', text: string, title: string): HTMLButtonElement => {
+            const btn = h('button', {
+              class: 'mode auto',
+              text,
+              onclick: (e) => {
+                e.stopPropagation();
+                const cur = findShip(st().run, id);
+                if (cur)
+                  ctx.send({
+                    t: 'shipAuto',
+                    shipId: id,
+                    kind,
+                    on: !(kind === 'repair' ? cur.autoRepair : cur.autoUpgrade),
+                  });
+              },
+            });
+            btn.dataset.title = title;
+            ctl.append(btn);
+            return btn;
+          };
+          repair = toggle(
+            'repair',
+            'REPAIR',
+            'Autorepair: fly home and repair below the hull threshold (Menu → Gameplay)',
+          );
+          upgrade = toggle(
+            'upgrade',
+            'UPGRADE',
+            'Autoupgrade: while docked, spend the bank above the reserve on slots and tiers',
+          );
+          row.append(ctl);
         }
         bind(() => {
           const s = st();
@@ -78,6 +114,8 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           hb.set(cur.hull / stt.maxHull);
           cb.set(walletTotal(cur.cargo) / stt.cargoCap);
           if (mode) setText(mode, cur.aiMode === 'assist' ? 'ASSIST' : 'AUTO');
+          repair?.classList.toggle('on', cur.autoRepair);
+          upgrade?.classList.toggle('on', cur.autoUpgrade);
         });
         return row;
       });
@@ -112,7 +150,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             : def.role === 'hauler'
               ? ' — ferries cargo from drones and outposts to the station; does not mine'
               : '';
-        btn.dataset.title = `${def.name}: ${def.slots} slots, ${def.hull} hull, ${def.cargo} cargo${note}`;
+        btn.dataset.title = `${def.name}: ${def.slots} slots (up to ${def.maxSlots}), ${def.hull} hull, ${def.cargo} cargo${note}`;
         btn.append(
           h('span', { text: `${def.role === 'flagship' ? 'Refit flagship → ' : '+ '}${def.name}` }),
           h('small', { text: formatCost(def.cost) }),

@@ -144,15 +144,16 @@ export class Input {
     return { x: x / l, z: z / l };
   }
 
-  /** Pans when the cursor rests near a screen edge (if enabled). */
-  edgePan(dt: number): void {
-    if (!this.settings.value.edgePan || !this.mouse.inside || this.drag || this.hud.menu.open) return;
+  /** Pans when the cursor rests near a screen edge (if enabled). Returns whether it panned. */
+  edgePan(dt: number): boolean {
+    if (!this.settings.value.edgePan || !this.mouse.inside || this.drag || this.hud.menu.open) return false;
     const r = this.renderer.canvas.getBoundingClientRect();
     const m = 14;
     const speed = 900 * dt;
     const dx = this.mouse.x < r.left + m ? 1 : this.mouse.x > r.right - m ? -1 : 0;
     const dy = this.mouse.y < r.top + m ? 1 : this.mouse.y > r.bottom - m ? -1 : 0;
     if (dx || dy) this.renderer.panPixels(dx * speed, dy * speed);
+    return !!(dx || dy);
   }
 
   /** What's under a screen point: ships first, then the station, then rocks. */

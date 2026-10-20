@@ -7,7 +7,7 @@ import { v } from '../core/vec';
 import { COMPONENTS, isVariant, variantDef, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
-import { credit, formatCost, pay } from '../data/resources';
+import { credit, emptyWallet, formatCost, formatWallet, pay } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { makeOutpost, outpostAt, outpostBlock } from './automation';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
@@ -21,6 +21,7 @@ import {
   refitBlock,
   repairCost,
   scrapValue,
+  slotCost,
   upgradeCost,
   warpCost,
 } from './economy';
@@ -64,7 +65,7 @@ const withShip =
 
 /**
  * Rejects a refit that isn't docked/alive (warn-and-return, like before) and a
- * slot index that is out of bounds (silent no-op, like before); otherwise the
+ * slot index that is out of bounds or not an integer (silent no-op); otherwise the
  * slot's current fitting, which may be null.
  */
 function slotTarget(state: GameState, ship: Ship, slot: number): { cur: Fitted | null } | null {
@@ -73,7 +74,7 @@ function slotTarget(state: GameState, ship: Ship, slot: number): { cur: Fitted |
     fail(state, block);
     return null;
   }
-  if (slot < 0 || slot >= ship.slots.length) return null;
+  if (!Number.isInteger(slot) || slot < 0 || slot >= ship.slots.length) return null;
   return { cur: ship.slots[slot] ?? null };
 }
 
@@ -150,13 +151,33 @@ export const handlers: Handlers = {
     if (h.role === 'flagship') {
       const fs = flagship(run);
       const frac = fs.hull / shipStats(fs, profile).maxHull;
-      const old = fs.slots.filter((s) => s);
+      const old = fs.slots;
+      // Bought slots carry over, up to the new hull's cap, and fitted parts keep their indices.
+      const n = Math.min(h.maxSlots, Math.max(h.slots, old.length));
       fs.hullId = cmd.hullId;
-      fs.slots = Array.from({ length: h.slots }, (_, i) => old[i] ?? null);
-      // Parts that no longer fit are refunded at half value.
-      for (const extra of old.slice(h.slots)) refundFitted(state, extra!);
+      const slots = Array.from({ length: n }, (_, i) => old[i] ?? null);
+      // Parts past the new cap move into free slots below it, in order; only what still has no room is
+      // refunded at half value.
+      const refund = emptyWallet();
+      let free = 0;
+      for (let i = n; i < old.length; i++) {
+        const extra = old[i];
+        if (!extra) continue;
+        while (free < n && slots[free]) free++;
+        if (free < n) slots[free++] = extra;
+        else credit(refund, scrapValue(extra));
+      }
+      fs.slots = slots;
+      credit(run.bank, refund);
       fs.hull = frac * shipStats(fs, profile).maxHull;
-      out.log.push({ level: 'major', text: `Flagship refitted onto a ${h.name} hull.` });
+      clampToStats(state, fs);
+      const parts = formatWallet(refund);
+      out.log.push({
+        level: 'major',
+        text: parts
+          ? `Flagship refitted onto a ${h.name} hull. Parts that no longer fit were scrapped for ${parts}.`
+          : `Flagship refitted onto a ${h.name} hull.`,
+      });
     } else {
       const st = run.system.station.pos;
       const n = droneCount(run) + 1;
@@ -173,6 +194,7 @@ export const handlers: Handlers = {
       );
       run.ships.push(ship);
       profile.stats.drones += 1;
+      if (h.role === 'drone') profile.stats.miningDrones += 1;
       out.log.push({ level: 'info', text: `${ship.name} launched from the station.` });
     }
   },
@@ -210,6 +232,12 @@ export const handlers: Handlers = {
     ship.aiTargetId = null;
   }),
 
+  shipAuto: withShip((state, ship, cmd) => {
+    if (isFlagship(ship)) return fail(state, 'The flagship is flown by hand.');
+    if (cmd.kind === 'repair') ship.autoRepair = cmd.on;
+    else ship.autoUpgrade = cmd.on;
+  }),
+
   repair: withShip((state, ship) => {
     const cost = repairCost(state, ship);
     const block = refitBlock(state, ship);
@@ -245,6 +273,16 @@ export const handlers: Handlers = {
     });
   }),
 
+  buySlot: withShip((state, ship) => {
+    const block = refitBlock(state, ship);
+    if (block) return fail(state, block);
+    const cost = slotCost(ship);
+    if (!cost) return fail(state, `${ship.name} has every slot its hull allows.`);
+    if (!pay(state.run.bank, cost)) return fail(state, `A new slot needs ${formatCost(cost)}.`);
+    ship.slots.push(null);
+    state.out.log.push({ level: 'info', text: `${ship.name}: slot ${ship.slots.length} added.` });
+  }),
+
   remove: withShip((state, ship, cmd) => {
     const t = slotTarget(state, ship, cmd.slot);
     if (!t) return;
@@ -261,11 +299,20 @@ export const handlers: Handlers = {
     const t = slotTarget(state, ship, cmd.slot);
     if (!t) return;
     const { cur } = t;
-    if (cur?.type === cmd.comp) return;
+    if (cur?.type === cmd.comp) {
+      const fitted = variantDef(cur.type, cur.variant).name;
+      return fail(
+        state,
+        cur.variant === cmd.variant
+          ? `${ship.name}: slot ${cmd.slot + 1} already holds a ${fitted}.`
+          : `${ship.name}: slot ${cmd.slot + 1} already holds a ${fitted}. Remove it before fitting ${variantDef(cmd.comp, cmd.variant).name}.`,
+      );
+    }
     if (!pay(state.run.bank, variantDef(cmd.comp, cmd.variant).cost(1)))
       return fail(state, 'Not enough resources for that component.');
     if (cur) refundFitted(state, cur);
     ship.slots[cmd.slot] = { type: cmd.comp, variant: cmd.variant, tier: 1 };
+    state.profile.stats.installs += 1;
     clampToStats(state, ship);
     state.out.log.push({
       level: 'info',
@@ -302,6 +349,12 @@ export const handlers: Handlers = {
       level: 'info',
       text: `Outpost deployed on a large ${rock.kind} asteroid (${Math.round(outpost.reserve)} units in reserve).`,
     });
+  },
+
+  dismissGoals: (state) => {
+    if (state.profile.goalsDismissed) return;
+    state.profile.goalsDismissed = true;
+    state.out.log.push({ level: 'info', text: 'First steps hidden. The help box still lists the controls.' });
   },
 
   abandonContract: (state) => {

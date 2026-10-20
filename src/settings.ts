@@ -37,6 +37,10 @@ export interface Settings {
   hazards: HazardLevel;
   /** Credit drone and outpost income for the time a save was closed. */
   offlineProgress: boolean;
+  /** Autorepair sends a ship home below this share of its hull (#140). */
+  autoRepairAt: 0.25 | 0.5 | 0.75;
+  /** Units of each resource fleet automation never spends (#140). */
+  autoReserve: 0 | 50 | 100 | 250 | 500 | 1000;
   // Graphics
   quality: Quality;
   nebula: boolean;
@@ -111,6 +115,8 @@ export const DEFAULTS: Settings = {
   assistChain: true,
   hazards: 'normal',
   offlineProgress: true,
+  autoRepairAt: 0.5,
+  autoReserve: 100,
   quality: 'high',
   nebula: true,
   antialias: true,
@@ -180,6 +186,8 @@ export function keyLabel(code: string | null): string {
 const KEY = 'asteroid-miner-horizons/settings';
 
 const AUTOSAVE_SEC_VALUES = [0, 10, 30, 60] as const;
+export const AUTO_REPAIR_AT_VALUES = [0.25, 0.5, 0.75] as const;
+export const AUTO_RESERVE_VALUES = [0, 50, 100, 250, 500, 1000] as const;
 const HUD_SCALE_RANGE = [0.5, 2] as const;
 const ZOOM_SPEED_RANGE = [0.25, 4] as const;
 const VOLUME_RANGE = [0, 1] as const;
@@ -229,6 +237,14 @@ export class SettingsStore {
         case 'autosaveSec':
           if (AUTOSAVE_SEC_VALUES.includes(d[k] as Settings['autosaveSec']))
             out.autosaveSec = d[k] as Settings['autosaveSec'];
+          continue;
+        case 'autoRepairAt':
+          if (AUTO_REPAIR_AT_VALUES.includes(d[k] as Settings['autoRepairAt']))
+            out.autoRepairAt = d[k] as Settings['autoRepairAt'];
+          continue;
+        case 'autoReserve':
+          if (AUTO_RESERVE_VALUES.includes(d[k] as Settings['autoReserve']))
+            out.autoReserve = d[k] as Settings['autoReserve'];
           continue;
         case 'hudScale':
           if (inRange(d[k], HUD_SCALE_RANGE)) out.hudScale = d[k];

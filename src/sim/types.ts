@@ -67,6 +67,10 @@ export interface Ship {
   cargo: Wallet;
   order: Order | null;
   aiMode: AiMode;
+  /** Drones and haulers: fly home to repair below the player's hull threshold (#140). */
+  autoRepair: boolean;
+  /** Drones and haulers: spend spare bank on slots and tiers while docked (#140). */
+  autoUpgrade: boolean;
   /** True while a mining beam is hitting its target this tick. */
   beamOn: boolean;
   beamTargetId: number | null;
@@ -247,6 +251,8 @@ export interface Profile {
   stats: LifetimeStats;
   /** Unlocked achievements, in unlock order. */
   achievements: AchievementId[];
+  /** The player closed the first-steps checklist (#171); it stays hidden for this save. */
+  goalsDismissed: boolean;
 }
 
 export type Fx =

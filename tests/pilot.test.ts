@@ -2,13 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { SPLASH_RADIUS } from '../src/data/components';
 import { FLARES } from '../src/data/hazards';
 import { TUNING } from '../src/data/tuning';
-import { DEFAULT_ASSISTS } from '../src/sim/assists';
+import { DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO } from '../src/sim/assists';
 import { newGame, newProfile, newRun, SAVE_VERSION } from '../src/sim/create';
 import { isDocked } from '../src/sim/economy';
 import { cometPathEscape } from '../src/sim/hazards';
 import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
-import { chainTarget, droneThink, steer, workRock, type TickCtx } from '../src/sim/pilot';
+import { chainTarget, droneThink, formationSlot, steer, workRock, type TickCtx } from '../src/sim/pilot';
+import { volatileBlastRadius, volatileSafeDistance } from '../src/sim/traits';
 import { serialize } from '../src/sim/save';
 import { flagship, isHoldFull, makeShip, shipStats } from '../src/sim/ships';
 import type { GameState, Rock, Ship, StarClass } from '../src/sim/types';
@@ -18,7 +19,7 @@ const NORMAL = { hazards: 'normal' } as const;
 function ctxFor(state: ReturnType<typeof newGame>): TickCtx {
   const index = new SimIndex();
   index.rebuild(state);
-  return { state, index, dt: DT, assists: DEFAULT_ASSISTS, hazards: 'off' };
+  return { state, index, dt: DT, assists: DEFAULT_ASSISTS, auto: DEFAULT_FLEET_AUTO, hazards: 'off' };
 }
 
 describe('pilot scratch reuse', () => {
@@ -278,5 +279,122 @@ describe('isHoldFull', () => {
     expect(isHoldFull(ship, st)).toBe(false);
     ship.cargo.ore = st.cargoCap - margin + 0.5;
     expect(isHoldFull(ship, st)).toBe(true);
+  });
+});
+
+/** A flagship cutting a volatile rock far from the belts, with `n` drones around it; no other rocks. */
+function blastGame(n: number) {
+  const state = newGame(1);
+  const { run } = state;
+  const rock = makeRock(run, 'ore', 0, { x: 5000, z: 5000 }, 30, 0, 'volatile');
+  run.rocks = [rock];
+  run.pickups = [];
+  const fs = flagship(run);
+  fs.pos = { x: rock.pos.x - volatileSafeDistance(rock), z: rock.pos.z };
+  fs.vel = { x: 0, z: 0 };
+  fs.order = { kind: 'mine', rockId: rock.id };
+  const drones: Ship[] = [];
+  for (let i = 0; i < n; i++) {
+    const d = makeShip(run, state.profile, 'drone', `Drone-${i}`, { x: 0, z: 0 });
+    d.aiMode = 'assist';
+    // Below one blast's damage, so a single hit is a loss.
+    d.hull = (TUNING.volatileBlastDamage * rock.radius) / 40 - 1;
+    d.shield = 0;
+    run.ships.push(d);
+    drones.push(d);
+  }
+  return { state, rock, fs, drones };
+}
+
+/** Ticks until `rock` breaks (or `seconds` pass). */
+function untilBroken(state: GameState, rock: Rock, seconds = 60): void {
+  const index = new SimIndex();
+  for (let t = 0; t < seconds && state.run.rocks.includes(rock); t += 1) runTicks(state, TUNING.simHz, { index });
+  expect(state.run.rocks.includes(rock)).toBe(false);
+}
+
+describe('volatile blast survival', () => {
+  it('escorts parked in formation round the flagship back out of the blast before it breaks', () => {
+    const { state, rock, fs, drones } = blastGame(6);
+    for (const d of drones) {
+      d.slots = d.slots.map(() => null); // no laser: an escort just follows the flagship
+      formationSlot(d.pos, fs.pos, d.id, 70);
+    }
+    // Several slots of the ring start inside the blast.
+    const blast = volatileBlastRadius(rock);
+    expect(
+      drones.filter((d) => Math.hypot(d.pos.x - rock.pos.x, d.pos.z - rock.pos.z) <= blast).length,
+    ).toBeGreaterThan(1);
+
+    untilBroken(state, rock);
+
+    for (const d of drones) expect(state.run.ships).toContain(d);
+    expect(state.profile.stats.shipsLost).toBe(0);
+  });
+
+  it('a drone already inside the safe distance backs off before it fires', () => {
+    const { state, rock, drones } = blastGame(1);
+    const drone = drones[0]!;
+    drone.pos = { x: rock.pos.x, z: rock.pos.z + rock.radius + 30 };
+    const ctx = ctxFor(state);
+    const st = ctx.index.stats.get(drone.id)!;
+    expect(workRock(ctx, drone, st, rock)).toBeNull();
+    expect(drone.beamOn).toBe(false);
+    expect(drone.vel.z).toBeGreaterThan(0); // away from the rock
+
+    untilBroken(state, rock);
+    expect(state.run.ships).toContain(drone);
+  });
+});
+
+/** A ship on the far side of the star from the station, every rock cleared. */
+function farSide(ship: Ship, state: GameState): void {
+  const st = state.run.system.station.pos;
+  ship.pos = { x: -st.x, z: -st.z };
+  ship.vel = { x: 0, z: 0 };
+}
+
+/** Runs up to `seconds`, tracking the closest the ship came to the star. Stops once `done`. */
+function closestApproach(state: GameState, ship: Ship, seconds: number, done: () => boolean): number {
+  const index = new SimIndex();
+  let closest = Infinity;
+  for (let i = 0; i < seconds * TUNING.simHz && !done(); i++) {
+    runTicks(state, 1, { index });
+    closest = Math.min(closest, Math.hypot(ship.pos.x, ship.pos.z));
+  }
+  return closest;
+}
+
+describe('star detour', () => {
+  it('a full drone routes round the star to dock instead of crossing it', () => {
+    const state = newGame(1);
+    state.run.rocks = [];
+    const drone = makeShip(state.run, state.profile, 'drone', 'Drone-1', { x: 0, z: 0 });
+    drone.aiMode = 'auto';
+    drone.cargo.ore = shipStats(drone, state.profile).cargoCap;
+    state.run.ships.push(drone);
+    farSide(drone, state);
+    const hull = drone.hull;
+
+    const closest = closestApproach(state, drone, 120, () => isDocked(state.run, drone));
+
+    expect(isDocked(state.run, drone)).toBe(true);
+    expect(closest).toBeGreaterThan(state.run.system.heatRadius);
+    expect(drone.hull).toBe(hull);
+  });
+
+  it('a flagship dock order routes round the star too', () => {
+    const state = newGame(1);
+    state.run.rocks = [];
+    const fs = flagship(state.run);
+    farSide(fs, state);
+    fs.order = { kind: 'dock' };
+    const hull = fs.hull;
+
+    const closest = closestApproach(state, fs, 120, () => fs.order === null);
+
+    expect(fs.order).toBeNull();
+    expect(closest).toBeGreaterThan(state.run.system.heatRadius);
+    expect(fs.hull).toBe(hull);
   });
 });

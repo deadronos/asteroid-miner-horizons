@@ -1,5 +1,5 @@
 // DOM HUD composer: places the panels (top bar, fleet, contracts, selected
-// ship, refinery, research) and owns the small overlays — event log, help, hover
+// ship, refinery, research, first-steps goals) and owns the small overlays — event log, help, hover
 // tooltip, warp flash, pause banner, toasts (achievements, offline summary) and FPS counter. All actions go out as sim
 // Commands via `send`.
 
@@ -14,6 +14,7 @@ import { Menu } from './Menu';
 import type { PanelCtx } from './panels/context';
 import { createContractsPanel } from './panels/ContractsPanel';
 import { createFleetPanel } from './panels/FleetPanel';
+import { createGoalsPanel } from './panels/GoalsPanel';
 import { createRefineryPanel } from './panels/RefineryPanel';
 import { ResearchPanel } from './panels/ResearchPanel';
 import { createShipPanel } from './panels/ShipPanel';
@@ -27,6 +28,12 @@ const TOAST_MS = 6000;
 export interface HudActions {
   send: (cmd: Command) => void;
   saves: SaveActions;
+}
+
+/** A button on a `showNotice` banner. */
+export interface NoticeAction {
+  label: string;
+  onClick: () => void;
 }
 
 export class Hud {
@@ -73,6 +80,7 @@ export class Hud {
       createContractsPanel(mk('contracts'), ctx),
       createShipPanel(mk('ship'), ctx),
       createRefineryPanel(mk('refinery'), ctx),
+      createGoalsPanel(mk('goals', 'hud hidden'), ctx),
     ];
     this.log.id = 'log';
     root.append(this.log);
@@ -111,23 +119,34 @@ export class Hud {
   }
 
   /**
-   * Shows `text` in the banner for the rest of the session, replacing the pause reason. With `action`, the
-   * banner also gets a button that runs it; only the button takes pointer events.
+   * Shows `text` in the banner until `clearNotice`, replacing the pause reason. With actions, the banner also
+   * gets a button for each; only the buttons take pointer events.
    */
-  showNotice(text: string, action?: { label: string; onClick: () => void }): void {
+  showNotice(text: string, actions: NoticeAction | NoticeAction[] = []): void {
+    const list = Array.isArray(actions) ? actions : [actions];
     this.noticeShown = true;
     this.paused.classList.remove('hidden');
     this.paused.classList.add('gfx-reset');
-    this.paused.classList.toggle('actionable', !!action);
-    if (action) this.paused.setAttribute('role', 'alert');
+    this.paused.classList.toggle('actionable', list.length > 0);
+    if (list.length > 0) this.paused.setAttribute('role', 'alert');
     else this.paused.removeAttribute('role');
-    if (action) this.paused.replaceChildren(text, h('button', { text: action.label, onclick: action.onClick }));
+    if (list.length > 0)
+      this.paused.replaceChildren(text, ...list.map((a) => h('button', { text: a.label, onclick: a.onClick })));
     else setText(this.paused, text);
     // The frame loop may have stopped, so a warp flash would otherwise stay frozen over the notice.
     this.flash.style.opacity = '0';
   }
 
-  /** Called every rendered frame to update the FPS counter. */
+  /** Takes down a `showNotice` banner, handing it back to the pause reason. */
+  clearNotice(): void {
+    if (!this.noticeShown) return;
+    this.noticeShown = false;
+    this.paused.classList.remove('gfx-reset', 'actionable');
+    this.paused.removeAttribute('role');
+    this.paused.replaceChildren();
+    this.paused.classList.add('hidden');
+  }
+
   /** Per-frame HUD work: the warp white-out (which needs every frame to look smooth) and the FPS counter. */
   frame(dt: number, warpFlash: number): void {
     const opacity = warpFlash.toFixed(3);

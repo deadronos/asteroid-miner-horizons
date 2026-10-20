@@ -1,15 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import type { ComponentId } from '../src/data/components';
+import { variantDef, type ComponentId } from '../src/data/components';
 import { RESOURCES, type Cost } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { makeOutpost } from '../src/sim/automation';
 import { newGame } from '../src/sim/create';
-import { halve, investedCost, warpCost } from '../src/sim/economy';
+import { halve, investedCost, scrapValue, warpCost } from '../src/sim/economy';
 import { makeRock } from '../src/sim/generate';
 import { describeModifiers, rollModifiers } from '../src/sim/modifiers';
 import { handlers } from '../src/sim/handlers';
 import { flagship, makeShip } from '../src/sim/ships';
-import { send } from './helpers';
+import { bankDelta, send } from './helpers';
 
 const fs1 = () => {
   const s = newGame(1);
@@ -70,12 +70,70 @@ describe('command handlers', () => {
     s.run.bank.ore = 1000;
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
     expect(fs.slots[2]).toEqual({ type: 'shield', variant: 'standard', tier: 1 });
+    expect(s.profile.stats.installs).toBe(1);
+  });
+  it('a rejected install does not count toward the installs stat', () => {
+    const { s, fs } = fs1();
+    s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn' });
+    expect(fs.slots[2]).toBeNull();
+    expect(s.profile.stats.installs).toBe(0);
+  });
+  it('dismissGoals hides the first-steps checklist once, logging one line', () => {
+    const { s } = fs1();
+    expect(s.profile.goalsDismissed).toBe(false);
+    const n = s.out.log.length;
+    send(s, { t: 'dismissGoals' });
+    expect(s.profile.goalsDismissed).toBe(true);
+    expect(s.out.log.length).toBe(n + 1);
+    send(s, { t: 'dismissGoals' });
+    expect(s.profile.goalsDismissed).toBe(true);
+    expect(s.out.log.length).toBe(n + 1);
   });
   it('install fits the chosen variant at tier 1', () => {
     const { s, fs } = fs1();
     s.run.bank.ore = 1000;
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'laser', variant: 'wide' });
     expect(fs.slots[2]).toEqual({ type: 'laser', variant: 'wide', tier: 1 });
+  });
+  it('rejects another variant of the component already fitted in the slot', () => {
+    const { s, fs } = fs1();
+    s.run.bank = { ore: 1000, ice: 1000, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'laser', variant: 'focused' });
+    const fitted = fs.slots[2];
+    const bankBefore = { ...s.run.bank };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'laser', variant: 'wide' });
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn' });
+    expect(s.out.log.at(-1)!.text).toContain('Focused Beam');
+    expect(s.out.log.at(-1)!.text).toContain('Remove it before fitting Wide Beam');
+    expect(fs.slots[2]).toBe(fitted);
+    expect(s.run.bank).toEqual(bankBefore);
+  });
+  it('re-installing the variant already fitted only says the slot holds it', () => {
+    const { s, fs } = fs1();
+    s.run.bank = { ore: 1000, ice: 1000, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'laser', variant: 'wide' });
+    const bankBefore = { ...s.run.bank };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'laser', variant: 'wide' });
+    expect(s.out.log.at(-1)).toMatchObject({ level: 'warn' });
+    expect(s.out.log.at(-1)!.text).toContain('already holds a Wide Beam.');
+    expect(s.out.log.at(-1)!.text).not.toContain('Remove');
+    expect(s.run.bank).toEqual(bankBefore);
+  });
+  it('install replaces a different component type, refunding the old and charging the new', () => {
+    const { s, fs } = fs1();
+    s.run.bank = { ore: 1000, ice: 1000, crystal: 0, alloy: 0, fuel: 0 };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'laser', variant: 'wide' });
+    const old = fs.slots[2]!;
+    const before = { ...s.run.bank };
+    send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'shield', variant: 'standard' });
+    expect(fs.slots[2]).toEqual({ type: 'shield', variant: 'standard', tier: 1 });
+    const expected: Cost = {};
+    const refund = scrapValue(old);
+    const price = variantDef('shield', 'standard').cost(1);
+    for (const r of RESOURCES) expected[r] = (refund[r] ?? 0) - (price[r] ?? 0);
+    expect(bankDelta(before, s.run.bank)).toEqual(expected);
   });
   it('rejects an unknown component variant', () => {
     const { s, fs } = fs1();
@@ -93,6 +151,20 @@ describe('command handlers', () => {
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'warpdrive' as ComponentId, variant: 'standard' });
     expect(s.out.log.at(-1)).toMatchObject({ level: 'warn', text: 'Unknown component variant.' });
     expect(fs.slots[2]).toBeNull();
+    expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
+  });
+  it('ignores a non-integer slot index', () => {
+    const { s, fs } = fs1();
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 0, alloy: 0, fuel: 0 };
+    const bankBefore = JSON.stringify(s.run.bank);
+    const slotsBefore = JSON.stringify(fs.slots);
+    for (const slot of [1.5, NaN, Infinity]) {
+      send(s, { t: 'install', shipId: fs.id, slot, comp: 'shield', variant: 'standard' });
+      send(s, { t: 'upgrade', shipId: fs.id, slot });
+      send(s, { t: 'remove', shipId: fs.id, slot });
+    }
+    expect(Object.keys(fs.slots)).toEqual(fs.slots.map((_, i) => String(i)));
+    expect(JSON.stringify(fs.slots)).toBe(slotsBefore);
     expect(JSON.stringify(s.run.bank)).toBe(bankBefore);
   });
   it('upgrade', () => {
@@ -115,7 +187,7 @@ describe('command handlers', () => {
     send(s, { t: 'install', shipId: fs.id, slot: 2, comp: 'laser', variant: 'wide' });
     const before = { ...s.run.bank };
     send(s, { t: 'remove', shipId: fs.id, slot: 2 });
-    const delta = Object.fromEntries(RESOURCES.map((r) => [r, s.run.bank[r] - before[r]])) as Cost;
+    const delta = bankDelta(before, s.run.bank);
     expect(delta).toEqual(halve(investedCost('laser', 'wide', 1)));
     // A focused beam costs more, so this guards that the refund reads the variant.
     expect(delta).not.toEqual(halve(investedCost('laser', 'focused', 1)));
@@ -133,6 +205,14 @@ describe('command handlers', () => {
     const n = s.run.ships.length;
     send(s, { t: 'buyHull', hullId: 'drone' });
     expect(s.run.ships.length).toBe(n + 1);
+    expect([s.profile.stats.drones, s.profile.stats.miningDrones]).toEqual([1, 1]);
+  });
+  it('buying a hauler counts as a launch but not as a mining drone', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 1e4, alloy: 1e4, fuel: 0 };
+    send(s, { t: 'buyHull', hullId: 'hauler' });
+    expect(s.run.ships.some((x) => x.hullId === 'hauler')).toBe(true);
+    expect([s.profile.stats.drones, s.profile.stats.miningDrones]).toEqual([1, 0]);
   });
   it('scrap', () => {
     const s = newGame(1);
@@ -355,7 +435,7 @@ describe('command handlers', () => {
     s.run.selectedId = 0;
     handlers.select(s, { t: 'select', shipId: fs.id });
     expect(s.run.selectedId).toBe(fs.id);
-    expect(Object.keys(handlers)).toHaveLength(19);
+    expect(Object.keys(handlers)).toHaveLength(22);
   });
 
   it('warp leaves outposts behind with a warning', () => {

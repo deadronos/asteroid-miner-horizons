@@ -12,7 +12,8 @@ import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
-// Real saves frozen at versions 2 to 10 (belt trimmed to a few rocks), committed
+import { goalDone, type GoalId } from '../src/ui/goals';
+// Real saves frozen at versions 2 to 12 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
@@ -23,6 +24,8 @@ import V7_FIXTURE from './fixtures/save-v7.json?raw';
 import V8_FIXTURE from './fixtures/save-v8.json?raw';
 import V9_FIXTURE from './fixtures/save-v9.json?raw';
 import V10_FIXTURE from './fixtures/save-v10.json?raw';
+import V11_FIXTURE from './fixtures/save-v11.json?raw';
+import V12_FIXTURE from './fixtures/save-v12.json?raw';
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -41,6 +44,8 @@ const currentRun = () => {
     ...s,
     cargo: { ...s.cargo, alloy: 0, fuel: 0 },
     slots: s.slots.map((f) => (f ? { ...f, variant: defaultVariant(f.type) } : null)),
+    autoRepair: false,
+    autoUpgrade: false,
   }));
   const system = { ...run.system, modifiers: [] };
   const hazards = newHazards(fixture.profile.seed, run.system.number);
@@ -55,6 +60,18 @@ const currentRun = () => {
   };
 };
 
+/** `run` with the v12 per-ship automation flags cleared; toEqual treats an undefined field as absent. */
+const sansShipAuto = <R extends { ships: object[] }>(run: R): R => ({
+  ...run,
+  ships: run.ships.map((s) => ({ ...s, autoRepair: undefined, autoUpgrade: undefined })),
+});
+
+/** `profile` without the v13 fields: the `installs`, `unloads` and `miningDrones` stats and the first-steps flag. */
+const sansGoals = <P extends { stats: object }>(profile: P): P => {
+  const { installs: _i, unloads: _u, miningDrones: _m, ...stats } = profile.stats as Record<string, unknown>;
+  return { ...profile, stats, goalsDismissed: undefined } as P;
+};
+
 /** A valid current-version save, with the given run overrides applied on top. */
 const saveCurrent = (run: Record<string, unknown> = {}): SaveData => {
   const fixture = v3FixtureState();
@@ -63,6 +80,7 @@ const saveCurrent = (run: Record<string, unknown> = {}): SaveData => {
     perks: { ...fixture.profile.perks, furnace: 0, hopper: 0 },
     stats: newStats(),
     achievements: [],
+    goalsDismissed: false,
   };
   return { ...fixture, profile, version: SAVE_VERSION, run: { ...currentRun(), ...run } } as unknown as SaveData;
 };
@@ -186,6 +204,112 @@ describe('load through the production registry', () => {
     expect(deserialize(JSON.stringify(saveCurrent({ contracts: undefined })))).toBeNull();
   });
 
+  it('rejects malformed tick-critical run fields before any tick reads them', () => {
+    const run = currentRun();
+    const ship = run.ships[0];
+    const rock = run.rocks[0];
+    const pickup = { id: 9001, kind: 'ore', amount: 3, pos: { x: 1, z: 2 }, vel: { x: 0, z: 0 }, age: 0 };
+    const belt = run.system.belts[0];
+    const withBelt = (b: unknown) => ({ system: { ...run.system, belts: [b] } });
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['missing run.system.belts', { system: { ...run.system, belts: undefined } }],
+      ['null belt entry', withBelt(null)],
+      ['empty belt entry', withBelt({})],
+      ['belt missing initialCount', withBelt({ ...belt, initialCount: undefined })],
+      ['belt mix missing a kind', withBelt({ ...belt, mix: { ore: 1, ice: 0 } })],
+      ['missing run.system.station', { system: { ...run.system, station: undefined } }],
+      [
+        'corrupt run.system.station.pos (z undefined)',
+        { system: { ...run.system, station: { pos: { x: 0, y: 0, z: undefined } } } },
+      ],
+      ['missing run.rng', { rng: undefined }],
+      ['missing run.nextId', { nextId: undefined }],
+      ['missing run.time', { time: undefined }],
+      ['missing run.runValue', { runValue: undefined }],
+      ['missing run.regrowTimer', { regrowTimer: undefined }],
+      ['missing ship.vel', { ships: [{ ...ship, vel: undefined }] }],
+      ['corrupt ship.vel', { ships: [{ ...ship, vel: { x: 0 } }] }],
+      ['missing ship.pos', { ships: [{ ...ship, pos: undefined }] }],
+      ['corrupt ship.pos', { ships: [{ ...ship, pos: { x: 0 } }] }],
+      ...(['angle', 'hull', 'shield', 'collisionCd', 'respawn'] as const).map(
+        (k): [string, Record<string, unknown>] => [`missing ship.${k}`, { ships: [{ ...ship, [k]: undefined }] }],
+      ),
+      ['missing rock.pos', { rocks: [{ ...rock, pos: undefined }] }],
+      ['corrupt rock.vel', { rocks: [{ ...rock, vel: { x: 0 } }] }],
+      ['missing rock.radius', { rocks: [{ ...rock, radius: undefined }] }],
+      ['unknown rock.kind', { rocks: [{ ...rock, kind: 'unobtainium' }] }],
+      ['missing pickup.pos', { pickups: [{ ...pickup, pos: undefined }] }],
+      ['missing pickup.vel', { pickups: [{ ...pickup, vel: undefined }] }],
+      ['null pickup', { pickups: [null] }],
+    ];
+    // The well-formed pickup is accepted, so its cases fail on the field alone.
+    expect(deserialize(JSON.stringify(saveCurrent({ pickups: [pickup] })))).not.toBeNull();
+    for (const [label, patch] of cases) {
+      expect(parseImport(JSON.stringify(saveCurrent(patch))), `case: ${label}`).toEqual({
+        ok: false,
+        error: 'This is not an Asteroid Miner Horizons save.',
+      });
+    }
+  });
+
+  it('rejects non-finite tick-critical numbers that survive JSON.parse', () => {
+    // JSON.stringify writes NaN and Infinity as null, which only tests the missing case. An
+    // overflowing literal parses back to Infinity, so splice one in to reach the finite() checks.
+    const INF = '"__INF__"';
+    const run = currentRun();
+    const ship = run.ships[0];
+    const rock = run.rocks[0];
+    const withInf = (patch: Record<string, unknown>): string =>
+      JSON.stringify(saveCurrent(patch)).replace(INF, '1e999');
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['run.rng.s', { rng: { s: '__INF__' } }],
+      ['run.nextId', { nextId: '__INF__' }],
+      ['run.time', { time: '__INF__' }],
+      ['run.runValue', { runValue: '__INF__' }],
+      ['run.regrowTimer', { regrowTimer: '__INF__' }],
+      ['ship.pos.x', { ships: [{ ...ship, pos: { ...ship.pos, x: '__INF__' } }] }],
+      ['ship.hull', { ships: [{ ...ship, hull: '__INF__' }] }],
+      ['rock.radius', { rocks: [{ ...rock, radius: '__INF__' }] }],
+      [
+        'belt.initialCount',
+        { system: { ...run.system, belts: [{ ...run.system.belts[0], initialCount: '__INF__' }] } },
+      ],
+    ];
+    for (const [label, patch] of cases) {
+      const text = withInf(patch);
+      expect(text, `case: ${label}`).toContain('1e999');
+      expect(deserialize(text), `case: ${label}`).toBeNull();
+    }
+  });
+
+  it('rejects a profile whose warp count, data or seed the next warp cannot use', () => {
+    // A save with no warp count used to load, then throw in the warp command (system number NaN).
+    const noWarps = saveCurrent();
+    delete (noWarps.profile as Partial<SaveData['profile']>).warps;
+    expect(deserialize(JSON.stringify(noWarps))).toBeNull();
+
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['warps null', { warps: null }],
+      ['warps a string', { warps: '3' }],
+      ['warps negative', { warps: -1 }],
+      ['warps fractional', { warps: 1.5 }],
+      ['data a string', { data: 'lots' }],
+      ['data missing', { data: undefined }],
+      ['dataEarned missing', { dataEarned: undefined }],
+      ['dataEarned null', { dataEarned: null }],
+      ['seed missing', { seed: undefined }],
+    ];
+    expect(deserialize(JSON.stringify(saveCurrent()))).not.toBeNull();
+    for (const [label, patch] of cases) {
+      expect(deserialize(JSON.stringify(merge(patch)(saveCurrent()))), `case: ${label}`).toBeNull();
+    }
+    // typeof Infinity is 'number' too; an overflowing literal is the only way JSON carries one.
+    for (const k of ['seed', 'warps', 'data', 'dataEarned']) {
+      const text = JSON.stringify(merge({ [k]: '__INF__' })(saveCurrent())).replace('"__INF__"', '1e999');
+      expect(deserialize(text), `case: ${k} Infinity`).toBeNull();
+    }
+  });
+
   it('rejects a current save whose contract board has no offers array', () => {
     expect(deserialize(JSON.stringify(saveCurrent({ contracts: {} })))).toBeNull();
   });
@@ -194,6 +318,99 @@ describe('load through the production registry', () => {
     expect(deserialize(saveWithBoard({ offers: [], nextId: 1, rng: {} }))).toBeNull(); // no rng.s
     expect(deserialize(saveWithBoard({ offers: [], nextId: 1, rng: null }))).toBeNull(); // no rng at all
     expect(deserialize(saveWithBoard({ offers: [], nextId: 'x', rng: { s: 1 } }))).toBeNull(); // bad counter
+  });
+
+  it('ticks a save with every order kind and a full contract board', () => {
+    const run = currentRun();
+    const [ship, ...rest] = run.ships;
+    const offer = {
+      id: 1,
+      kind: 'deliverOre',
+      target: 50,
+      progress: 0,
+      timeLimit: 300,
+      timeLeft: 60,
+      reward: { ice: 5 },
+      data: 0,
+    };
+    const contracts = { ...run.contracts, offers: [offer], active: { ...offer, id: 2, kind: 'breakLarge' }, nextId: 3 };
+    const orders = [
+      { kind: 'move', to: { x: 10, z: 20 } },
+      { kind: 'mine', rockId: run.rocks[0].id },
+      { kind: 'dock' },
+    ];
+    for (const order of orders) {
+      const r = parseImport(
+        JSON.stringify(saveCurrent({ ships: [{ ...ship, order, aiMode: 'auto' }, ...rest], contracts })),
+      );
+      if (!r.ok) throw new Error(`expected the ${order.kind} save to load`);
+      const tickOnce = () => tick(r.record.state, 1 / 60, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+      expect(tickOnce).not.toThrow();
+    }
+  });
+
+  it('rejects malformed ship orders, AI state and contracts before any tick reads them', () => {
+    const run = currentRun();
+    const ship = run.ships[0];
+    const rock = run.rocks[0];
+    const offer = {
+      id: 1,
+      kind: 'deliverOre',
+      target: 50,
+      progress: 0,
+      timeLimit: 300,
+      timeLeft: 60,
+      reward: { ice: 5 },
+      data: 0,
+    };
+    const withShip = (patch: Record<string, unknown>) => ({ ships: [{ ...ship, ...patch }] });
+    const withBoard = (patch: Record<string, unknown>) => ({ contracts: { ...run.contracts, ...patch } });
+    const withSystem = (patch: Record<string, unknown>) => ({ system: { ...run.system, ...patch } });
+    const planet = run.system.planets[0];
+    const cases: Array<[string, Record<string, unknown>]> = [
+      ['move order without a target', withShip({ order: { kind: 'move' } })],
+      ['move order with a corrupt target', withShip({ order: { kind: 'move', to: { x: 1 } } })],
+      ['mine order without a rock id', withShip({ order: { kind: 'mine' } })],
+      ['unknown order kind', withShip({ order: { kind: 'warp' } })],
+      ['non-object order', withShip({ order: 'dock' })],
+      ['missing ship.order', withShip({ order: undefined })],
+      ['unknown ship.aiMode', withShip({ aiMode: 'berserk' })],
+      ['missing ship.aiMode', withShip({ aiMode: undefined })],
+      ['corrupt ship.aiTargetId', withShip({ aiTargetId: 'rock' })],
+      ['corrupt ship.beamTargetId', withShip({ beamTargetId: {} })],
+      ['unknown ship.hullId', withShip({ hullId: 'dreadnought' })],
+      ['missing ship.id', withShip({ id: undefined })],
+      ['missing ship.name', withShip({ name: undefined })],
+      ['missing rock.id', { rocks: [{ ...rock, id: undefined }] }],
+      ['unknown rock.size', { rocks: [{ ...rock, size: 3 }] }],
+      ['null contract offer', withBoard({ offers: [null] })],
+      ['offer missing timeLeft', withBoard({ offers: [{ ...offer, timeLeft: undefined }] })],
+      ['offer of an unknown kind', withBoard({ offers: [{ ...offer, kind: 'smuggle' }] })],
+      ['offer with a non-numeric reward', withBoard({ offers: [{ ...offer, reward: { ore: 'lots' } }] })],
+      ['offer with an unknown reward resource', withBoard({ offers: [{ ...offer, reward: { gold: 1 } }] })],
+      ['empty active contract', withBoard({ active: {} })],
+      ['active contract missing progress', withBoard({ active: { ...offer, progress: undefined } })],
+      ['missing contracts.active', withBoard({ active: undefined })],
+      ['missing contracts.completed', withBoard({ completed: undefined })],
+      ['missing contracts.rewardValue', withBoard({ rewardValue: undefined })],
+      ['missing run.selectedId', { selectedId: undefined }],
+      ['missing system.planets', withSystem({ planets: undefined })],
+      ['planet missing speed', withSystem({ planets: [{ ...planet, speed: undefined }] })],
+      ['moon missing angle', withSystem({ planets: [{ ...planet, moons: [{ angle: undefined, speed: 1 }] }] })],
+      ['planet missing moons', withSystem({ planets: [{ ...planet, moons: undefined }] })],
+      ['missing system.number', withSystem({ number: undefined })],
+      ['unknown system.starClass', withSystem({ starClass: 'X' })],
+      ['missing system.heatRadius', withSystem({ heatRadius: undefined })],
+      ['no belts', withSystem({ belts: [] })],
+    ];
+    // The well-formed offer is accepted, so its cases fail on the field alone.
+    expect(deserialize(JSON.stringify(saveCurrent(withBoard({ offers: [offer], active: offer }))))).not.toBeNull();
+    for (const [label, patch] of cases) {
+      expect(parseImport(JSON.stringify(saveCurrent(patch))), `case: ${label}`).toEqual({
+        ok: false,
+        error: 'This is not an Asteroid Miner Horizons save.',
+      });
+    }
   });
 
   it('rejects a current save whose run has no refinery', () => {
@@ -588,7 +805,7 @@ describe('automation migration to v9', () => {
     const state = loadFrozen(V8_FIXTURE);
     const { automation, ...run } = state.run;
     expect(automation.outposts).toEqual([]);
-    expect(run).toEqual(before.run);
+    expect(sansShipAuto(run)).toEqual(before.run);
   });
 
   it('keeps a well-formed outpost through a round-trip', () => {
@@ -665,6 +882,8 @@ describe('lifetime stats migration to v11', () => {
       contracts: 3,
       refined: 58,
       comets: 4,
+      // Seeded later by the v13 step: the save has warped, so the flagship has unloaded.
+      unloads: 1,
     });
   });
 
@@ -672,8 +891,10 @@ describe('lifetime stats migration to v11', () => {
     const before = JSON.parse(V10_FIXTURE).state;
     const loaded = loadFrozen(V10_FIXTURE);
     // toEqual treats an undefined field as absent, so this compares everything else.
-    expect({ ...loaded.profile, stats: undefined, achievements: undefined }).toEqual(before.profile);
-    expect(loaded.run).toEqual(before.run);
+    expect({ ...loaded.profile, stats: undefined, achievements: undefined, goalsDismissed: undefined }).toEqual(
+      before.profile,
+    );
+    expect(sansShipAuto(loaded.run)).toEqual(before.run);
   });
 
   it('unlocks what the seeded stats already reach on the first tick', () => {
@@ -702,5 +923,99 @@ describe('lifetime stats migration to v11', () => {
     }
     const good = { ...loaded.profile, achievements: ['firstJump'] };
     expect(parseImport(JSON.stringify({ version: SAVE_VERSION, profile: good, run: loaded.run })).ok).toBe(true);
+  });
+});
+
+describe('ship automation migration to v12', () => {
+  it.each([
+    ['v2', FIXTURE],
+    ['v10', V10_FIXTURE],
+    ['v11', V11_FIXTURE],
+  ])('loads the %s fixture with autorepair and autoupgrade off on every ship', (_label, raw) => {
+    const state = loadFrozen(raw);
+    expect(state.version).toBe(SAVE_VERSION);
+    for (const ship of state.run.ships) expect([ship.autoRepair, ship.autoUpgrade]).toEqual([false, false]);
+  });
+
+  it('keeps the v11 fixture otherwise unchanged', () => {
+    const before = JSON.parse(V11_FIXTURE).state;
+    const loaded = loadFrozen(V11_FIXTURE);
+    expect(sansGoals(loaded.profile)).toEqual(before.profile);
+    expect(sansShipAuto(loaded.run)).toEqual(before.run);
+  });
+
+  it('rejects a current save whose ship flags are not booleans', () => {
+    const loaded = loadFrozen(V11_FIXTURE);
+    loaded.run.ships[1]!.autoRepair = 'yes' as unknown as boolean;
+    expect(parseImport(JSON.stringify({ format: 'amh-save', savedAt: 0, state: loaded })).ok).toBe(false);
+  });
+});
+
+describe('first-steps migration to v13', () => {
+  it.each([
+    ['v2', FIXTURE],
+    ['v10', V10_FIXTURE],
+    ['v11', V11_FIXTURE],
+    ['v12', V12_FIXTURE],
+  ])('loads the %s fixture with every stat present and the checklist not dismissed', (_label, raw) => {
+    const state = loadFrozen(raw);
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.profile.goalsDismissed).toBe(false);
+    expect(new Set(Object.keys(state.profile.stats))).toEqual(new Set(Object.keys(newStats())));
+  });
+
+  it.each([
+    // Starting loadouts only, no deposits, no warps.
+    ['v2', FIXTURE, { installs: 0, unloads: 0, miningDrones: 0 }],
+    // Starting loadout, empty bank this run, but two warps behind it.
+    ['v10', V10_FIXTURE, { installs: 0, unloads: 1, miningDrones: 0 }],
+    // Flagship cargo + sensor (2) and a cargo pod on each drone (4); the hauler keeps its stock engine.
+    ['v11', V11_FIXTURE, { installs: 6, unloads: 1, miningDrones: 4 }],
+    // As v11, but the drone with autoupgrade on may have fitted its own cargo pod, so it is not counted.
+    ['v12', V12_FIXTURE, { installs: 5, unloads: 1, miningDrones: 4 }],
+  ])('backfills the new stats from what the %s save shows', (_label, raw, want) => {
+    const { stats } = loadFrozen(raw).profile;
+    expect({ installs: stats.installs, unloads: stats.unloads, miningDrones: stats.miningDrones }).toEqual(want);
+  });
+
+  it('counts a part on a refitted flagship against the Prospector loadout it started from', () => {
+    const before = JSON.parse(V12_FIXTURE);
+    const fs = before.state.run.ships[0];
+    fs.hullId = 'excavator';
+    fs.slots = [...fs.slots.slice(0, 2), null, null, null, null];
+    const r = parseImport(JSON.stringify(before));
+    if (!r.ok) throw new Error('expected the edited fixture to load');
+    // Only the three drones' cargo pods: the carried laser and engine are not hand installs.
+    expect(r.record.state.profile.stats.installs).toBe(3);
+  });
+
+  it('a migrated pre-warp save with fitted parts shows those goals done', () => {
+    const state = loadFrozen(V12_FIXTURE);
+    expect(['install', 'unload', 'drone'].map((id) => goalDone(state, id as GoalId))).toEqual([true, true, true]);
+  });
+
+  it('keeps the v12 fixture otherwise unchanged', () => {
+    const before = JSON.parse(V12_FIXTURE).state;
+    const loaded = loadFrozen(V12_FIXTURE);
+    expect(sansGoals(loaded.profile)).toEqual(before.profile);
+    expect(loaded.run).toEqual(before.run);
+  });
+
+  it('rejects a current save whose first-steps flag is missing or not a boolean', () => {
+    const loaded = loadFrozen(V12_FIXTURE);
+    for (const goalsDismissed of [undefined, 'yes', 1, null]) {
+      const profile = { ...loaded.profile, goalsDismissed };
+      expect(parseImport(JSON.stringify({ version: SAVE_VERSION, profile, run: loaded.run })).ok).toBe(false);
+    }
+    const dismissed = { ...loaded.profile, goalsDismissed: true };
+    const r = parseImport(JSON.stringify({ version: SAVE_VERSION, profile: dismissed, run: loaded.run }));
+    expect(r.ok && r.record.state.profile.goalsDismissed).toBe(true);
+  });
+
+  it('rejects a current save with no installs stat', () => {
+    const loaded = loadFrozen(V12_FIXTURE);
+    const { installs: _installs, ...stats } = loaded.profile.stats;
+    const profile = { ...loaded.profile, stats };
+    expect(parseImport(JSON.stringify({ version: SAVE_VERSION, profile, run: loaded.run })).ok).toBe(false);
   });
 });

@@ -8,11 +8,12 @@ import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
 import { walletValue, RESOURCES, formatWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { updateAchievements } from './achievements';
-import { DEFAULT_ASSISTS, type Assists } from './assists';
+import { DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO, type Assists, type FleetAuto } from './assists';
 import { haulerThink, updateOutposts } from './automation';
 import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
+import { serviceDocked } from './fleetAuto';
 import { spawnBeltRock } from './generate';
 import { flareExposure, updateHazards } from './hazards';
 import type { SimIndex } from './index';
@@ -28,6 +29,8 @@ export interface TickInput {
   thrust: Vec2;
   commands: Command[];
   assists?: Assists;
+  /** Autorepair threshold and spending reserve; absent means the defaults. */
+  automation?: FleetAuto;
   /** Hazard difficulty; absent means 'off'. */
   hazards?: HazardLevel;
 }
@@ -76,6 +79,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     index,
     dt,
     assists: input.assists ?? DEFAULT_ASSISTS,
+    auto: input.automation ?? DEFAULT_FLEET_AUTO,
     hazards: level,
   };
 
@@ -173,7 +177,10 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
 
   ship.shield = Math.min(st.maxShield, ship.shield + st.shieldRegen * dt);
 
-  if (isDocked(run, ship) && walletTotal(ship.cargo) > 0) unload(state, ship);
+  if (isDocked(run, ship)) {
+    if (walletTotal(ship.cargo) > 0) unload(state, ship);
+    if (!isFlagship(ship)) serviceDocked(state, ctx.index, ship, st, ctx.auto);
+  }
 }
 
 function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
@@ -219,6 +226,7 @@ function unload(state: GameState, ship: Ship): void {
     ship.cargo[r] = 0;
   }
   run.runValue += value;
+  if (value > 0 && isFlagship(ship)) state.profile.stats.unloads += 1;
   if (value > 0) state.out.fx.push({ t: 'dock', pos: { ...ship.pos }, shipId: ship.id, value });
   if (isFlagship(ship) && parts) state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts}.` });
 }
@@ -250,8 +258,14 @@ function updatePickups(state: GameState, index: SimIndex, dt: number): void {
     if (best) {
       const st = stats.get(best.id)!;
       const pull = TUNING.tractorSpeed * (0.4 + 0.6 * (1 - bestD / st.magnet));
-      p.vel.x = best.vel.x + ((best.pos.x - p.pos.x) / bestD) * pull;
-      p.vel.z = best.vel.z + ((best.pos.z - p.pos.z) / bestD) * pull;
+      // A pickup sitting exactly on the ship has no direction to be pulled in (0 / 0), so it just rides along.
+      if (bestD < 1e-6) {
+        p.vel.x = best.vel.x;
+        p.vel.z = best.vel.z;
+      } else {
+        p.vel.x = best.vel.x + ((best.pos.x - p.pos.x) / bestD) * pull;
+        p.vel.z = best.vel.z + ((best.pos.z - p.pos.z) / bestD) * pull;
+      }
       if (bestD < TUNING.pickupCollectRadius + st.size) {
         const take = Math.min(cargoFree(best, st), p.amount);
         best.cargo[p.kind] += take;

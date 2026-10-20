@@ -10,7 +10,8 @@ npx vitest                        # watch mode
 npm run check                     # format:check + lint + typecheck + tests — the gate
 ```
 
-There is no Vitest config file, so tests run in the default **node** environment: no jsdom, no real browser, no
+Vitest is configured by the `test` block in `vite.config.ts`: it collects only `tests/**/*.test.ts` (never the
+copies under `.claude/worktrees/`) and keeps the default **node** environment: no jsdom, no real browser, no
 WebGL. Tests still import three.js where it is useful, because geometry and math classes construct fine
 without a renderer.
 
@@ -25,7 +26,8 @@ special roles worth knowing before you change the code they guard:
 | `sim.test.ts`        | Determinism (same seed + commands → same serialised state), save round-trip  |
 | `commands.test.ts`   | Every command handler, including rejections                                  |
 | `migrations.test.ts` | Each save version step, against the fixtures in `tests/fixtures/`            |
-| `alloc.test.ts`      | Per-tick allocation; the regression net for hot-path changes                 |
+| `alloc.test.ts`      | Mean bytes allocated per tick with a full fleet, against a fixed budget      |
+| `inPlace.test.ts`    | `ships`, `rocks` and `pickups` are compacted in place, never reassigned      |
 | `stats.test.ts`      | Derived ship stats as a snapshot; update it only when the change is intended |
 | `bot.test.ts`        | The balance bot's decisions                                                  |
 
@@ -48,8 +50,9 @@ tests; `tests/__snapshots__/` holds snapshots.
 - **Sim tests drive the tick directly** through `tests/helpers.ts`: `runTicks(state, n, opts)` for an exact tick
   count, `runFor(state, seconds, opts)` for sim time (it accumulates `t += DT`, so it can run one tick more than
   `seconds / DT`), with `commands`, `hazards`, `assists` or a shared `index` in `opts`. Do not spin up `main.ts`.
-- **`alloc.test.ts` guards allocation.** Reuse buffers and instances rather than allocating per tick; that test
-  is the regression net for hot-path changes.
+- **Reuse buffers and instances rather than allocating per tick.** `alloc.test.ts` fails when the mean
+  allocation per tick grows past its budget; that catches a new per-rock or per-ship allocation, but not a single
+  extra array copy. `inPlace.test.ts` catches a `filter`/`map` that reassigns `run.ships`, `rocks` or `pickups`.
 
 ## Headless bot harness
 
@@ -59,7 +62,9 @@ tests; `tests/__snapshots__/` holds snapshots.
 - `scripts/harness.ts` — `runBot(state, opts)` steps the sim at a fixed 60 Hz, lets the bot decide every 15
   ticks, and drains `out.fx`/`out.log` so long runs don't grow memory.
 - `npm run bench` — times the `tick()` call with a full fleet; over budget warns, never fails.
-- `npm run balance` — plays seeds × warps and writes `docs/balance.md`.
+- `npm run balance` — plays 10 seeds × 10 warps at hazards `normal` (the game's default; `--hazards off` for
+  calm play) and writes `docs/balance.md`. CI regenerates it and warns
+  (does not fail) when the committed report differs; the header line is ignored.
 
 `bot.test.ts` covers bot decisions. If you add a game system, consider teaching the bot to use it so the
 balance report reflects it — otherwise the numbers silently ignore your feature.

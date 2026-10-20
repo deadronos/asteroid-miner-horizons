@@ -22,8 +22,15 @@ export const TUNING = {
   collisionCooldown: 0.5,
   collisionMinSpeed: 25,
   starHeatDps: 30,
+  /** Clearance past the star's heat radius that autopilot routes keep (`pilot.arrive`). */
+  starRoutePad: 120,
   flagshipRespawn: 4,
   repairOrePerHull: 0.3,
+  /** Cost of a ship's 3rd slot; each later slot costs slotCostGrowth× the one before (#141). */
+  slotBaseCost: { ore: 120, ice: 60 },
+  slotCostGrowth: 1.7,
+  /** Sim seconds between one ship's autoupgrade steps while docked, so purchases read in the log (#140). */
+  autoUpgradeInterval: 0.5,
 
   baseFleetCap: 5,
   /** A hold counts as full once free space drops below max(fullHoldMin, cap × fullHoldShare). */
@@ -97,6 +104,10 @@ export const TUNING = {
   volatileBlastPad: 120,
   volatileBlastDamage: 40,
   volatileYieldMul: 1.5,
+  /** Below this share of its hp a volatile rock counts as breaking: drone and hauler AI keep out of its blast. */
+  volatileWarnHp: 1,
+  /** A ship cutting a volatile rock backs off once this far inside the safe distance (hysteresis). */
+  volatileBackOffSlack: 8,
   /** Dense: the laser tier that can cut it, and its yield bonus. */
   denseMinLaserTier: 2,
   denseYieldMul: 1.6,

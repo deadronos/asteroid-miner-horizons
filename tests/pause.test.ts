@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { LIVE_CONTINUOUS } from '../src/audio/sfx';
-import { pauseAudio, pauseBanner, pauseKind, type PauseInput } from '../src/pause';
+import { PAUSED_FRAME_INTERVAL, pauseAudio, pauseBanner, pauseKind, renderDue, type PauseInput } from '../src/pause';
 
 const running: PauseInput = {
   manual: false,
@@ -60,5 +60,28 @@ describe('pauseAudio', () => {
 
   it('keeps only the alarm while the window is unfocused', () => {
     expect(pauseAudio('unfocused')).toEqual({ hums: false, alarm: true });
+  });
+});
+
+describe('renderDue', () => {
+  it('renders every frame while running', () => {
+    expect(renderDue(null, 0, false)).toBe(true);
+  });
+
+  it('throttles a frozen sim to its interval', () => {
+    expect(renderDue('manual', 1 / 60, false)).toBe(false);
+    expect(renderDue('manual', PAUSED_FRAME_INTERVAL.manual, false)).toBe(true);
+    expect(renderDue('menu', 1 / 30, false)).toBe(false);
+    expect(renderDue('unfocused', PAUSED_FRAME_INTERVAL.manual, false)).toBe(false);
+    expect(renderDue('unfocused', PAUSED_FRAME_INTERVAL.unfocused, false)).toBe(true);
+  });
+
+  it('renders at once while busy, whatever the pause', () => {
+    expect(renderDue('manual', 0, true)).toBe(true);
+    expect(renderDue('unfocused', 0, true)).toBe(true);
+  });
+
+  it('never renders an unfocused pause more often than a manual one', () => {
+    expect(PAUSED_FRAME_INTERVAL.unfocused).toBeGreaterThanOrEqual(PAUSED_FRAME_INTERVAL.manual);
   });
 });

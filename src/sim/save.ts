@@ -9,6 +9,8 @@
 
 import { ACHIEVEMENTS, STAT_KEYS } from '../data/achievements';
 import { COMPONENTS, isVariant, type ComponentId } from '../data/components';
+import { CONTRACTS } from '../data/contracts';
+import { HULLS } from '../data/hulls';
 import { MODIFIERS } from '../data/modifiers';
 import { PERK_IDS } from '../data/perks';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
@@ -57,12 +59,25 @@ export function deserialize(json: string, opts?: MigrateOptions): GameState | nu
   }
 }
 
+/**
+ * True when `state` would load back from its own save. JSON writes NaN and Infinity as null, so a game a bug left
+ * holding one would otherwise be saved as text the load rejects.
+ */
+export function loadsBack(state: GameState): boolean {
+  return deserialize(serialize(state)) !== null;
+}
+
 /** True for any non-null object (arrays included); narrows so fields can be read as `unknown`. */
 const isObj = (x: unknown): x is Record<string, unknown> => !!x && typeof x === 'object';
 const finite = (n: unknown): n is number => typeof n === 'number' && Number.isFinite(n);
 const isVec = (p: unknown): boolean => isObj(p) && finite(p.x) && finite(p.z);
-/** True when `r` is a serialised `Rng`: an object with a numeric state. */
-const isRng = (r: unknown): boolean => isObj(r) && typeof r.s === 'number';
+/** True when `r` is a serialised `Rng`: an object with a finite numeric state. */
+const isRng = (r: unknown): boolean => isObj(r) && finite(r.s);
+/** True when `k` names a raw resource a rock, pickup or belt can carry. */
+const isRawKind = (k: unknown): boolean => typeof k === 'string' && (RAW_RESOURCES as readonly string[]).includes(k);
+
+/** True when `x` is null or a finite number (an optional id the tick looks up). */
+const isIdOrNull = (x: unknown): boolean => x === null || finite(x);
 
 /** True when `w` is an object with a number under every `RESOURCES` key. */
 function isWallet(w: unknown): boolean {
@@ -109,6 +124,75 @@ function isFitted(f: unknown): boolean {
 /** True when `s` is a ship whose slot list the tick can derive stats from. */
 function isShipSlots(s: unknown): boolean {
   return isObj(s) && Array.isArray(s.slots) && s.slots.every(isFitted);
+}
+
+/** True when `o` is no order, or one `runOrder` can follow: a move with a target, a mine with a rock id, or dock. */
+function isOrder(o: unknown): boolean {
+  if (o === null) return true;
+  if (!isObj(o)) return false;
+  if (o.kind === 'move') return isVec(o.to);
+  if (o.kind === 'mine') return finite(o.rockId);
+  return o.kind === 'dock';
+}
+
+/**
+ * True when `s` has everything the tick moves or reads each frame: a known hull, position, velocity, the scalars
+ * it steps (a missing one turns NaN for good; a NaN hull can never reach 0), a followable order and AI mode,
+ * complete cargo and known fitted slots.
+ */
+function isShip(s: unknown): boolean {
+  return (
+    isObj(s) &&
+    finite(s.id) &&
+    typeof s.name === 'string' &&
+    typeof s.hullId === 'string' &&
+    Object.hasOwn(HULLS, s.hullId) &&
+    isOrder(s.order) &&
+    (s.aiMode === 'assist' || s.aiMode === 'auto') &&
+    isIdOrNull(s.aiTargetId) &&
+    isIdOrNull(s.beamTargetId) &&
+    isVec(s.pos) &&
+    isVec(s.vel) &&
+    finite(s.angle) &&
+    finite(s.hull) &&
+    finite(s.shield) &&
+    finite(s.collisionCd) &&
+    finite(s.respawn) &&
+    isWallet(s.cargo) &&
+    typeof s.autoRepair === 'boolean' &&
+    typeof s.autoUpgrade === 'boolean' &&
+    isShipSlots(s)
+  );
+}
+
+/** True when `r` is a rock the tick can move, mine and crack, with no trait the sim doesn't know. */
+function isRock(r: unknown): boolean {
+  return (
+    isTrait(r) &&
+    isObj(r) &&
+    finite(r.id) &&
+    (r.size === 0 || r.size === 1 || r.size === 2) &&
+    isRawKind(r.kind) &&
+    isVec(r.pos) &&
+    isVec(r.vel) &&
+    finite(r.radius) &&
+    finite(r.hp) &&
+    finite(r.maxHp) &&
+    finite(r.units) &&
+    finite(r.belt)
+  );
+}
+
+/** True when `p` is a pickup the tick can drift, age and collect. */
+function isPickup(p: unknown): boolean {
+  return isObj(p) && isRawKind(p.kind) && isVec(p.pos) && isVec(p.vel) && finite(p.amount) && finite(p.age);
+}
+
+/** True when `b` has what belt regrowth and spawning read: finite radii, a target count and a weight per raw kind. */
+function isBelt(b: unknown): boolean {
+  if (!isObj(b) || !finite(b.inner) || !finite(b.outer) || !finite(b.initialCount)) return false;
+  const mix = b.mix;
+  return isObj(mix) && RAW_RESOURCES.every((k) => finite(mix[k]));
 }
 
 /** True when `h` has what the hazard tick reads: an RNG state, finite timers, and well-formed pending hazards. */
@@ -161,18 +245,80 @@ function isLifetime(p: Profile): boolean {
   );
 }
 
-/** True when `p` has a seed, a finite level for every perk, and well-formed lifetime stats. */
+/** True when `p` has a seed, a warp count, data totals, a finite level for every perk, well-formed lifetime stats and a first-steps flag. */
 function isProfile(p: Profile | undefined): p is Profile {
-  if (!p || typeof p.seed !== 'number' || !isObj(p.perks)) return false;
+  if (!p || !finite(p.seed) || !isObj(p.perks)) return false;
+  // The next warp numbers its system from the warp count, and research spends data.
+  if (!Number.isInteger(p.warps) || p.warps < 0 || !finite(p.data) || !finite(p.dataEarned)) return false;
   // Stats, costs and the refinery read every perk level, so each must be a finite number.
   if (!PERK_IDS.every((k) => finite(p.perks[k]))) return false;
+  // The HUD reads the first-steps flag on every refresh.
+  if (typeof p.goalsDismissed !== 'boolean') return false;
   // The tick adds to every stat and the Stats tab looks up every unlocked achievement.
   return isLifetime(p);
 }
 
-/** True when the contract board has everything the tick walks: offers, the id counter and the RNG state. */
+/** True when `c` is a contract the tick can age, complete and describe: a known kind, finite numbers, a sane reward. */
+function isContract(c: unknown): boolean {
+  if (!isObj(c)) return false;
+  const reward = c.reward;
+  return (
+    finite(c.id) &&
+    typeof c.kind === 'string' &&
+    Object.hasOwn(CONTRACTS, c.kind) &&
+    finite(c.target) &&
+    finite(c.progress) &&
+    finite(c.timeLimit) &&
+    finite(c.timeLeft) &&
+    finite(c.data) &&
+    isObj(reward) &&
+    !Array.isArray(reward) &&
+    Object.entries(reward).every(([k, n]) => (RESOURCES as readonly string[]).includes(k) && finite(n))
+  );
+}
+
+/** True when the contract board has everything the tick walks: offers, the active contract, counters and RNG state. */
 function isBoard(b: unknown): boolean {
-  return isObj(b) && Array.isArray(b.offers) && typeof b.nextId === 'number' && isRng(b.rng);
+  return (
+    isObj(b) &&
+    Array.isArray(b.offers) &&
+    b.offers.every(isContract) &&
+    (b.active === null || isContract(b.active)) &&
+    finite(b.nextId) &&
+    finite(b.completed) &&
+    finite(b.failed) &&
+    finite(b.rewardValue) &&
+    isRng(b.rng)
+  );
+}
+
+/** True when `p` is a planet (or moon) the tick can turn: a finite angle and speed, and turnable moons. */
+function isOrbiter(p: unknown, moons: boolean): boolean {
+  if (!isObj(p) || !finite(p.angle) || !finite(p.speed)) return false;
+  return !moons || (Array.isArray(p.moons) && p.moons.every((m) => isOrbiter(m, false)));
+}
+
+/** True when the system's star, planets and scalars are what the tick, hazards and contracts read. */
+function isSystem(sys: unknown): boolean {
+  if (!isObj(sys)) return false;
+  const { belts, station, planets } = sys;
+  return (
+    typeof sys.name === 'string' &&
+    finite(sys.number) &&
+    (sys.starClass === 'M' || sys.starClass === 'G' || sys.starClass === 'B') &&
+    finite(sys.starRadius) &&
+    finite(sys.heatRadius) &&
+    finite(sys.richness) &&
+    Array.isArray(planets) &&
+    planets.every((p) => isOrbiter(p, true)) &&
+    // Comets roll a belt to cross, so there must be at least one.
+    Array.isArray(belts) &&
+    belts.length > 0 &&
+    belts.every(isBelt) &&
+    isObj(station) &&
+    isVec(station.pos) &&
+    isModifierList(sys.modifiers)
+  );
 }
 
 /**
@@ -208,15 +354,14 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
   if (!isProfile(profile)) return null;
   if (!run || !run.system || !Array.isArray(run.ships) || !Array.isArray(run.rocks) || !Array.isArray(run.pickups))
     return null;
-  // A trait the sim doesn't know would drive behaviour no rock can roll.
-  if (!run.rocks.every(isTrait)) return null;
-  if (!isModifierList(run.system.modifiers)) return null;
+  // The tick steps these every frame, so a missing or non-finite one would turn NaN and stay that way.
+  if (!isRng(run.rng) || !finite(run.nextId) || !finite(run.time) || !finite(run.runValue)) return null;
+  if (!finite(run.regrowTimer) || !finite(run.selectedId)) return null;
+  if (!isSystem(run.system)) return null;
+  if (!run.rocks.every(isRock) || !run.pickups.every(isPickup)) return null;
   // A wallet missing a resource column (e.g. alloy) would poison every later
-  // read with NaN, so the bank and each ship's cargo must be complete.
-  if (!isWallet(run.bank) || !run.ships.every((s) => isWallet(s.cargo))) return null;
-  // The tick derives each ship's stats from its fitted slots, so every one must
-  // name a known component variant at a real tier.
-  if (!run.ships.every(isShipSlots)) return null;
+  // read with NaN, so the bank must be complete (ship cargo is checked by isShip).
+  if (!isWallet(run.bank) || !run.ships.every(isShip)) return null;
   if (!isBoard(run.contracts)) return null;
   if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
   if (!isRefinery(run.refinery)) return null;
@@ -311,18 +456,44 @@ export function parseImport(
   };
 }
 
-export function readSlot(i: number): SaveRecord | null {
+/**
+ * What a slot holds. `unreadable` means something is stored but it doesn't parse or validate (corrupt, or from a
+ * newer build); its raw text is kept so it can be exported, and nothing should write over it unasked.
+ */
+export type SlotStatus =
+  | { kind: 'empty' }
+  | { kind: 'ok'; record: SaveRecord }
+  | { kind: 'unreadable'; reason: string; raw: string };
+
+/** Reads slot `i` and says whether it is empty, a usable save, or stored text that can't be loaded (and why). */
+export function slotStatus(i: number): SlotStatus {
   const raw = safeStorage()?.getItem(slotKey(i));
-  if (!raw) return null;
+  if (!raw) return { kind: 'empty' };
   const r = parseImport(raw);
-  return r.ok ? r.record : null;
+  return r.ok ? { kind: 'ok', record: r.record } : { kind: 'unreadable', reason: r.error, raw };
 }
 
-export function writeSlot(i: number, state: GameState): void {
+/** The save in slot `i`, or null when the slot is empty or unreadable (see `slotStatus` to tell them apart). */
+export function readSlot(i: number): SaveRecord | null {
+  const st = slotStatus(i);
+  return st.kind === 'ok' ? st.record : null;
+}
+
+/** The first empty slot, or -1 when every slot holds something. */
+export function firstEmptySlot(): number {
+  for (let i = 0; i < SLOT_COUNT; i++) if (slotStatus(i).kind === 'empty') return i;
+  return -1;
+}
+
+/** Writes `state` to slot `i`. False when storage is missing, full or blocked, so the caller can tell the player. */
+export function writeSlot(i: number, state: GameState): boolean {
+  const s = safeStorage();
+  if (!s) return false;
   try {
-    safeStorage()?.setItem(slotKey(i), recordText(state, Date.now()));
+    s.setItem(slotKey(i), recordText(state, Date.now()));
+    return true;
   } catch {
-    // Storage full or blocked: the game keeps running unsaved.
+    return false;
   }
 }
 
@@ -339,12 +510,16 @@ export function setActiveSlot(i: number): void {
   safeStorage()?.setItem(ACTIVE_KEY, String(i));
 }
 
-/** Moves a save from the old single-save key into slot 0 (once). */
+/**
+ * Moves a save from the old single-save key into slot 0, or the first empty slot when slot 0 is taken. The legacy
+ * key is removed only once its save is safely in a slot, so an unreadable or unplaceable one is kept.
+ */
 export function migrateLegacy(): void {
   const s = safeStorage();
   const raw = s?.getItem(LEGACY_KEY);
   if (!s || !raw) return;
   const state = deserialize(raw);
-  if (state && !s.getItem(slotKey(0))) writeSlot(0, state);
-  s.removeItem(LEGACY_KEY);
+  if (!state) return;
+  const slot = firstEmptySlot();
+  if (slot >= 0 && writeSlot(slot, state)) s.removeItem(LEGACY_KEY);
 }
