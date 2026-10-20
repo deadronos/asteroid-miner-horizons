@@ -1,18 +1,23 @@
 // Web Audio mixer: master ← (sfx, music) gain buses bound to the volume
-// settings. The AudioContext is created on the first user gesture (so the
-// browser never blocks autoplay) and suspended while the tab is hidden.
-// One-shots are ZzFX buffers rendered once per preset and replayed at any
-// pitch; continuous states (beam hums, the danger alarm) come from
-// `updateContinuous`, which is called every frame with a `ContinuousPolicy`
-// selecting which layers may sound that frame (see `pauseAudio`). Generative
-// ambient music (`MusicPlayer`) plays into the music bus via `updateMusic`.
+// settings, then through a master limiter into the destination. The
+// AudioContext is created on the first user gesture (so the browser never
+// blocks autoplay) and suspended while the tab is hidden. One-shots are ZzFX
+// buffers rendered once per preset and replayed at any pitch; each runs
+// through a per-voice lowpass so distant sounds dull, and a send into a shared
+// generated reverb for the wet sounds. Continuous states (beam hums, the
+// danger alarm) come from `updateContinuous`, which is called every frame with
+// a `ContinuousPolicy` selecting which layers may sound that frame (see
+// `pauseAudio`). Generative ambient music (`MusicPlayer`) plays into the music
+// bus via `updateMusic`.
 
 import type { SettingsStore } from '../settings';
 import type { Fx, GameState, LogEntry } from '../sim/types';
+import { LIMITER, REVERB_RETURN, REVERB_SEND, reverbImpulse } from './mix';
 import { MusicPlayer } from './MusicPlayer';
 import {
   alarmLevel,
   beamHums,
+  CENTER_CUTOFF,
   type ContinuousPolicy,
   MAX_HUMS,
   PRESETS,
@@ -51,6 +56,8 @@ export class AudioEngine {
   private master: GainNode | null = null;
   private sfx: GainNode | null = null;
   private music: GainNode | null = null;
+  private masterLimiter: DynamicsCompressorNode | null = null;
+  private reverb: ConvolverNode | null = null;
   private player: MusicPlayer | null = null;
   private buffers = new Map<SoundId, AudioBuffer>();
   private limiter = new RateLimiter();
@@ -90,9 +97,25 @@ export class AudioEngine {
       this.master = this.ctx.createGain();
       this.sfx = this.ctx.createGain();
       this.music = this.ctx.createGain();
+
+      const limiter = this.ctx.createDynamicsCompressor();
+      limiter.threshold.value = LIMITER.threshold;
+      limiter.knee.value = LIMITER.knee;
+      limiter.ratio.value = LIMITER.ratio;
+      limiter.attack.value = LIMITER.attack;
+      limiter.release.value = LIMITER.release;
+      this.masterLimiter = limiter;
+
+      const reverb = this.ctx.createConvolver();
+      reverb.buffer = this.impulseBuffer(this.ctx);
+      const reverbReturn = this.ctx.createGain();
+      reverbReturn.gain.value = REVERB_RETURN;
+      reverb.connect(reverbReturn).connect(this.sfx);
+      this.reverb = reverb;
+
       this.sfx.connect(this.master);
       this.music.connect(this.master);
-      this.master.connect(this.ctx.destination);
+      this.master.connect(limiter).connect(this.ctx.destination);
       this.player = new MusicPlayer(this.ctx, this.music);
       this.applyVolumes(true);
     }
@@ -110,6 +133,15 @@ export class AudioEngine {
     set(master, curve(s.volMaster));
     set(sfx, curve(s.volSfx) * SFX_TRIM);
     set(music, curve(s.volMusic));
+  }
+
+  /** Builds the shared stereo reverb impulse once per AudioContext. */
+  private impulseBuffer(ctx: AudioContext): AudioBuffer {
+    const [left, right] = reverbImpulse(ctx.sampleRate);
+    const buffer = ctx.createBuffer(2, left.length, ctx.sampleRate);
+    buffer.copyToChannel(left, 0);
+    buffer.copyToChannel(right, 1);
+    return buffer;
   }
 
   private buffer(id: SoundId): AudioBuffer {
@@ -134,7 +166,18 @@ export class AudioEngine {
     gain.gain.value = v.gain;
     const pan = ctx.createStereoPanner();
     pan.pan.value = v.pan;
-    src.connect(gain).connect(pan).connect(sfx);
+    const filter = ctx.createBiquadFilter();
+    filter.type = 'lowpass';
+    filter.frequency.value = v.cutoff;
+    filter.Q.value = 0.7;
+    src.connect(gain).connect(pan).connect(filter).connect(sfx);
+    const send = REVERB_SEND[v.id] ?? 0;
+    let wet: GainNode | null = null;
+    if (send > 0 && this.reverb) {
+      wet = ctx.createGain();
+      wet.gain.value = send;
+      filter.connect(wet).connect(this.reverb);
+    }
     src.addEventListener(
       'ended',
       () => {
@@ -142,6 +185,8 @@ export class AudioEngine {
         src.disconnect();
         gain.disconnect();
         pan.disconnect();
+        filter.disconnect();
+        wet?.disconnect();
       },
       { once: true },
     );
@@ -149,7 +194,7 @@ export class AudioEngine {
   }
 
   ui(id: 'uiClick' | 'uiDeny'): void {
-    this.play({ id, gain: 1, pan: 0, rate: 1 });
+    this.play({ id, gain: 1, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
   }
 
   /** Plays sounds for this frame's sim fx. Read-only: the renderer drains the list. */
@@ -190,12 +235,12 @@ export class AudioEngine {
         if (!voice) {
           // Hard cap: a beam beyond MAX_HUMS simply stays silent (beamHums already trims to it).
           if (this.hums.size >= MAX_HUMS) continue;
-          voice = this.makeHumVoice(ctx, sfx, hum.freq, hum.pan);
+          voice = this.makeHumVoice(ctx, sfx, hum.freq, hum.pan, hum.cutoff);
           this.hums.set(hum.shipId, voice);
         }
         voice.gain.gain.setTargetAtTime(hum.gain * HUM_TRIM, now, HUM_ATTACK);
         voice.osc.frequency.setTargetAtTime(hum.freq, now, HUM_ATTACK);
-        voice.filter.frequency.setTargetAtTime(hum.freq * 6, now, HUM_ATTACK);
+        voice.filter.frequency.setTargetAtTime(Math.min(hum.freq * 6, hum.cutoff), now, HUM_ATTACK);
         voice.pan.pan.value = hum.pan;
       }
     } else {
@@ -206,7 +251,7 @@ export class AudioEngine {
   }
 
   /** Builds a silent osc → lowpass → gain → panner chain and starts the oscillator. */
-  private makeHumVoice(ctx: AudioContext, sfx: GainNode, freq: number, pan: number): HumVoice {
+  private makeHumVoice(ctx: AudioContext, sfx: GainNode, freq: number, pan: number, cutoff: number): HumVoice {
     const osc = ctx.createOscillator();
     const filter = ctx.createBiquadFilter();
     const gain = ctx.createGain();
@@ -214,7 +259,7 @@ export class AudioEngine {
     osc.type = 'sawtooth';
     osc.frequency.value = freq;
     filter.type = 'lowpass';
-    filter.frequency.value = freq * 6;
+    filter.frequency.value = Math.min(freq * 6, cutoff);
     gain.gain.value = 0; // silent until the per-frame ramp fades it in
     panner.pan.value = pan;
     osc.connect(filter).connect(gain).connect(panner).connect(sfx);
@@ -260,7 +305,7 @@ export class AudioEngine {
       return;
     }
     if (now < this.nextAlarm) return;
-    this.play({ id: 'alarm', gain: 0.35 + 0.5 * level, pan: 0, rate: 1 });
+    this.play({ id: 'alarm', gain: 0.35 + 0.5 * level, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
     this.nextAlarm = now + ALARM_INTERVAL;
   }
 
