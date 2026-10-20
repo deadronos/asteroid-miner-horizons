@@ -12,6 +12,7 @@ import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
+import { goalDone, type GoalId } from '../src/ui/goals';
 // Real saves frozen at versions 2 to 12 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
@@ -65,9 +66,9 @@ const sansShipAuto = <R extends { ships: object[] }>(run: R): R => ({
   ships: run.ships.map((s) => ({ ...s, autoRepair: undefined, autoUpgrade: undefined })),
 });
 
-/** `profile` without the v13 fields: the `installs` stat and the first-steps flag. */
+/** `profile` without the v13 fields: the `installs`, `unloads` and `miningDrones` stats and the first-steps flag. */
 const sansGoals = <P extends { stats: object }>(profile: P): P => {
-  const { installs: _installs, ...stats } = profile.stats as Record<string, unknown>;
+  const { installs: _i, unloads: _u, miningDrones: _m, ...stats } = profile.stats as Record<string, unknown>;
   return { ...profile, stats, goalsDismissed: undefined } as P;
 };
 
@@ -881,6 +882,8 @@ describe('lifetime stats migration to v11', () => {
       contracts: 3,
       refined: 58,
       comets: 4,
+      // Seeded later by the v13 step: the save has warped, so the flagship has unloaded.
+      unloads: 1,
     });
   });
 
@@ -954,12 +957,41 @@ describe('first-steps migration to v13', () => {
     ['v10', V10_FIXTURE],
     ['v11', V11_FIXTURE],
     ['v12', V12_FIXTURE],
-  ])('loads the %s fixture with no installs counted and the checklist not dismissed', (_label, raw) => {
+  ])('loads the %s fixture with every stat present and the checklist not dismissed', (_label, raw) => {
     const state = loadFrozen(raw);
     expect(state.version).toBe(SAVE_VERSION);
-    expect(state.profile.stats.installs).toBe(0);
     expect(state.profile.goalsDismissed).toBe(false);
     expect(new Set(Object.keys(state.profile.stats))).toEqual(new Set(Object.keys(newStats())));
+  });
+
+  it.each([
+    // Starting loadouts only, no deposits, no warps.
+    ['v2', FIXTURE, { installs: 0, unloads: 0, miningDrones: 0 }],
+    // Starting loadout, empty bank this run, but two warps behind it.
+    ['v10', V10_FIXTURE, { installs: 0, unloads: 1, miningDrones: 0 }],
+    // Flagship cargo + sensor (2) and a cargo pod on each drone (4); the hauler keeps its stock engine.
+    ['v11', V11_FIXTURE, { installs: 6, unloads: 1, miningDrones: 4 }],
+    // As v11, but the drone with autoupgrade on may have fitted its own cargo pod, so it is not counted.
+    ['v12', V12_FIXTURE, { installs: 5, unloads: 1, miningDrones: 4 }],
+  ])('backfills the new stats from what the %s save shows', (_label, raw, want) => {
+    const { stats } = loadFrozen(raw).profile;
+    expect({ installs: stats.installs, unloads: stats.unloads, miningDrones: stats.miningDrones }).toEqual(want);
+  });
+
+  it('counts a part on a refitted flagship against the Prospector loadout it started from', () => {
+    const before = JSON.parse(V12_FIXTURE);
+    const fs = before.state.run.ships[0];
+    fs.hullId = 'excavator';
+    fs.slots = [...fs.slots.slice(0, 2), null, null, null, null];
+    const r = parseImport(JSON.stringify(before));
+    if (!r.ok) throw new Error('expected the edited fixture to load');
+    // Only the three drones' cargo pods: the carried laser and engine are not hand installs.
+    expect(r.record.state.profile.stats.installs).toBe(3);
+  });
+
+  it('a migrated pre-warp save with fitted parts shows those goals done', () => {
+    const state = loadFrozen(V12_FIXTURE);
+    expect(['install', 'unload', 'drone'].map((id) => goalDone(state, id as GoalId))).toEqual([true, true, true]);
   });
 
   it('keeps the v12 fixture otherwise unchanged', () => {

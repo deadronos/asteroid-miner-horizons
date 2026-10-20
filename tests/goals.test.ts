@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { runBot } from '../scripts/harness';
 import { TUNING } from '../src/data/tuning';
+import { DEFAULT_FLEET_AUTO } from '../src/sim/assists';
+import { makeOutpost } from '../src/sim/automation';
 import { newGame } from '../src/sim/create';
 import { warpCost } from '../src/sim/economy';
 import { flagship, makeShip, shipStats } from '../src/sim/ships';
@@ -15,12 +17,22 @@ import {
   goalsVisible,
   type GoalId,
 } from '../src/ui/goals';
-import { send } from './helpers';
+import { runTicks, send } from './helpers';
 
 const done = (s: GameState): GoalId[] => GOALS.filter((g) => goalDone(s, g.id)).map((g) => g.id);
 
-/** A fresh game whose flagship sits mid-belt with an order, so no blocker hint applies by default. */
+/** A fresh game: the flagship docked with an empty hold, so no blocker hint applies. */
 const fresh = (): GameState => newGame(7);
+
+/** A fresh game with every rock and pickup gone, so a drone near the flagship has nothing to do. */
+const empty = (): GameState => {
+  const s = fresh();
+  s.run.rocks = [];
+  s.run.pickups = [];
+  return s;
+};
+
+const AUTODOCK_OFF = { assists: { autoDock: false }, auto: DEFAULT_FLEET_AUTO };
 
 /** Adds a mining drone to the run and returns it. */
 const addDrone = (s: GameState) => {
@@ -40,14 +52,14 @@ describe('first-steps goals', () => {
     expect(goalHint(s)).toBeNull();
   });
 
-  it('derives each goal from lifetime stats, and the unload from this run’s deposits', () => {
+  it('derives each goal from a lifetime stat', () => {
     const s = fresh();
     s.profile.stats.unitsMined = MINE_GOAL - 0.5;
     expect(goalDone(s, 'mine')).toBe(false);
     s.profile.stats.unitsMined = MINE_GOAL;
-    s.run.runValue = 1;
+    s.profile.stats.unloads = 1;
     s.profile.stats.installs = 1;
-    s.profile.stats.drones = 1;
+    s.profile.stats.miningDrones = 1;
     s.profile.stats.contracts = 1;
     expect(done(s)).toEqual(['mine', 'unload', 'install', 'drone', 'contract']);
     expect(currentGoal(s)?.id).toBe('warp');
@@ -57,9 +69,34 @@ describe('first-steps goals', () => {
 
   it('the current goal is the first one not met, whatever order the others were met in', () => {
     const s = fresh();
-    s.profile.stats.drones = 1;
+    s.profile.stats.miningDrones = 1;
     s.profile.stats.unitsMined = 100;
     expect(currentGoal(s)?.id).toBe('unload');
+  });
+
+  it('only the flagship unloading ticks "Dock and unload"', () => {
+    const s = fresh();
+    const d = addDrone(s);
+    d.pos = { ...s.run.system.station.pos };
+    d.cargo.ore = 10;
+    runTicks(s, 1);
+    expect(s.run.runValue).toBeGreaterThan(0);
+    expect(goalDone(s, 'unload')).toBe(false);
+    const fs = flagship(s.run);
+    fs.pos = { ...s.run.system.station.pos };
+    fs.cargo.ore = 10;
+    runTicks(s, 1);
+    expect(s.profile.stats.unloads).toBe(1);
+    expect(goalDone(s, 'unload')).toBe(true);
+  });
+
+  it('a hauler does not tick "Buy a drone"; a mining drone does', () => {
+    const s = fresh();
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 1e4, alloy: 1e4, fuel: 0 };
+    send(s, { t: 'buyHull', hullId: 'hauler' });
+    expect(goalDone(s, 'drone')).toBe(false);
+    send(s, { t: 'buyHull', hullId: 'drone' });
+    expect(goalDone(s, 'drone')).toBe(true);
   });
 
   it('shows the active contract’s progress until the first one completes', () => {
@@ -106,27 +143,95 @@ describe('first-steps goals', () => {
       expect(goalHint(s)).toMatch(/being rebuilt/);
     });
 
-    it('flags an idle drone, and names the mode to switch to', () => {
-      const s = fresh();
+    it('flags a drone with nothing to mine near its anchor, and names the mode to switch to', () => {
+      const s = empty();
       const d = addDrone(s);
       expect(goalHint(s)).toMatch(/Drone-1 is idle: .*AUTO/);
       d.aiMode = 'auto';
       expect(goalHint(s)).toMatch(/Drone-1 is idle: .*ASSIST/);
-      d.aiTargetId = s.run.rocks[0]!.id;
+    });
+
+    it('does not call a drone idle between targets while rocks are in reach', () => {
+      // The drone brain clears aiTargetId when a rock breaks, collects debris or dodges; none of that is idle.
+      const s = fresh();
+      const d = addDrone(s);
+      d.aiTargetId = null;
+      d.beamOn = false;
+      expect(s.run.rocks.some((r) => Math.hypot(r.pos.x - d.pos.x, r.pos.z - d.pos.z) < TUNING.droneLeash)).toBe(true);
+      expect(goalHint(s)).toBeNull();
+    });
+
+    it('does not call a drone idle while debris near its anchor is waiting', () => {
+      const s = empty();
+      const d = addDrone(s);
+      s.run.pickups.push({
+        id: 1,
+        kind: 'ore',
+        amount: 3,
+        pos: { x: d.pos.x + 100, z: d.pos.z },
+        vel: { x: 0, z: 0 },
+        age: 0,
+      });
+      expect(goalHint(s)).toBeNull();
+    });
+
+    it('ignores rocks the drone cannot mine: outpost hosts and dense rock under a tier-2 laser', () => {
+      const s = empty();
+      const d = addDrone(s);
+      const near = { x: d.pos.x + 100, z: d.pos.z };
+      const host = {
+        id: 901,
+        kind: 'ore' as const,
+        size: 0 as const,
+        pos: near,
+        vel: { x: 0, z: 0 },
+        radius: 30,
+        hp: 9,
+        maxHp: 9,
+        units: 9,
+        belt: 0,
+      };
+      s.run.rocks.push(host);
+      s.run.automation.outposts.push(makeOutpost(host));
+      s.run.rocks.push({ ...host, id: 902, size: 1, trait: 'dense' });
+      expect(goalHint(s)).toMatch(/Drone-1 is idle/);
+      s.run.rocks.push({ ...host, id: 903, size: 1 });
+      expect(goalHint(s)).toBeNull();
+    });
+
+    it('stays quiet while a hazard may have the drone dodging, or it is flying home for repairs', () => {
+      const s = empty();
+      const d = addDrone(s);
+      s.run.hazards.flare = { phase: 'warning', timeLeft: 5 };
+      expect(goalHint(s)).toBeNull();
+      s.run.hazards.flare = null;
+      d.autoRepair = true;
+      d.hull = 1;
       expect(goalHint(s)).toBeNull();
     });
 
     it('does not call a drone with a manual order idle', () => {
-      const s = fresh();
+      const s = empty();
       const d = addDrone(s);
       d.order = { kind: 'dock' };
       expect(goalHint(s)).toBeNull();
     });
 
+    it('asks for a dock order when a full drone waits because auto-dock is off', () => {
+      const s = empty();
+      const d = addDrone(s);
+      d.cargo.ore = shipStats(d, s.profile).cargoCap;
+      expect(goalHint(s)).toBeNull(); // auto-dock on: it is already flying home
+      expect(goalHint(s, AUTODOCK_OFF)).toBe(
+        'Drone-1 hold full: order it to dock, or turn on auto-dock (⚙ → Gameplay).',
+      );
+      d.order = { kind: 'dock' };
+      expect(goalHint(s, AUTODOCK_OFF)).toBeNull();
+    });
+
     it('asks for fuel once the warp is the only goal left', () => {
       const s = fresh();
-      Object.assign(s.profile.stats, { unitsMined: 50, installs: 1, drones: 1, contracts: 1 });
-      s.run.runValue = 10;
+      Object.assign(s.profile.stats, { unitsMined: 50, unloads: 1, installs: 1, miningDrones: 1, contracts: 1 });
       s.run.bank.fuel = 4;
       expect(goalHint(s)).toBe(
         `Warp needs ${warpCost(s) - 4} more fuel: refine it from ice (5 each) in the refinery panel.`,
@@ -146,6 +251,7 @@ describe('first-steps goals', () => {
       goalProgress(s, g.id);
     }
     goalHint(s);
+    goalHint(s, AUTODOCK_OFF);
     currentGoal(s);
     expect(JSON.stringify({ profile: s.profile, run: s.run })).toBe(before);
   });

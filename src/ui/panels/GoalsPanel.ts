@@ -2,7 +2,7 @@
 // a hint for the current blocker, and a close button that hides it for this save.
 // Built once; refresh only flips classes and text. The rules live in `../goals`.
 
-import { GOALS, currentGoal, goalDone, goalHint, goalProgress, goalsVisible } from '../goals';
+import { GOALS, goalDone, goalHint, goalProgress, goalsVisible, type HintEnv } from '../goals';
 import { Panel, h, setText } from '../dom';
 import type { PanelCtx } from './context';
 
@@ -35,18 +35,21 @@ export function createGoalsPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         const show = goalsVisible(s);
         el.classList.toggle('hidden', !show);
         if (!show) return;
-        const cur = currentGoal(s);
-        let done = 0;
-        for (const r of rows) {
-          const ok = goalDone(s, r.g.id);
-          if (ok) done++;
-          r.row.classList.toggle('done', ok);
-          r.row.classList.toggle('cur', r.g === cur);
-          setText(r.mark, ok ? '✓' : r.g === cur ? '▸' : '○');
-          setText(r.progress, ok ? '' : (goalProgress(s, r.g.id) ?? ''));
-        }
-        setText(count, `${done}/${GOALS.length}`);
-        const text = goalHint(s);
+        const done = rows.map((r) => goalDone(s, r.g.id));
+        const cur = done.indexOf(false);
+        rows.forEach((r, i) => {
+          r.row.classList.toggle('done', done[i]!);
+          r.row.classList.toggle('cur', i === cur);
+          setText(r.mark, done[i] ? '✓' : i === cur ? '▸' : '○');
+          setText(r.progress, done[i] ? '' : (goalProgress(s, r.g.id) ?? ''));
+        });
+        setText(count, `${done.filter(Boolean).length}/${GOALS.length}`);
+        const v = ctx.settings.value;
+        const env: HintEnv = {
+          assists: { autoDock: v.assistAutoDock },
+          auto: { repairAt: v.autoRepairAt, reserve: v.autoReserve },
+        };
+        const text = goalHint(s, env);
         hint.classList.toggle('hidden', !text);
         setText(hint, text ? `⚠ ${text}` : '');
       });

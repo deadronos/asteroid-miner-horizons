@@ -12,22 +12,26 @@ the loop and does not repeat key bindings.
 
 ## Goals and how each is derived
 
-| Goal                 | Done when                                       |
-| -------------------- | ----------------------------------------------- |
-| Mine 20 units        | `stats.unitsMined >= 20`                        |
-| Dock and unload      | `run.runValue > 0` (or a warp has happened)     |
-| Install a component  | `stats.installs > 0` (**new stat**)             |
-| Buy a drone          | `stats.drones > 0`                              |
-| Complete a contract  | `stats.contracts > 0`                           |
-| Warp to a new system | `stats.warps > 0`                               |
+| Goal                 | Done when                                            |
+| -------------------- | ---------------------------------------------------- |
+| Mine 20 units        | `stats.unitsMined >= 20`                             |
+| Dock and unload      | `stats.unloads > 0` (**new**: flagship unloads)      |
+| Install a component  | `stats.installs > 0` (**new**: installs by hand)     |
+| Buy a drone          | `stats.miningDrones > 0` (**new**: mining drones)    |
+| Complete a contract  | `stats.contracts > 0`                                |
+| Warp to a new system | `stats.warps > 0`                                    |
 
-- `run.runValue` only grows when cargo is deposited at the station, so it stands in for "unloaded once". The
-  checklist only shows before the first warp, so a per-run value is enough.
-- **Install cannot be derived.** Slots only show the current fit: a remove, a scrap or a flagship refit would
-  erase the evidence, and comparing against hull loadouts misfires on the Excavator. So `installs` is a new
-  lifetime stat, bumped by the `install` command and by autoupgrade filling an empty slot. It shows in the Stats
-  tab as "Components installed".
-- The current goal is the first one not met; goals met out of order stay ticked.
+Three steps can't be derived from existing state:
+
+- **Unload.** `run.runValue` also grows from drone and hauler deposits and from offline income. So `unloads`
+  counts deposits by the flagship only, in `update.ts`'s `unload()`.
+- **Install.** Slots only show the current fit: a remove, a scrap or a flagship refit erases the evidence. So
+  `installs` counts the `install` command only. Autoupgrade fills don't count, and the Stats tab label is
+  "Components installed by hand".
+- **Drone.** `stats.drones` counts haulers too, and `run.ships` loses a drone that is destroyed or scrapped. So
+  `miningDrones` counts `buyHull` for drone-role hulls (Mining Drone and Harvester).
+
+The current goal is the first one not met; goals met out of order stay ticked.
 
 ## Visibility and dismissal
 
@@ -39,25 +43,36 @@ the loop and does not repeat key bindings.
 
 ## Hints
 
-`goalHint(state)` returns the first match, or null:
+`goalHint(state, env)` returns the first match, or null. `env` carries the player's auto-dock and autorepair
+settings, which the HUD reads from Settings; tests use the defaults.
 
 1. The flagship is being rebuilt.
 2. The flagship has no mining laser ("dock and install one in the ship panel").
 3. The flagship's hold is full and it is not already heading home ("click the station to unload").
-4. A mining drone with no order, no target, no beam, a laser and room in its hold is idle. Assist mode suggests
-   flying near asteroids or switching to AUTO; auto mode suggests switching to ASSIST.
-5. The warp is the current goal and the bank lacks fuel ("refine it from ice in the refinery panel").
+4. A mining drone with no order is parked full because auto-dock is off ("order it to dock, or turn on
+   auto-dock").
+5. A mining drone with no order genuinely has nothing to do. That means no comet or flare is pending (it may be
+   dodging), it is not flying home for autorepair, and there is neither debris nor a rock it can mine (dense
+   rock needs a tier-2 laser, outpost hosts are off limits) within `droneLeash` of its anchor. The anchor is the
+   flagship in assist mode and the station in auto mode. Assist mode suggests flying near asteroids or switching
+   to AUTO; auto mode suggests switching to ASSIST. This mirrors the drone brain's own search, so a drone that
+   is between rocks, sweeping debris or dodging is not flagged. The drone's per-tick `aiTargetId` is not used.
+6. The warp is the current goal and the bank lacks fuel ("refine it from ice in the refinery panel").
 
 Hints show only inside the checklist, so they stop once onboarding is over.
 
 ## Save schema
 
-`SAVE_VERSION` 12 → 13, because the stat is required (the issue allows a bump for a new stat). The new
-`goalsDismissed` profile flag uses the same bump.
+`SAVE_VERSION` 12 → 13, for the three new stats and the `goalsDismissed` profile flag.
 
-- Migration 12: `stats.installs = 0` (past installs were never counted) and `goalsDismissed = false`.
-- `fromData` rejects a profile whose `goalsDismissed` is not a boolean. The existing stat check already rejects a
-  missing `installs`.
+- Migration 12 backfills each stat from what the save shows, as a lower bound:
+  - `installs`: fitted parts that differ from the starting loadout at the same slot. Flagships compare against
+    the Prospector, because a refit carries parts over at their indices. Ships with autoupgrade on are skipped.
+  - `miningDrones`: drone-role ships in the fleet.
+  - `unloads`: 1 if this run has deposited anything or the save has warped, otherwise 0.
+  - `goalsDismissed`: false.
+- `fromData` rejects a profile whose `goalsDismissed` is not a boolean. The existing stat check already rejects
+  a missing stat.
 - New fixture `tests/fixtures/save-v12.json`.
 
 ## Code layout

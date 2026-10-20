@@ -226,6 +226,7 @@ function unload(state: GameState, ship: Ship): void {
     ship.cargo[r] = 0;
   }
   run.runValue += value;
+  if (value > 0 && isFlagship(ship)) state.profile.stats.unloads += 1;
   if (value > 0) state.out.fx.push({ t: 'dock', pos: { ...ship.pos }, shipId: ship.id, value });
   if (isFlagship(ship) && parts) state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts}.` });
 }

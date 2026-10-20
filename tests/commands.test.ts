@@ -205,6 +205,14 @@ describe('command handlers', () => {
     const n = s.run.ships.length;
     send(s, { t: 'buyHull', hullId: 'drone' });
     expect(s.run.ships.length).toBe(n + 1);
+    expect([s.profile.stats.drones, s.profile.stats.miningDrones]).toEqual([1, 1]);
+  });
+  it('buying a hauler counts as a launch but not as a mining drone', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 1e4, alloy: 1e4, fuel: 0 };
+    send(s, { t: 'buyHull', hullId: 'hauler' });
+    expect(s.run.ships.some((x) => x.hullId === 'hauler')).toBe(true);
+    expect([s.profile.stats.drones, s.profile.stats.miningDrones]).toEqual([1, 0]);
   });
   it('scrap', () => {
     const s = newGame(1);

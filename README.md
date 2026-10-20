@@ -117,7 +117,7 @@ It goes away after the first warp; × hides it for that save.
   refinery (Catalytic Furnace) and more batches per refinery cycle (Bulk Hoppers).
 - **Stats & achievements**: each save keeps lifetime stats that survive warps (time played,
   asteroids broken, units mined, warps, contracts, refined units, outposts, launches,
-  components installed, research, comets and ships lost) and 21 achievements unlocked from them. An unlock shows
+  flagship unloads, mining drones bought, components installed by hand, research, comets and ships lost) and 21 achievements unlocked from them. An unlock shows
   a toast and a log line; ⚙ → Stats lists the stats and each achievement's progress.
 - **Offline progress**: loading a save credits the fleet for the time it was closed, up to
   8 hours (absences under a minute are ignored). It is an estimate, not a replay: each

@@ -115,7 +115,6 @@ export function serviceDocked(state: GameState, index: SimIndex, ship: Ship, st:
     out.log.push({ level: 'info', text: `${ship.name} bought slot ${ship.slots.length} (${formatCost(cost)}).` });
   } else if (step.kind === 'install') {
     ship.slots[step.slot] = { type: step.type, variant: defaultVariant(step.type), tier: 1 };
-    state.profile.stats.installs += 1;
     const name = variantDef(step.type, defaultVariant(step.type)).name;
     out.log.push({ level: 'info', text: `${ship.name} installed ${name} (${formatCost(cost)}).` });
   } else {

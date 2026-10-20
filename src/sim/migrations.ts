@@ -4,13 +4,24 @@
 // replaying the entries in order instead of being rejected outright.
 
 import { defaultVariant } from '../data/components';
+import { HULLS } from '../data/hulls';
 import { newStats } from './achievements';
 import { newAutomation } from './automation';
 import { newBoard } from './contracts';
 import { SAVE_VERSION } from './create';
 import { newHazards } from './hazards';
 import { newRefinery } from './refining';
-import type { GameState } from './types';
+import type { GameState, Ship } from './types';
+
+/**
+ * Fitted parts that differ from the starting loadout at the same slot index. Flagships compare against the
+ * Prospector, the hull every save starts in, because a refit carries parts over at their indices.
+ */
+function extraParts(ship: Ship): number {
+  const hull = HULLS[ship.hullId];
+  const loadout = hull?.role === 'flagship' ? HULLS.prospector.loadout : (hull?.loadout ?? []);
+  return ship.slots.filter((f, i) => f && (f.type !== loadout[i]?.type || f.variant !== loadout[i]?.variant)).length;
+}
 
 /** The persisted shape: all of GameState except the transient outbox. */
 export type SaveData = Pick<GameState, 'version' | 'profile' | 'run'>;
@@ -96,12 +107,18 @@ export const migrations: Record<number, Migration> = {
     }
     return d;
   },
-  // v13 added the `installs` stat and the first-steps dismissal (#171). Past
-  // installs were never counted, so the stat starts at 0; the checklist starts
-  // shown, and only ever appears before the first warp.
+  // v13 added three stats behind the first-steps checklist and its dismissal
+  // (#171). None was counted before, so each is seeded from what the save
+  // shows as a lower bound: hand installs from fitted parts that differ from the
+  // hull's starting loadout (skipping ships autoupgrade may have filled), mining
+  // drones from those in the fleet, and one flagship unload if this run has
+  // deposited anything or the save has warped.
   12: (d) => {
-    d.profile.stats.installs = 0;
-    d.profile.goalsDismissed = false;
+    const { profile, run } = d;
+    profile.stats.installs = run.ships.reduce((n, s) => n + (s.autoUpgrade ? 0 : extraParts(s)), 0);
+    profile.stats.miningDrones = run.ships.filter((s) => HULLS[s.hullId]?.role === 'drone').length;
+    profile.stats.unloads = run.runValue > 0 || profile.warps > 0 ? 1 : 0;
+    profile.goalsDismissed = false;
     return d;
   },
 };

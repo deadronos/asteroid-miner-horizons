@@ -194,6 +194,7 @@ export const handlers: Handlers = {
       );
       run.ships.push(ship);
       profile.stats.drones += 1;
+      if (h.role === 'drone') profile.stats.miningDrones += 1;
       out.log.push({ level: 'info', text: `${ship.name} launched from the station.` });
     }
   },

@@ -106,6 +106,8 @@ describe('serviceDocked', () => {
     expect(d.slots[1]).toEqual({ type: 'cargo', variant: 'standard', tier: 1 });
     expect(s.run.bank.ore).toBe(1e4 - variantDef('cargo', 'standard').cost(1).ore!);
     expect(d.slots[0]).toBe(laser);
+    // Only the player's own installs count toward the stat (and the first-steps goal).
+    expect(s.profile.stats.installs).toBe(0);
   });
 
   it('waits autoUpgradeInterval between steps on the same ship', () => {
