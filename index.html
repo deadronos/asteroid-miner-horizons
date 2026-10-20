@@ -4,9 +4,181 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Asteroid Miner Horizons</title>
+    <meta
+      name="description"
+      content="Mine asteroids, command a drone fleet and warp across a procedural star system in this top-down sci-fi mining sim."
+    />
+    <meta name="theme-color" content="#03060d" />
+    <meta property="og:title" content="Asteroid Miner Horizons" />
+    <meta
+      property="og:description"
+      content="Mine asteroids, command a drone fleet and warp across a procedural star system in this top-down sci-fi mining sim."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="Asteroid Miner Horizons" />
+    <meta property="og:url" content="https://deadronos.github.io/asteroid-miner-horizons/" />
+    <meta name="twitter:card" content="summary" />
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%2303060d'/%3E%3Ccircle cx='32' cy='32' r='18' fill='%2359ffa0'/%3E%3Ccircle cx='25' cy='26' r='4' fill='%2303060d'/%3E%3Ccircle cx='38' cy='38' r='5.5' fill='%2303060d'/%3E%3C/svg%3E"
+    />
+    <style>
+      /* First-paint styles for the static boot screen; style.css takes over once the module loads. */
+      html,
+      body {
+        margin: 0;
+        min-height: 100%;
+        background: #03060d;
+        color: #d4ecff;
+        font:
+          13px/1.35 system-ui,
+          -apple-system,
+          'Segoe UI',
+          sans-serif;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      [hidden] {
+        display: none !important;
+      }
+
+      .boot {
+        position: fixed;
+        inset: 0;
+        z-index: 28;
+        display: flex;
+        padding: 24px;
+        overflow: auto;
+        background:
+          radial-gradient(circle at 50% 42%, rgba(89, 255, 160, 0.08), transparent 46%) 0 0 / 100% 100% no-repeat,
+          radial-gradient(1px 1px at 22% 28%, rgba(212, 236, 255, 0.5), transparent) 0 0 / 240px 240px,
+          radial-gradient(1.5px 1.5px at 68% 62%, rgba(127, 159, 189, 0.55), transparent) 0 0 / 310px 310px,
+          radial-gradient(1px 1px at 84% 18%, rgba(110, 200, 255, 0.45), transparent) 0 0 / 380px 380px,
+          #03060d;
+      }
+
+      .boot-card {
+        width: 100%;
+        max-width: 520px;
+        margin: auto;
+        padding: 30px 32px 26px;
+        border: 1px solid rgba(110, 200, 255, 0.22);
+        border-radius: 14px;
+        background: radial-gradient(circle at 30% 0%, rgba(89, 255, 160, 0.07), transparent 55%), rgba(7, 14, 28, 0.9);
+        box-shadow:
+          0 24px 70px rgba(0, 0, 0, 0.55),
+          inset 0 1px 0 rgba(212, 236, 255, 0.06);
+        text-align: center;
+      }
+
+      .boot-kicker {
+        margin: 0 0 10px;
+        color: #7f9fbd;
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+      }
+
+      #boot-title {
+        margin: 0;
+        color: #d4ecff;
+        font-size: clamp(34px, 8vw, 58px);
+        font-weight: 700;
+        line-height: 0.95;
+        letter-spacing: 0.01em;
+        text-shadow: 0 0 28px rgba(89, 255, 160, 0.22);
+      }
+
+      .boot-summary {
+        margin: 16px 0 0;
+        color: #7f9fbd;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .boot-actions {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 10px;
+        margin-top: 24px;
+      }
+
+      .boot-actions button {
+        padding: 10px 20px;
+        border: 1px solid rgba(110, 200, 255, 0.22);
+        border-radius: 8px;
+        background: rgba(110, 200, 255, 0.08);
+        color: #d4ecff;
+        font: inherit;
+        font-size: 13px;
+        font-weight: 600;
+        letter-spacing: 0.03em;
+        cursor: pointer;
+      }
+
+      .boot-actions button:hover {
+        border-color: rgba(110, 200, 255, 0.45);
+        background: rgba(110, 200, 255, 0.16);
+      }
+
+      .boot-actions button:focus-visible {
+        outline: 2px solid #59ffa0;
+        outline-offset: 2px;
+      }
+
+      .boot-actions .boot-primary {
+        border-color: #59ffa0;
+        background: #59ffa0;
+        color: #03060d;
+      }
+
+      .boot-actions .boot-primary:hover {
+        background: #59ffa0;
+        filter: brightness(1.08);
+      }
+
+      .boot-hint {
+        margin: 18px 0 0;
+        color: #7f9fbd;
+        font-size: 11px;
+        letter-spacing: 0.04em;
+      }
+
+      @media (max-width: 560px) {
+        .boot-card {
+          padding: 24px 20px 20px;
+        }
+
+        .boot-actions {
+          flex-direction: column;
+        }
+
+        .boot-actions button {
+          width: 100%;
+        }
+      }
+    </style>
   </head>
   <body>
     <div id="app"></div>
+    <div id="boot" class="boot" role="dialog" aria-modal="true" aria-labelledby="boot-title">
+      <div class="boot-card">
+        <p class="boot-kicker">A top-down sci-fi mining sim</p>
+        <h1 id="boot-title">Asteroid<br />Miner Horizons</h1>
+        <p class="boot-summary" id="boot-summary">Start a new mining run.</p>
+        <div class="boot-actions">
+          <button id="boot-continue" class="boot-primary" hidden>Continue</button>
+          <button id="boot-new" class="boot-primary">New game</button>
+          <button id="boot-settings">Settings</button>
+        </div>
+        <p class="boot-hint">Sound starts after your first click.</p>
+      </div>
+    </div>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
