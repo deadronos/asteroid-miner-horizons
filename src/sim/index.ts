@@ -1,5 +1,4 @@
 import { SpatialHash } from '../core/spatialHash';
-import type { Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import { applyEffects, systemEffects } from './modifiers';
 import { emptyStats, writeShipStats, type ShipStats } from './ships';
@@ -18,14 +17,6 @@ export class SimIndex {
    * `rebuild`; only `clear` empties it.
    */
   readonly stats = new Map<number, ShipStats>();
-  /** Scratch written by `pilot.avoidance`; never read without writing first. */
-  readonly avoid: Vec2 = { x: 0, z: 0 };
-  /** Scratch written by `pilot.droneThink`; never read without writing first. */
-  readonly home: Vec2 = { x: 0, z: 0 };
-  /** Scratch for hazard escape vectors and flee points in `pilot`; never read without writing first. */
-  readonly escape: Vec2 = { x: 0, z: 0 };
-  /** Scratch for the star-avoiding waypoint in `pilot.arrive`; never read without writing first. */
-  readonly waypoint: Vec2 = { x: 0, z: 0 };
   /** Scratch for the ship loop: ids updated this tick, so a rewind does not tick one twice. */
   readonly updatedShipIds: number[] = [];
   /** Live comet rocks, collected in `rebuild`. */

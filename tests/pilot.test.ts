@@ -8,7 +8,7 @@ import { isDocked } from '../src/sim/economy';
 import { cometPathEscape } from '../src/sim/hazards';
 import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
-import { chainTarget, droneThink, formationSlot, steer, workRock, type TickCtx } from '../src/sim/pilot';
+import { arrive, chainTarget, dodgeHazards, droneThink, formationSlot, workRock, type TickCtx } from '../src/sim/pilot';
 import { volatileBlastRadius, volatileSafeDistance } from '../src/sim/traits';
 import { serialize } from '../src/sim/save';
 import { flagship, isHoldFull, makeShip, shipStats } from '../src/sim/ships';
@@ -22,34 +22,18 @@ function ctxFor(state: ReturnType<typeof newGame>): TickCtx {
   return { state, index, dt: DT, assists: DEFAULT_ASSISTS, auto: DEFAULT_FLEET_AUTO, hazards: 'off' };
 }
 
-describe('pilot scratch reuse', () => {
-  it('steer writes its avoidance result into the shared index scratch', () => {
-    const state = newGame(1);
-    const ctx = ctxFor(state);
-    const ship = state.run.ships[0]!;
-    state.run.rocks.push(makeRock(state.run, 'ore', 0, { x: ship.pos.x + 40, z: ship.pos.z }, 30, 0));
-    ctx.index.rebuild(state);
-    const scratch = ctx.index.avoid;
-    const st = ctx.index.stats.get(ship.id)!;
-    steer(ctx, ship, st, 1, 0, true);
-    expect(ctx.index.avoid).toBe(scratch);
-    // A rock 40 units ahead (radius 30) is in the corridor and nearly touching,
-    // so avoidance must push back/sideways — not just produce a finite number.
-    expect(Math.hypot(ctx.index.avoid.x, ctx.index.avoid.z)).toBeGreaterThan(0);
-  });
+it('SimIndex exposes no shared scratch vectors', () => {
+  const index = new SimIndex();
+  for (const key of ['avoid', 'home', 'escape', 'waypoint']) expect(Object.hasOwn(index, key)).toBe(false);
+});
 
-  it('droneThink writes its home slot into the shared index scratch', () => {
-    const state = newGame(1);
-    const drone = makeShip(state.run, state.profile, 'drone', 'Drone-1', { x: 100, z: 0 });
-    state.run.ships.push(drone);
-    const ctx = ctxFor(state);
-    const st = ctx.index.stats.get(drone.id)!;
-    const scratch = ctx.index.home;
-    droneThink(ctx, drone, st);
-    expect(ctx.index.home).toBe(scratch);
-    expect(Number.isFinite(ctx.index.home.x)).toBe(true);
-    expect(Number.isFinite(ctx.index.home.z)).toBe(true);
-  });
+it('formationSlot returns a fresh vector and leaves its anchor alone', () => {
+  const anchor = { x: 10, z: -4 };
+  const a = formationSlot(anchor, 7, 70);
+  const b = formationSlot(anchor, 7, 70);
+  expect(anchor).toEqual({ x: 10, z: -4 });
+  expect(a).not.toBe(b);
+  expect(a).toEqual(b);
 });
 
 describe('chainTarget', () => {
@@ -141,6 +125,24 @@ describe('droneThink hazard reflexes', () => {
     const ctx = ctxFor(state);
     droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
     expect(drone.aiTargetId).toBe(clear.id);
+  });
+
+  it('dodgeHazards out of a comet path does not clobber a caller-owned arrive target', () => {
+    const { state, drone } = hazardGame('G', { x: 0, z: 610 });
+    state.run.hazards.comet = { from: { x: -3200, z: 600 }, vel: { x: 130, z: 0 }, belt: 0, timeLeft: 8 };
+    const ctx = ctxFor(state);
+    const st = ctx.index.stats.get(drone.id)!;
+
+    const steered = dodgeHazards(ctx, drone, st, false);
+    expect(steered).toBe(true);
+    // Velocity should have a positive z component (away from the path centred at z=600).
+    expect(drone.vel.z).toBeGreaterThan(0);
+
+    // arrive to a caller-owned target; verify the target object is not mutated.
+    const target = { x: 0, z: 2000 };
+    const before = { x: target.x, z: target.z };
+    arrive(ctx, drone, st, target);
+    expect(target).toEqual(before);
   });
 });
 
@@ -318,7 +320,7 @@ describe('volatile blast survival', () => {
     const { state, rock, fs, drones } = blastGame(6);
     for (const d of drones) {
       d.slots = d.slots.map(() => null); // no laser: an escort just follows the flagship
-      formationSlot(d.pos, fs.pos, d.id, 70);
+      d.pos = formationSlot(fs.pos, d.id, 70);
     }
     // Several slots of the ring start inside the blast.
     const blast = volatileBlastRadius(rock);
