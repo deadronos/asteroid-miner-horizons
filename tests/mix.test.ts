@@ -23,6 +23,7 @@ describe('reverb send table', () => {
       contractDone: 0.22,
       loss: 0.32,
     });
+    expect(REVERB_SEND.crack).toBeUndefined();
     expect(REVERB_SEND.research).toBeUndefined();
     expect(REVERB_SEND.outpost).toBeUndefined();
     expect(REVERB_SEND.contractFail).toBeUndefined();

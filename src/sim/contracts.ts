@@ -115,7 +115,11 @@ export function updateContracts(state: GameState, dt: number): void {
   c.timeLeft -= dt;
   if (c.timeLeft <= 0) {
     board.failed++;
-    state.out.log.push({ level: 'warn', text: `Contract failed: ${describeContract(c)}.`, event: 'contractFail' });
+    state.out.log.push({
+      level: 'warn',
+      text: `Contract failed: ${describeContract(c)}.`,
+      event: 'contractFail',
+    });
     board.active = null;
   }
 }

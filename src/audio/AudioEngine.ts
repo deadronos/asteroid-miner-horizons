@@ -8,7 +8,9 @@
 // danger alarm) come from `updateContinuous`, which is called every frame with
 // a `ContinuousPolicy` selecting which layers may sound that frame (see
 // `pauseAudio`). Generative ambient music (`MusicPlayer`) plays into the music
-// bus via `updateMusic`.
+// bus via `updateMusic`. Every ~0.1 s `consumeLog` collapses the new log lines
+// and fires one rate-limited cue per event identity in the batch (the deny buzz
+// for warn lines is unchanged).
 
 import type { SettingsStore } from '../settings';
 import type { Fx, GameState, LogEntry } from '../sim/types';

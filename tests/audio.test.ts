@@ -22,7 +22,6 @@ import {
 import { ZZFX_RATE, zzfxSamples } from '../src/audio/zzfx';
 import { newGame } from '../src/sim/create';
 import { makeShip } from '../src/sim/ships';
-import type { LogEntry } from '../src/sim/types';
 
 const view = { center: { x: 0, z: 0 }, halfW: 800, halfH: 400 };
 
@@ -81,15 +80,17 @@ describe('rate limiter', () => {
 describe('event cues', () => {
   const keys = ['research', 'achievement', 'contractDone', 'contractFail', 'outpost', 'shipLoss'] as CueKey[];
 
-  it('maps every cue key to its own preset at a pinned gain', () => {
+  it('maps every cue key to its own preset at its pinned gain', () => {
     // oxlint-disable-next-line unicorn/no-array-sort -- the sorted copies are test-local
     expect(Object.keys(CUES).sort()).toEqual([...keys].sort());
     const ids = keys.map((k) => CUES[k]!.id);
     expect(new Set(ids).size).toBe(keys.length);
-    for (const k of keys) {
-      expect(CUES[k]!.gain).toBeGreaterThan(0);
-      expect(CUES[k]!.gain).toBeLessThanOrEqual(1);
-    }
+    expect(CUES.research!.gain).toBe(0.5);
+    expect(CUES.achievement!.gain).toBe(0.7);
+    expect(CUES.contractDone!.gain).toBe(0.6);
+    expect(CUES.contractFail!.gain).toBe(0.45);
+    expect(CUES.outpost!.gain).toBe(0.55);
+    expect(CUES.shipLoss!.gain).toBe(0.7);
   });
 
   it('collapses a same-batch burst to one cue per identity', () => {
@@ -98,7 +99,7 @@ describe('event cues', () => {
         { level: 'major', text: 'A was destroyed.', event: 'shipLoss' },
         { level: 'major', text: 'B was destroyed.', event: 'shipLoss' },
         { level: 'major', text: 'C was destroyed.', event: 'shipLoss' },
-      ] satisfies LogEntry[]),
+      ]),
     ).toEqual({ deny: false, cues: ['shipLoss'] });
   });
 
@@ -117,21 +118,53 @@ describe('event cues', () => {
           text: 'Achievement unlocked: …',
           achievement: 'firstCrack',
         },
-      ] satisfies LogEntry[]),
+      ]),
     ).toEqual({
       deny: true,
       cues: ['research', 'contractDone', 'achievement'],
     });
   });
 
-  it('paces repeating cues through MIN_GAP', () => {
+  it('paces research through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('research', 0)).toBe(true);
+    expect(l.allow('research', 0.14)).toBe(false);
+    expect(l.allow('research', 0.15)).toBe(true);
+  });
+
+  it('paces achievement through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('achievement', 0)).toBe(true);
+    expect(l.allow('achievement', 0.49)).toBe(false);
+    expect(l.allow('achievement', 0.5)).toBe(true);
+  });
+
+  it('paces contractDone through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('contractDone', 0)).toBe(true);
+    expect(l.allow('contractDone', 0.29)).toBe(false);
+    expect(l.allow('contractDone', 0.3)).toBe(true);
+  });
+
+  it('paces contractFail through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('contractFail', 0)).toBe(true);
+    expect(l.allow('contractFail', 0.29)).toBe(false);
+    expect(l.allow('contractFail', 0.3)).toBe(true);
+  });
+
+  it('paces outpost through MIN_GAP', () => {
+    const l = new RateLimiter();
+    expect(l.allow('outpost', 0)).toBe(true);
+    expect(l.allow('outpost', 0.29)).toBe(false);
+    expect(l.allow('outpost', 0.3)).toBe(true);
+  });
+
+  it('paces loss through MIN_GAP', () => {
     const l = new RateLimiter();
     expect(l.allow('loss', 0)).toBe(true);
-    expect(l.allow('loss', 0.2)).toBe(false);
-    expect(l.allow('loss', 0.5)).toBe(true);
-    expect(l.allow('research', 0.5)).toBe(true);
-    expect(l.allow('research', 0.55)).toBe(false);
-    expect(l.allow('research', 0.7)).toBe(true);
+    expect(l.allow('loss', 0.39)).toBe(false);
+    expect(l.allow('loss', 0.4)).toBe(true);
   });
 });
 

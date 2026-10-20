@@ -112,14 +112,14 @@ export interface Cue {
 }
 
 /** Which preset and how loud per event identity; placement is always centre. */
-export const CUES: Readonly<Record<CueKey, Cue>> = {
+export const CUES: Readonly<Record<CueKey, Cue>> = Object.freeze({
   research: { id: 'research', gain: 0.5 },
   achievement: { id: 'achievement', gain: 0.7 },
   contractDone: { id: 'contractDone', gain: 0.6 },
   contractFail: { id: 'contractFail', gain: 0.45 },
   outpost: { id: 'outpost', gain: 0.55 },
   shipLoss: { id: 'loss', gain: 0.7 },
-};
+});
 
 /** Warn lines and one cue voice per event identity found in a log batch. */
 export function cueBatch(log: readonly LogEntry[]): { deny: boolean; cues: CueKey[] } {
