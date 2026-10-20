@@ -148,6 +148,10 @@ describe('applyOffline', () => {
   });
 });
 
+/** The offline-progress summary lines a session has logged. */
+const aways = (s: GameSession): string[] =>
+  s.state.out.log.filter((e) => e.text.startsWith('While you were away')).map((e) => e.text);
+
 describe('GameSession offline progress', () => {
   let store: Storage;
   const T0 = Date.UTC(2026, 9, 19, 12);
@@ -201,6 +205,104 @@ describe('GameSession offline progress', () => {
     const s = new GameSession(settings(false));
     expect(s.state.run.bank).toEqual(game.run.bank);
     expect(s.state.out.log.some((e) => e.text.startsWith('While you were away'))).toBe(false);
+  });
+
+  /** A session on a saved drone game, loaded at the current (fake) time so nothing is credited yet. */
+  function running(offlineProgress = true): GameSession {
+    writeSlot(0, withDrones(2));
+    return new GameSession(settings(offlineProgress));
+  }
+
+  describe('in a hidden tab', () => {
+    let doc: EventTarget & { hidden: boolean };
+
+    beforeEach(() => {
+      doc = Object.assign(new EventTarget(), { hidden: false });
+      Object.defineProperty(globalThis, 'window', { value: new EventTarget(), configurable: true });
+      Object.defineProperty(globalThis, 'document', { value: doc, configurable: true });
+    });
+    afterEach(() => {
+      Reflect.deleteProperty(globalThis, 'window');
+      Reflect.deleteProperty(globalThis, 'document');
+    });
+
+    const setHidden = (hidden: boolean): void => {
+      doc.hidden = hidden;
+      doc.dispatchEvent(new Event('visibilitychange'));
+    };
+    it('credits the hidden span once, when the tab is shown again, and saves it', () => {
+      const s = running();
+      s.start();
+      const bank0 = walletTotal(s.state.run.bank);
+      setHidden(true);
+      vi.setSystemTime(T0 + HOUR * 1000);
+      setHidden(false);
+
+      expect(walletTotal(s.state.run.bank) - bank0).toBeCloseTo(droneRate(s.state) * HOUR, 3);
+      expect(aways(s)).toEqual([expect.stringMatching(/^While you were away \(1h 00m\)/)]);
+      expect(readSlot(0)!.savedAt).toBe(T0 + HOUR * 1000);
+
+      // A second visible event, or a reload now, credits nothing more.
+      const bank1 = walletTotal(s.state.run.bank);
+      setHidden(false);
+      expect(walletTotal(s.state.run.bank)).toBe(bank1);
+      const again = new GameSession(settings());
+      expect(walletTotal(again.state.run.bank)).toBeCloseTo(bank1, 6);
+      s.stop();
+    });
+
+    it('does not credit the span again after hide, reload, show', () => {
+      const s = running();
+      s.start();
+      setHidden(true); // saves at T0
+      s.stop(); // the page goes away
+      vi.setSystemTime(T0 + HOUR * 1000);
+      const reloaded = new GameSession(settings()); // credits the hour from savedAt
+      reloaded.start();
+      setHidden(false);
+      expect(aways(reloaded)).toHaveLength(1);
+      reloaded.stop();
+    });
+
+    it('ignores short hides and respects the setting', () => {
+      const s = running();
+      s.start();
+      setHidden(true);
+      vi.setSystemTime(T0 + 30_000);
+      setHidden(false);
+      expect(aways(s)).toEqual([]);
+      s.stop();
+
+      vi.setSystemTime(T0);
+      const off = running(false);
+      off.start();
+      setHidden(true);
+      vi.setSystemTime(T0 + HOUR * 1000);
+      setHidden(false);
+      expect(aways(off)).toEqual([]);
+      off.stop();
+    });
+
+    it('counts a page opened in a background tab as hidden from start()', () => {
+      doc.hidden = true;
+      const s = running();
+      s.start();
+      vi.setSystemTime(T0 + HOUR * 1000);
+      setHidden(false);
+      expect(aways(s)).toHaveLength(1);
+      s.stop();
+    });
+
+    it('credits nothing while saving is suspended after an error', () => {
+      const s = running();
+      s.start();
+      s.suspendAutosave();
+      setHidden(true);
+      vi.setSystemTime(T0 + HOUR * 1000);
+      setHidden(false);
+      expect(aways(s)).toEqual([]);
+      s.stop();
+    });
   });
 });
 

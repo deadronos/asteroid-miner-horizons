@@ -1,7 +1,8 @@
 // The playing session: which save slot is running, the live GameState, and
 // every way it changes (load, new game, import, delete, autosave). Loading a
 // save credits offline progress for the time since it was written, then saves
-// at once so a reload cannot credit the same absence twice. A slot whose save
+// at once so a reload cannot credit the same absence twice. A hidden tab, where
+// the loop stops, is credited the same way when it is shown again. A slot whose save
 // can't be read is never written over unasked: startup moves to an empty slot,
 // or runs unsaved when there is none. Nor is a good save replaced by one that
 // would not load back. `main.ts` only wires the renderer, HUD, input and loop
@@ -63,6 +64,8 @@ export class GameSession implements SaveActions {
   private detach: (() => void) | null = null;
   /** True after the loop hit an error: the running game may be broken, so it must not overwrite its slot. */
   private suspended = false;
+  /** Wall time (ms) the tab was hidden at, or null while it is visible; the absence is credited on return. */
+  private hiddenAt: number | null = null;
   /** Per-session derived state for the running game; never serialized. */
   readonly sim = new SimIndex();
 
@@ -179,14 +182,23 @@ export class GameSession implements SaveActions {
     const persist = (): void => {
       this.persist();
     };
-    const onHide = (): void => {
-      if (document.hidden) persist();
+    const onVisibility = (): void => {
+      if (document.hidden) {
+        this.hiddenAt = Date.now();
+        persist();
+      } else if (this.hiddenAt !== null) {
+        const since = this.hiddenAt;
+        this.hiddenAt = null;
+        this.creditOffline(since);
+      }
     };
+    // Opened in a background tab: the absence starts now.
+    if (document.hidden) this.hiddenAt = Date.now();
     window.addEventListener('beforeunload', persist);
-    document.addEventListener('visibilitychange', onHide);
+    document.addEventListener('visibilitychange', onVisibility);
     this.detach = () => {
       window.removeEventListener('beforeunload', persist);
-      document.removeEventListener('visibilitychange', onHide);
+      document.removeEventListener('visibilitychange', onVisibility);
     };
   }
 
@@ -199,6 +211,7 @@ export class GameSession implements SaveActions {
     this.cancelIdle = null;
     this.detach?.();
     this.detach = null;
+    this.hiddenAt = null;
   }
 
   /** Swap the running game, saving the old one to its slot and the new one to its. */
@@ -214,6 +227,8 @@ export class GameSession implements SaveActions {
     setActiveSlot(i);
     this.running = state;
     this.suspended = false;
+    // A game swapped in while hidden is only away from the swap on.
+    if (this.hiddenAt !== null) this.hiddenAt = Date.now();
     this.clearIndex();
     this.hooks.onSwitch?.();
     this.persist();
@@ -314,10 +329,13 @@ export class GameSession implements SaveActions {
     });
   }
 
-  /** Credits the fleet's income since `savedAt` (if the setting allows) and saves, so it is credited once. */
-  private creditOffline(savedAt: number): void {
-    if (!this.settings.value.offlineProgress) return;
-    if (applyOffline(this.state, (Date.now() - savedAt) / 1000)) this.persist();
+  /**
+   * Credits the fleet's income since `since` (a save's time, or when the tab was hidden) if the setting allows, and
+   * saves, so it is credited once. Skipped while suspended: the game may be broken and could not be saved anyway.
+   */
+  private creditOffline(since: number): void {
+    if (!this.settings.value.offlineProgress || this.suspended) return;
+    if (applyOffline(this.state, (Date.now() - since) / 1000)) this.persist();
   }
 
   private logLoaded(i: number): void {
