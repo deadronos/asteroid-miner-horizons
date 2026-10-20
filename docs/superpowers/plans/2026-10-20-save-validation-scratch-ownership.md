@@ -50,7 +50,7 @@
 - `src/sim/save.ts` keeps every existing export (`serialize`, `deserialize`, `loadsBack`, `exportText`,
   `exportCompact`, `parseImport`, `parseImportText`, slot helpers) with unchanged signatures.
 
-- [ ] **Step 1: Write the failing direct-validation tests**
+- [x] **Step 1: Write the failing direct-validation tests**
 
 Create `tests/validate.test.ts`. Build a valid payload with
 `JSON.parse(serialize(newGame(7))) as unknown as SaveData`, clone it per case, and assert
@@ -79,12 +79,12 @@ Run each through `validateState`. Use `Partial<...>` casts for deletes and `unkn
 assignments (the repo lints `no-explicit-any`). Also assert `deserialize(JSON.stringify(corrupt))` is `null` for
 every case.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/validate.test.ts`
 Expected: FAIL because `src/sim/validate.ts` does not exist (module resolution error).
 
-- [ ] **Step 3: Move the validators into `src/sim/validate.ts`**
+- [x] **Step 3: Move the validators into `src/sim/validate.ts`**
 
 Move the private validator block from `src/sim/save.ts` (from `isObj` through the body of `fromData`) into the new
 module. Keep every helper private. Export only:
@@ -99,7 +99,7 @@ The body keeps the current checks in the same order, then returns
 `run.ships` and `run.rocks` using a small private helper (for example `hasUniqueIds(items)`), before the existing
 cross-reference checks. Do not change any other acceptance rule.
 
-- [ ] **Step 4: Delegate from `save.ts`**
+- [x] **Step 4: Delegate from `save.ts`**
 
 In `src/sim/save.ts`, replace the moved block with:
 
@@ -115,7 +115,7 @@ function fromData(data: unknown, opts?: MigrateOptions): GameState | null {
 Remove the now-unused data-table imports and the `Profile` / `Run` type imports. Keep `SAVE_VERSION`,
 `chainCovers`, `migrate` and all storage/format code in `save.ts`.
 
-- [ ] **Step 5: Add the seeded fuzz test**
+- [x] **Step 5: Add the seeded fuzz test**
 
 In `tests/validate.test.ts`, add a test using `makeRng(0x5eed)`, `next`, `int` and `pick` from `src/core/rng.ts`.
 For 200 iterations:
@@ -132,7 +132,7 @@ For 200 iterations:
 Use a fixed list of required paths and finite-number paths so the mutations are always structurally meaningful.
 Include at least one `NaN` and one `Infinity` iteration explicitly, not only through random selection.
 
-- [ ] **Step 6: Run the focused tests and the full check**
+- [x] **Step 6: Run the focused tests and the full check**
 
 Run: `npx vitest run tests/validate.test.ts tests/migrations.test.ts tests/sim.test.ts`
 Expected: PASS.
@@ -140,7 +140,7 @@ Expected: PASS.
 Run: `npm run check`
 Expected: PASS (format, lint, typecheck, all tests).
 
-- [ ] **Step 7: Commit Task 1**
+- [x] **Step 7: Commit Task 1**
 
 ```bash
 git add src/sim/validate.ts src/sim/save.ts tests/validate.test.ts
@@ -165,7 +165,7 @@ git commit -m "Move save payload validation into its own module (#157)"
   - `hazards.inCometPath(run: Run, comets: readonly Rock[], pos: Vec2, pad: number): boolean` (allocation-free on a
     miss). `cometPathEscape` and `flareShelter` keep their current signatures.
 
-- [ ] **Step 1: Replace the scratch-reuse tests with ownership tests**
+- [x] **Step 1: Replace the scratch-reuse tests with ownership tests**
 
 In `tests/pilot.test.ts`, delete the `pilot scratch reuse` describe block. Add:
 
@@ -192,12 +192,12 @@ assert it returns true and the resulting velocity points away from the path (pos
 to the comet velocity). Follow it with a normal `arrive` to a caller-owned target and assert that target object is
 unchanged.
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/pilot.test.ts`
 Expected: FAIL — `SimIndex` still has the scratch fields and `formationSlot` still requires an `out` argument.
 
-- [ ] **Step 3: Remove the scratch fields and use locals**
+- [x] **Step 3: Remove the scratch fields and use locals**
 
 In `src/sim/index.ts`, delete the `avoid`, `home`, `escape` and `waypoint` fields and their comments.
 
@@ -215,12 +215,12 @@ In `src/sim/hazards.ts`, make the private `pathEscape` return `Vec2 | null`, add
 `inCometPath(run, comets, pos, pad): boolean`, and keep `cometPathEscape` by copying the returned vector into its
 `out` argument only on a hit. Keep `flareShelter` as-is.
 
-- [ ] **Step 4: Run focused tests**
+- [x] **Step 4: Run focused tests**
 
 Run: `npx vitest run tests/pilot.test.ts tests/hazards.test.ts tests/autopilot.test.ts tests/alloc.test.ts`
 Expected: PASS, with the allocation mean below 112 KiB/tick.
 
-- [ ] **Step 5: Run the full check and confirm no balance drift**
+- [x] **Step 5: Run the full check and confirm no balance drift**
 
 Run: `npm run check`
 Expected: PASS.
@@ -231,7 +231,7 @@ Expected: PASS.
 Run: `npm run balance`, then `git diff --exit-code docs/balance.md`
 Expected: no diff. If the report changes, stop and investigate the behaviour change before committing.
 
-- [ ] **Step 6: Commit Task 2**
+- [x] **Step 6: Commit Task 2**
 
 ```bash
 git add src/sim/index.ts src/sim/pilot.ts src/sim/hazards.ts src/sim/automation.ts tests/pilot.test.ts
@@ -243,18 +243,18 @@ git commit -m "Give pilot vectors explicit per-call ownership (#158)"
 **Files:**
 - Create: `docs/superpowers/plans/2026-10-20-save-validation-scratch-ownership-run-log.md`
 
-- [ ] **Step 1: Write the run log**
+- [x] **Step 1: Write the run log**
 
 Record the date, issues, branch, spec/plan links, the setup, the verification after each task (commands and
 results), the measured allocation mean, any deviation from the plan and why, a per-task session/round/commit table,
 and the reviewer findings with accepted/rejected calls.
 
-- [ ] **Step 2: Final verification**
+- [x] **Step 2: Final verification**
 
 Run: `npm run check && npm run build`
 Expected: PASS.
 
-- [ ] **Step 3: Commit the run log**
+- [x] **Step 3: Commit the run log**
 
 ```bash
 git add docs/superpowers/plans/2026-10-20-save-validation-scratch-ownership-run-log.md
