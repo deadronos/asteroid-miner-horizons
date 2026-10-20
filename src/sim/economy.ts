@@ -35,6 +35,16 @@ export function upgradeCost(ship: Ship, slot: number): Cost | null {
   return variantDef(f.type, f.variant).cost((f.tier + 1) as Tier);
 }
 
+/** Cost of the ship's next slot, by slot number (the 3rd costs slotBaseCost), or null at the hull's cap. */
+export function slotCost(ship: Ship): Cost | null {
+  const n = ship.slots.length + 1;
+  if (n > HULLS[ship.hullId].maxSlots) return null;
+  const mul = TUNING.slotCostGrowth ** (n - 3);
+  const c: Cost = {};
+  for (const [r, amt] of Object.entries(TUNING.slotBaseCost)) c[r as keyof Cost] = Math.round(amt * mul);
+  return c;
+}
+
 export function repairCost(state: GameState, ship: Ship): number {
   const st = shipStats(ship, state.profile);
   return Math.ceil(Math.max(0, st.maxHull - ship.hull) * TUNING.repairOrePerHull);

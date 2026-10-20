@@ -21,6 +21,7 @@ import {
   refitBlock,
   repairCost,
   scrapValue,
+  slotCost,
   upgradeCost,
   warpCost,
 } from './economy';
@@ -151,10 +152,12 @@ export const handlers: Handlers = {
       const fs = flagship(run);
       const frac = fs.hull / shipStats(fs, profile).maxHull;
       const old = fs.slots.filter((s) => s);
+      // Bought slots carry over, up to the new hull's cap.
+      const n = Math.min(h.maxSlots, Math.max(h.slots, fs.slots.length));
       fs.hullId = cmd.hullId;
-      fs.slots = Array.from({ length: h.slots }, (_, i) => old[i] ?? null);
+      fs.slots = Array.from({ length: n }, (_, i) => old[i] ?? null);
       // Parts that no longer fit are refunded at half value.
-      for (const extra of old.slice(h.slots)) refundFitted(state, extra!);
+      for (const extra of old.slice(n)) refundFitted(state, extra!);
       fs.hull = frac * shipStats(fs, profile).maxHull;
       out.log.push({ level: 'major', text: `Flagship refitted onto a ${h.name} hull.` });
     } else {
@@ -210,6 +213,12 @@ export const handlers: Handlers = {
     ship.aiTargetId = null;
   }),
 
+  shipAuto: withShip((state, ship, cmd) => {
+    if (isFlagship(ship)) return fail(state, 'The flagship is flown by hand.');
+    if (cmd.kind === 'repair') ship.autoRepair = cmd.on;
+    else ship.autoUpgrade = cmd.on;
+  }),
+
   repair: withShip((state, ship) => {
     const cost = repairCost(state, ship);
     const block = refitBlock(state, ship);
@@ -243,6 +252,16 @@ export const handlers: Handlers = {
       level: 'info',
       text: `${ship.name}: ${variantDef(cur.type, cur.variant).name} → T${cur.tier}.`,
     });
+  }),
+
+  buySlot: withShip((state, ship) => {
+    const block = refitBlock(state, ship);
+    if (block) return fail(state, block);
+    const cost = slotCost(ship);
+    if (!cost) return fail(state, `${ship.name} has every slot its hull allows.`);
+    if (!pay(state.run.bank, cost)) return fail(state, `A new slot needs ${formatCost(cost)}.`);
+    ship.slots.push(null);
+    state.out.log.push({ level: 'info', text: `${ship.name}: slot ${ship.slots.length} added.` });
   }),
 
   remove: withShip((state, ship, cmd) => {

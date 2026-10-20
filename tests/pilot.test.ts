@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { SPLASH_RADIUS } from '../src/data/components';
 import { FLARES } from '../src/data/hazards';
 import { TUNING } from '../src/data/tuning';
-import { DEFAULT_ASSISTS } from '../src/sim/assists';
+import { DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO } from '../src/sim/assists';
 import { newGame, newProfile, newRun, SAVE_VERSION } from '../src/sim/create';
 import { isDocked } from '../src/sim/economy';
 import { cometPathEscape } from '../src/sim/hazards';
@@ -18,7 +18,7 @@ const NORMAL = { hazards: 'normal' } as const;
 function ctxFor(state: ReturnType<typeof newGame>): TickCtx {
   const index = new SimIndex();
   index.rebuild(state);
-  return { state, index, dt: DT, assists: DEFAULT_ASSISTS, hazards: 'off' };
+  return { state, index, dt: DT, assists: DEFAULT_ASSISTS, auto: DEFAULT_FLEET_AUTO, hazards: 'off' };
 }
 
 describe('pilot scratch reuse', () => {

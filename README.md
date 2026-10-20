@@ -81,11 +81,21 @@ All keys can be rebound in ⚙ → Controls.
   each offer a sidegrade variant chosen when installing — Focused/Wide Beam and
   Standard Drive/Vector Thruster. Effects stack, so two lasers give twice the DPS.
   Refits, repairs and scrapping require the ship to be docked. Removing a part refunds
-  half its value.
-- **Fleet**: buy Mining Drones (2 slots) or Harvesters (3 slots). Drones auto-mine, sweep
+  half its value. A docked ship can buy extra slots, up to 6 on every hull (8 on the
+  Excavator); each slot costs 1.7× the one before, starting at 120 ore · 60 ice for a
+  3rd slot. Bought slots carry over when the flagship changes hull, up to the new cap.
+- **Fleet**: buy Mining Drones (2 slots) or Harvesters (3 slots), both expandable to 6. Drones auto-mine, sweep
   up debris and return to unload when full. In **Assist** mode they work near the
   flagship; in **Auto** mode they work near the station. Select one to give it manual
-  orders. The flagship can be refitted onto the 6-slot **Excavator** hull.
+  orders. The flagship can be refitted onto the 6-slot **Excavator** hull (expandable to 8).
+- **Autorepair & autoupgrade**: each drone and hauler row in the Fleet panel has **REPAIR**
+  and **UPGRADE** toggles (off by default). With REPAIR on, a ship below the hull threshold
+  (Menu → Gameplay, default 50%) flies home and repairs. With UPGRADE on, a docked ship
+  takes its cheapest next step every half second: fill an empty slot (drones: laser, cargo,
+  engine, armor, shield, sensor; haulers start with cargo), raise a part one tier, or buy a
+  slot. It never removes a part you fitted, so a hand-fitted build is kept. Both spend only
+  what the bank holds above the reserve (Menu → Gameplay, default 100 of each resource),
+  and repair comes first.
 - **Automation**: a **Hauler** takes a fleet slot but never mines. It skims drones once
   their holds are 30% full and empties outposts, then unloads at the station, so drones
   spend less time commuting. An **outpost** (120 ore · 30 ice · 15 alloy, up to 3) is

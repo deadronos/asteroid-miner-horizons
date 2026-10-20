@@ -355,7 +355,7 @@ describe('command handlers', () => {
     s.run.selectedId = 0;
     handlers.select(s, { t: 'select', shipId: fs.id });
     expect(s.run.selectedId).toBe(fs.id);
-    expect(Object.keys(handlers)).toHaveLength(19);
+    expect(Object.keys(handlers)).toHaveLength(21);
   });
 
   it('warp leaves outposts behind with a warning', () => {
