@@ -10,7 +10,7 @@ import { isDocked } from './economy';
 import { needsRepair } from './fleetAuto';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
-import { arrive, dodgeHazards, formationSlot, steer, unsafe, type TickCtx } from './pilot';
+import { arrive, dodgeBlast, dodgeHazards, formationSlot, unsafe, type TickCtx } from './pilot';
 import { cargoFree, findShip, flagship, isAlive, isDrone, isHauler, isHoldFull, type ShipStats } from './ships';
 import type { Automation, GameState, Outpost, Rock, Ship } from './types';
 
@@ -88,38 +88,6 @@ export function updateOutposts(state: GameState, index: SimIndex, dt: number): v
   auto.outposts.length = kept;
 }
 
-/** Clearance past the star's heat radius that a hauler's route keeps. */
-const STAR_PAD = 120;
-
-/**
- * Arrives at `target`, detouring around the star when the straight line would cross its heat zone: haulers cross
- * the whole system, where a drone working near its anchor never needs to. The detour aims at the point on the safe
- * circle beside the line's closest approach, so it re-aims every tick and bends round the star in an arc.
- */
-function haulTo(ctx: TickCtx, ship: Ship, st: ShipStats, target: Vec2, stopDist: number, avoidId: number | null) {
-  const safe = ctx.state.run.system.heatRadius + STAR_PAD + st.size;
-  const dx = target.x - ship.pos.x;
-  const dz = target.z - ship.pos.z;
-  const l2 = dx * dx + dz * dz || 1;
-  // Closest point to the star (the origin) on the segment ship → target.
-  const t = Math.max(0, Math.min(1, -(ship.pos.x * dx + ship.pos.z * dz) / l2));
-  const cx = ship.pos.x + dx * t;
-  const cz = ship.pos.z + dz * t;
-  const c = Math.hypot(cx, cz);
-  if (c >= safe) {
-    arrive(ctx, ship, st, target, stopDist, avoidId);
-    return;
-  }
-  // Straight through the centre: pick the side to the ship's left of the line.
-  const len = Math.sqrt(l2);
-  const nx = c > 1e-6 ? cx / c : -dz / len;
-  const nz = c > 1e-6 ? cz / c : dx / len;
-  const wp = ctx.index.waypoint;
-  wp.x = nx * (safe + STAR_PAD);
-  wp.z = nz * (safe + STAR_PAD);
-  steer(ctx, ship, st, wp.x - ship.pos.x, wp.z - ship.pos.z, ctx.assists.avoid, avoidId);
-}
-
 /** Something a hauler can load from: a miner's hold or an outpost's storage. */
 interface Source {
   /** Ship id or host rock id; both come from `run.nextId`, so they never collide. */
@@ -183,8 +151,8 @@ function pickSource(ctx: TickCtx, ship: Ship): number | null {
 }
 
 /**
- * Hauler brain, used when a hauler has no manual order: comet path or flare → get clear · hull below the autorepair
- * threshold → repair at the station (#140) · full → unload at the
+ * Hauler brain, used when a hauler has no manual order: comet path or flare → get clear · inside a breaking volatile rock's blast → back out · hull
+ * below the autorepair threshold → repair at the station (#140) · full → unload at the
  * station · else load from the claimed (or the best) miner or outpost · else unload what it carries · else wait by
  * the station. Haulers never mine.
  */
@@ -197,9 +165,10 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     ship.aiTargetId = null;
     return;
   }
+  if (dodgeBlast(ctx, ship, st)) return;
   if (needsRepair(ship, st, ctx.auto)) {
     ship.aiTargetId = null;
-    if (!isDocked(run, ship)) haulTo(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+    if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
     return;
   }
 
@@ -212,7 +181,7 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     ship.aiTargetId = src.id;
     const reach = st.size + src.radius + TUNING.haulTransferGap;
     if (dist(ship.pos, src.pos) > reach) {
-      haulTo(ctx, ship, st, src.pos, reach * 0.7, src.avoidId);
+      arrive(ctx, ship, st, src.pos, reach * 0.7, src.avoidId);
       return;
     }
     // Hold station alongside and load.
@@ -224,9 +193,9 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   ship.aiTargetId = null;
   if (carrying && ctx.assists.autoDock) {
-    if (!isDocked(run, ship)) haulTo(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+    if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
     return;
   }
   // Idle, or loaded without auto-dock: wait just off the station for work or a manual dock order.
-  haulTo(ctx, ship, st, formationSlot(ctx.index.home, station, ship.id, 110), 20, null);
+  arrive(ctx, ship, st, formationSlot(ctx.index.home, station, ship.id, 110), 20, null);
 }
