@@ -175,21 +175,30 @@ export function inFlareZone(run: Run, pos: Vec2): boolean {
   return pos.x * pos.x + pos.z * pos.z < r * r;
 }
 
-/** Writes the unit vector out of the path ahead of `from` along `vel` into `out` if `pos` lies within `half` of it. */
-function pathEscape(from: Vec2, vel: Vec2, half: number, pos: Vec2, out: Vec2): boolean {
+/** Returns the unit vector out of the path ahead of `from` along `vel` if `pos` lies within `half` of it, else null. */
+function pathEscape(from: Vec2, vel: Vec2, half: number, pos: Vec2): Vec2 | null {
   const sp = len(vel);
-  if (sp < 1e-6) return false;
+  if (sp < 1e-6) return null;
   const dx = vel.x / sp;
   const dz = vel.z / sp;
   const rx = pos.x - from.x;
   const rz = pos.z - from.z;
-  if (rx * dx + rz * dz < -half) return false; // safely behind
+  if (rx * dx + rz * dz < -half) return null; // safely behind
   const lateral = rx * -dz + rz * dx; // + means left of the path
-  if (Math.abs(lateral) >= half) return false;
+  if (Math.abs(lateral) >= half) return null;
   const side = lateral >= 0 ? 1 : -1;
-  out.x = -dz * side;
-  out.z = dx * side;
-  return true;
+  return { x: -dz * side, z: dx * side };
+}
+
+/**
+ * True if `pos` lies in the path of the pending comet or a live one in `comets` (within the comet's radius plus
+ * `pad`). Allocation-free on a miss.
+ */
+export function inCometPath(run: Run, comets: readonly Rock[], pos: Vec2, pad: number): boolean {
+  const w = run.hazards.comet;
+  if (w && pathEscape(w.from, w.vel, COMET_RADIUS[1] + pad, pos) !== null) return true;
+  for (const c of comets) if (pathEscape(c.pos, c.vel, c.radius + pad, pos) !== null) return true;
+  return false;
 }
 
 /**
@@ -198,8 +207,22 @@ function pathEscape(from: Vec2, vel: Vec2, half: number, pos: Vec2, out: Vec2): 
  */
 export function cometPathEscape(run: Run, comets: readonly Rock[], pos: Vec2, pad: number, out: Vec2): boolean {
   const w = run.hazards.comet;
-  if (w && pathEscape(w.from, w.vel, COMET_RADIUS[1] + pad, pos, out)) return true;
-  for (const c of comets) if (pathEscape(c.pos, c.vel, c.radius + pad, pos, out)) return true;
+  if (w) {
+    const v = pathEscape(w.from, w.vel, COMET_RADIUS[1] + pad, pos);
+    if (v) {
+      out.x = v.x;
+      out.z = v.z;
+      return true;
+    }
+  }
+  for (const c of comets) {
+    const v = pathEscape(c.pos, c.vel, c.radius + pad, pos);
+    if (v) {
+      out.x = v.x;
+      out.z = v.z;
+      return true;
+    }
+  }
   return false;
 }
 

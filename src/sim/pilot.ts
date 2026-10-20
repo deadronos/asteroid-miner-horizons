@@ -6,7 +6,7 @@ import { damp, dist, distSq, len, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import type { Assists, FleetAuto } from './assists';
 import { isDocked } from './economy';
-import { cometPathEscape, flareShelter, inFlareZone } from './hazards';
+import { cometPathEscape, flareShelter, inCometPath, inFlareZone } from './hazards';
 import type { SimIndex } from './index';
 import { needsRepair } from './fleetAuto';
 import { laserRock } from './mining';
@@ -30,7 +30,15 @@ export interface TickCtx {
  * direction push the ship sideways (around them, not back), and rocks that
  * are nearly touching push straight away.
  */
-function avoidance(ctx: TickCtx, ship: Ship, st: ShipStats, dx: number, dz: number, ignoreId: number | null): number {
+function avoidance(
+  ctx: TickCtx,
+  ship: Ship,
+  st: ShipStats,
+  dx: number,
+  dz: number,
+  ignoreId: number | null,
+  out: Vec2,
+): number {
   const look = st.size + 60 + len(ship.vel) * 1.2;
   let ax = 0;
   let az = 0;
@@ -57,8 +65,8 @@ function avoidance(ctx: TickCtx, ship: Ship, st: ShipStats, dx: number, dz: numb
     ax += -dz * side * urgency;
     az += dx * side * urgency;
   });
-  ctx.index.avoid.x = ax;
-  ctx.index.avoid.z = az;
+  out.x = ax;
+  out.z = az;
   return danger;
 }
 
@@ -93,8 +101,8 @@ export function steer(
       px = wx / w;
       pz = wz / w;
     }
-    const danger = avoidance(ctx, ship, st, px, pz, ignoreId);
-    const a = ctx.index.avoid;
+    const a = { x: 0, z: 0 };
+    const danger = avoidance(ctx, ship, st, px, pz, ignoreId, a);
     x += a.x * Math.max(want, 0.5);
     z += a.z * Math.max(want, 0.5);
     want *= 1 - 0.7 * danger; // ease off the throttle while threading a cluster
@@ -138,9 +146,7 @@ function starDetour(ctx: TickCtx, ship: Ship, st: ShipStats, target: Vec2, avoid
   const l = Math.sqrt(l2);
   const nx = c > 1e-6 ? cx / c : -dz / l;
   const nz = c > 1e-6 ? cz / c : dx / l;
-  const wp = ctx.index.waypoint;
-  wp.x = nx * (safe + TUNING.starRoutePad);
-  wp.z = nz * (safe + TUNING.starRoutePad);
+  const wp = { x: nx * (safe + TUNING.starRoutePad), z: nz * (safe + TUNING.starRoutePad) };
   steer(ctx, ship, st, wp.x - ship.pos.x, wp.z - ship.pos.z, ctx.assists.avoid, avoidId);
   return true;
 }
@@ -302,7 +308,7 @@ export function runOrder(ctx: TickCtx, ship: Ship, st: ShipStats): boolean {
 /** True if `pos` lies in the flare zone or a comet path (see `sim/hazards`). */
 export function unsafe(ctx: TickCtx, pos: Vec2): boolean {
   const { run } = ctx.state;
-  return inFlareZone(run, pos) || cometPathEscape(run, ctx.index.comets, pos, TUNING.cometDodgePad, ctx.index.escape);
+  return inFlareZone(run, pos) || inCometPath(run, ctx.index.comets, pos, TUNING.cometDodgePad);
 }
 
 /**
@@ -311,27 +317,26 @@ export function unsafe(ctx: TickCtx, pos: Vec2): boolean {
  */
 export function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: boolean): boolean {
   const { run } = ctx.state;
-  const esc = ctx.index.escape;
+  const esc = { x: 0, z: 0 };
   if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, esc)) {
     steer(ctx, ship, st, esc.x, esc.z, ctx.assists.avoid);
     return true;
   }
   if (!inFlareZone(run, ship.pos)) return false;
-  if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, esc) === 'dock')
+  const shelter = { x: 0, z: 0 };
+  if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, shelter) === 'dock')
     arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.5);
-  else arrive(ctx, ship, st, esc, 20);
+  else arrive(ctx, ship, st, shelter, 20);
   return true;
 }
 
 /**
- * Writes ship `id`'s parking spot into `out` and returns it: one of six slots on a ring of `radius` around `anchor`,
- * so ships waiting at the same anchor spread out. Writes into `out` so the per-tick path does not allocate.
+ * Returns ship `id`'s parking spot: one of six slots on a ring of `radius` around `anchor`,
+ * so ships waiting at the same anchor spread out. Returns a fresh vector each call.
  */
-export function formationSlot(out: Vec2, anchor: Vec2, id: number, radius: number): Vec2 {
+export function formationSlot(anchor: Vec2, id: number, radius: number): Vec2 {
   const slot = (id % 6) * ((Math.PI * 2) / 6);
-  out.x = anchor.x + Math.cos(slot) * radius;
-  out.z = anchor.z + Math.sin(slot) * radius;
-  return out;
+  return { x: anchor.x + Math.cos(slot) * radius, z: anchor.z + Math.sin(slot) * radius };
 }
 
 /**
@@ -347,7 +352,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   const fs = flagship(run);
   const anchor = ship.aiMode === 'assist' && isAlive(fs) ? fs.pos : station;
-  const home = formationSlot(ctx.index.home, anchor, ship.id, 70);
+  const home = formationSlot(anchor, ship.id, 70);
 
   const full = isHoldFull(ship, st);
   if (dodgeHazards(ctx, ship, st, full)) {

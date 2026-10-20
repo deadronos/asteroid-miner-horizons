@@ -197,5 +197,5 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     return;
   }
   // Idle, or loaded without auto-dock: wait just off the station for work or a manual dock order.
-  arrive(ctx, ship, st, formationSlot(ctx.index.home, station, ship.id, 110), 20, null);
+  arrive(ctx, ship, st, formationSlot(station, ship.id, 110), 20, null);
 }
