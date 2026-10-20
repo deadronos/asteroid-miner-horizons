@@ -4,10 +4,11 @@
 import type { HazardLevel } from '../data/hazards';
 import { damp, dist, distSq, len, type Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
-import type { Assists } from './assists';
+import type { Assists, FleetAuto } from './assists';
 import { isDocked } from './economy';
 import { cometPathEscape, flareShelter, inFlareZone } from './hazards';
 import type { SimIndex } from './index';
+import { needsRepair } from './fleetAuto';
 import { laserRock } from './mining';
 import { flagship, isAlive, isHoldFull, type ShipStats } from './ships';
 import { canMine, volatileSafeDistance } from './traits';
@@ -18,6 +19,8 @@ export interface TickCtx {
   index: SimIndex;
   dt: number;
   assists: Assists;
+  /** Autorepair threshold and spending reserve. */
+  auto: FleetAuto;
   /** Hazard level for this tick; scales flare damage. */
   hazards: HazardLevel;
 }
@@ -265,7 +268,8 @@ export function formationSlot(out: Vec2, anchor: Vec2, id: number, radius: numbe
 
 /**
  * Drone brain, used when a drone has no manual order:
- * comet path or flare → get clear · full → return to station · loose pickups nearby → collect · else mine near the
+ * comet path or flare → get clear · hull below the autorepair threshold → repair at the station (#140) · full →
+ * return to station · loose pickups nearby → collect · else mine near the
  * anchor (the flagship in "assist" mode, the station in "auto" mode) · else follow the anchor. Targets in a comet
  * path or flare zone are skipped, and an unsafe anchor is waited out in place.
  */
@@ -280,6 +284,12 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const full = isHoldFull(ship, st);
   if (dodgeHazards(ctx, ship, st, full)) {
     ship.aiTargetId = null;
+    return;
+  }
+
+  if (needsRepair(ship, st, ctx.auto)) {
+    ship.aiTargetId = null;
+    if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
     return;
   }
 

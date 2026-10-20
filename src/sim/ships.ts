@@ -99,6 +99,8 @@ export function makeShip(run: Run, profile: Profile, hullId: HullId, name: strin
     cargo: emptyWallet(),
     order: null,
     aiMode: 'assist',
+    autoRepair: false,
+    autoUpgrade: false,
     beamOn: false,
     beamTargetId: null,
     aiTargetId: null,

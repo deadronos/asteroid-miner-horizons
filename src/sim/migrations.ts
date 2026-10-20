@@ -88,6 +88,14 @@ export const migrations: Record<number, Migration> = {
     profile.achievements = [];
     return d;
   },
+  // v12 added per-ship autorepair and autoupgrade (#140); both start off.
+  11: (d) => {
+    for (const ship of d.run.ships) {
+      ship.autoRepair = false;
+      ship.autoUpgrade = false;
+    }
+    return d;
+  },
 };
 
 export interface MigrateOptions {

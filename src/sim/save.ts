@@ -128,6 +128,8 @@ function isShip(s: unknown): boolean {
     finite(s.collisionCd) &&
     finite(s.respawn) &&
     isWallet(s.cargo) &&
+    typeof s.autoRepair === 'boolean' &&
+    typeof s.autoUpgrade === 'boolean' &&
     isShipSlots(s)
   );
 }
