@@ -112,7 +112,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             : def.role === 'hauler'
               ? ' — ferries cargo from drones and outposts to the station; does not mine'
               : '';
-        btn.dataset.title = `${def.name}: ${def.slots} slots, ${def.hull} hull, ${def.cargo} cargo${note}`;
+        btn.dataset.title = `${def.name}: ${def.slots} slots (up to ${def.maxSlots}), ${def.hull} hull, ${def.cargo} cargo${note}`;
         btn.append(
           h('span', { text: `${def.role === 'flagship' ? 'Refit flagship → ' : '+ '}${def.name}` }),
           h('small', { text: formatCost(def.cost) }),

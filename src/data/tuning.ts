@@ -24,6 +24,9 @@ export const TUNING = {
   starHeatDps: 30,
   flagshipRespawn: 4,
   repairOrePerHull: 0.3,
+  /** Cost of a ship's 3rd slot; each later slot costs slotCostGrowth× the one before (#141). */
+  slotBaseCost: { ore: 120, ice: 60 },
+  slotCostGrowth: 1.7,
 
   baseFleetCap: 5,
   /** A hold counts as full once free space drops below max(fullHoldMin, cap × fullHoldShare). */

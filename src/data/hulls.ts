@@ -1,4 +1,5 @@
-// Hull types. A hull fixes base stats and how many component slots a ship has.
+// Hull types. A hull fixes base stats, how many component slots a ship starts
+// with, and how many it can be expanded to at the station (#141).
 // Flagship hulls replace your command ship (keeping fitted parts); drone hulls
 // are bought as extra autonomous fleet members, and hauler hulls are fleet
 // members that ferry cargo from miners and outposts instead of mining.
@@ -12,7 +13,10 @@ export interface HullDef {
   id: HullId;
   name: string;
   role: 'flagship' | 'drone' | 'hauler';
+  /** Slots a new ship of this hull starts with. */
   slots: number;
+  /** Slots it can be expanded to by buying more at the station. */
+  maxSlots: number;
   hull: number;
   speed: number;
   accel: number;
@@ -31,6 +35,7 @@ export const HULLS: Record<HullId, HullDef> = {
     name: 'Prospector',
     role: 'flagship',
     slots: 4,
+    maxSlots: 6,
     hull: 100,
     speed: 105,
     accel: 340,
@@ -46,6 +51,7 @@ export const HULLS: Record<HullId, HullDef> = {
     name: 'Excavator',
     role: 'flagship',
     slots: 6,
+    maxSlots: 8,
     hull: 240,
     speed: 95,
     accel: 280,
@@ -61,6 +67,7 @@ export const HULLS: Record<HullId, HullDef> = {
     name: 'Mining Drone',
     role: 'drone',
     slots: 2,
+    maxSlots: 6,
     hull: 45,
     speed: 90,
     accel: 300,
@@ -76,6 +83,7 @@ export const HULLS: Record<HullId, HullDef> = {
     name: 'Harvester',
     role: 'drone',
     slots: 3,
+    maxSlots: 6,
     hull: 110,
     speed: 85,
     accel: 260,
@@ -91,6 +99,7 @@ export const HULLS: Record<HullId, HullDef> = {
     name: 'Hauler',
     role: 'hauler',
     slots: 2,
+    maxSlots: 6,
     hull: 80,
     speed: 115,
     accel: 300,

@@ -1,5 +1,5 @@
 // Selected-ship panel: hull/shield/cargo bars, stats, dock/repair/scrap and
-// the component slots (install, upgrade, remove).
+// the component slots (install, upgrade, remove, buy another slot).
 
 import {
   COMPONENTS,
@@ -11,7 +11,7 @@ import {
 } from '../../data/components';
 import { HULLS } from '../../data/hulls';
 import { canAfford, formatCost, formatWallet, type Cost, walletTotal } from '../../data/resources';
-import { isDocked, refitBlock, repairCost, scrapValue, upgradeCost } from '../../sim/economy';
+import { isDocked, refitBlock, repairCost, scrapValue, slotCost, upgradeCost } from '../../sim/economy';
 import { applySystemStats } from '../../sim/modifiers';
 import { findShip, isAlive, isFlagship, selectedShip, shipStats } from '../../sim/ships';
 import type { Fitted, Ship } from '../../sim/types';
@@ -91,7 +91,9 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       const title = h(
         'h3',
         { text: `${ship0.name}` },
-        h('small', { text: ` ${HULLS[ship0.hullId].name} · ${ship0.slots.length} slots` }),
+        h('small', {
+          text: ` ${HULLS[ship0.hullId].name} · ${ship0.slots.length}/${HULLS[ship0.hullId].maxSlots} slots`,
+        }),
       );
       const hull = bar('hull');
       const shield = bar('shield');
@@ -207,6 +209,20 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         });
         return row;
       });
+
+      if (slotCost(ship0)) {
+        const buy = h('button', { onclick: () => send({ t: 'buySlot', shipId: id }) });
+        const row = slotRow('New slot', h('small', { text: 'Expand the hull by one slot' }), buy);
+        row.classList.add('empty');
+        bind(() => {
+          const s = cur();
+          const cost = s && slotCost(s);
+          if (!s || !cost) return;
+          setText(buy, `Buy ${formatCost(cost)}`);
+          setBlocked(buy, refitBlock(st(), s) ?? (canAfford(st().run.bank, cost) ? null : 'Not enough resources'));
+        });
+        slotRows.push(row);
+      }
 
       return [title, hull.el, shield.el, cargo.el, cargoDetail, stats, actions, notice, slotsHead, ...slotRows];
     },

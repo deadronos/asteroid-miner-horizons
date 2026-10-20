@@ -23,6 +23,7 @@ export type Command =
   | { t: 'install'; shipId: number; slot: number; comp: ComponentId; variant: VariantId }
   | { t: 'upgrade'; shipId: number; slot: number }
   | { t: 'remove'; shipId: number; slot: number }
+  | { t: 'buySlot'; shipId: number }
   | { t: 'repair'; shipId: number }
   | { t: 'buyHull'; hullId: HullId }
   | { t: 'scrap'; shipId: number }
