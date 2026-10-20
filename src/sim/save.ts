@@ -363,18 +363,44 @@ export function parseImport(
   };
 }
 
-export function readSlot(i: number): SaveRecord | null {
+/**
+ * What a slot holds. `unreadable` means something is stored but it doesn't parse or validate (corrupt, or from a
+ * newer build); its raw text is kept so it can be exported, and nothing should write over it unasked.
+ */
+export type SlotStatus =
+  | { kind: 'empty' }
+  | { kind: 'ok'; record: SaveRecord }
+  | { kind: 'unreadable'; reason: string; raw: string };
+
+/** Reads slot `i` and says whether it is empty, a usable save, or stored text that can't be loaded (and why). */
+export function slotStatus(i: number): SlotStatus {
   const raw = safeStorage()?.getItem(slotKey(i));
-  if (!raw) return null;
+  if (!raw) return { kind: 'empty' };
   const r = parseImport(raw);
-  return r.ok ? r.record : null;
+  return r.ok ? { kind: 'ok', record: r.record } : { kind: 'unreadable', reason: r.error, raw };
 }
 
-export function writeSlot(i: number, state: GameState): void {
+/** The save in slot `i`, or null when the slot is empty or unreadable (see `slotStatus` to tell them apart). */
+export function readSlot(i: number): SaveRecord | null {
+  const st = slotStatus(i);
+  return st.kind === 'ok' ? st.record : null;
+}
+
+/** The first empty slot, or -1 when every slot holds something. */
+export function firstEmptySlot(): number {
+  for (let i = 0; i < SLOT_COUNT; i++) if (slotStatus(i).kind === 'empty') return i;
+  return -1;
+}
+
+/** Writes `state` to slot `i`. False when storage is missing, full or blocked, so the caller can tell the player. */
+export function writeSlot(i: number, state: GameState): boolean {
+  const s = safeStorage();
+  if (!s) return false;
   try {
-    safeStorage()?.setItem(slotKey(i), recordText(state, Date.now()));
+    s.setItem(slotKey(i), recordText(state, Date.now()));
+    return true;
   } catch {
-    // Storage full or blocked: the game keeps running unsaved.
+    return false;
   }
 }
 
@@ -391,12 +417,16 @@ export function setActiveSlot(i: number): void {
   safeStorage()?.setItem(ACTIVE_KEY, String(i));
 }
 
-/** Moves a save from the old single-save key into slot 0 (once). */
+/**
+ * Moves a save from the old single-save key into slot 0, or the first empty slot when slot 0 is taken. The legacy
+ * key is removed only once its save is safely in a slot, so an unreadable or unplaceable one is kept.
+ */
 export function migrateLegacy(): void {
   const s = safeStorage();
   const raw = s?.getItem(LEGACY_KEY);
   if (!s || !raw) return;
   const state = deserialize(raw);
-  if (state && !s.getItem(slotKey(0))) writeSlot(0, state);
-  s.removeItem(LEGACY_KEY);
+  if (!state) return;
+  const slot = firstEmptySlot();
+  if (slot >= 0 && writeSlot(slot, state)) s.removeItem(LEGACY_KEY);
 }
