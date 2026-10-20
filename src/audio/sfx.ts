@@ -105,31 +105,35 @@ export class RateLimiter {
 
 export type CueKey = LogEvent | 'achievement';
 
-/** One preset and its pinned gain for an event identity. */
-export interface Cue {
-  id: SoundId;
-  gain: number;
-}
-
-/** Which preset and how loud per event identity; placement is always centre. */
-export const CUES: Readonly<Record<CueKey, Cue>> = Object.freeze({
-  research: { id: 'research', gain: 0.5 },
-  achievement: { id: 'achievement', gain: 0.7 },
-  contractDone: { id: 'contractDone', gain: 0.6 },
-  contractFail: { id: 'contractFail', gain: 0.45 },
-  outpost: { id: 'outpost', gain: 0.55 },
-  shipLoss: { id: 'loss', gain: 0.7 },
+/** Which preset each event identity plays. Its level is the preset's own volume (`PRESETS[id][0]`). */
+export const CUES: Readonly<Record<CueKey, SoundId>> = Object.freeze({
+  research: 'research',
+  achievement: 'achievement',
+  contractDone: 'contractDone',
+  contractFail: 'contractFail',
+  outpost: 'outpost',
+  shipLoss: 'loss',
 });
 
-/** Warn lines and one cue voice per event identity found in a log batch. */
+/** A cue's voice: dead centre at gain 1, like the other non-positional sounds, so the level is applied once. */
+export function cueVoice(key: CueKey): Voice {
+  return { id: CUES[key], gain: 1, pan: 0, rate: 1, cutoff: CENTER_CUTOFF };
+}
+
+/**
+ * Rejected-command warn lines and one cue per event identity found in a log batch. A warn line with its
+ * own event (a failed contract) plays that cue instead of the deny buzz, and an achievement unlocked
+ * alongside a contract payout (Contractor) plays only the achievement fanfare.
+ */
 export function cueBatch(log: readonly LogEntry[]): { deny: boolean; cues: CueKey[] } {
   const cues = new Set<CueKey>();
   let deny = false;
   for (const l of log) {
-    if (l.level === 'warn') deny = true;
+    if (l.level === 'warn' && !l.event) deny = true;
     if (l.achievement) cues.add('achievement');
     if (l.event) cues.add(l.event);
   }
+  if (cues.has('achievement')) cues.delete('contractDone');
   return { deny, cues: [...cues] };
 }
 

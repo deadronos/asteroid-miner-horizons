@@ -9,8 +9,8 @@
 // a `ContinuousPolicy` selecting which layers may sound that frame (see
 // `pauseAudio`). Generative ambient music (`MusicPlayer`) plays into the music
 // bus via `updateMusic`. Every ~0.1 s `consumeLog` collapses the new log lines
-// and fires one rate-limited cue per event identity in the batch (the deny buzz
-// for warn lines is unchanged).
+// and fires one rate-limited cue per event identity in the batch, after the deny
+// buzz for rejected-command warn lines.
 
 import type { SettingsStore } from '../settings';
 import type { Fx, GameState, LogEntry } from '../sim/types';
@@ -20,10 +20,9 @@ import {
   alarmLevel,
   beamHums,
   CENTER_CUTOFF,
-  CUES,
   cueBatch,
+  cueVoice,
   type ContinuousPolicy,
-  type CueKey,
   MAX_HUMS,
   PRESETS,
   RateLimiter,
@@ -329,12 +328,6 @@ export class AudioEngine {
   consumeLog(log: readonly LogEntry[]): void {
     const batch = cueBatch(log);
     if (batch.deny) this.ui('uiDeny');
-    for (const key of batch.cues) this.playCue(key);
-  }
-
-  /** Plays a cue's preset once at the table gain, dead centre. */
-  private playCue(key: CueKey): void {
-    const cue = CUES[key];
-    this.play({ id: cue.id, gain: cue.gain, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
+    for (const key of batch.cues) this.play(cueVoice(key));
   }
 }

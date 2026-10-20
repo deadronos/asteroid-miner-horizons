@@ -5,6 +5,7 @@ import {
   CENTER_CUTOFF,
   CUES,
   cueBatch,
+  cueVoice,
   EDGE_CUTOFF,
   EDGE_GAIN,
   MAX_HUMS,
@@ -80,17 +81,47 @@ describe('rate limiter', () => {
 describe('event cues', () => {
   const keys = ['research', 'achievement', 'contractDone', 'contractFail', 'outpost', 'shipLoss'] as CueKey[];
 
-  it('maps every cue key to its own preset at its pinned gain', () => {
+  it('maps every cue key to its own preset at its pinned level', () => {
     // oxlint-disable-next-line unicorn/no-array-sort -- the sorted copies are test-local
     expect(Object.keys(CUES).sort()).toEqual([...keys].sort());
-    const ids = keys.map((k) => CUES[k]!.id);
-    expect(new Set(ids).size).toBe(keys.length);
-    expect(CUES.research!.gain).toBe(0.5);
-    expect(CUES.achievement!.gain).toBe(0.7);
-    expect(CUES.contractDone!.gain).toBe(0.6);
-    expect(CUES.contractFail!.gain).toBe(0.45);
-    expect(CUES.outpost!.gain).toBe(0.55);
-    expect(CUES.shipLoss!.gain).toBe(0.7);
+    expect(new Set(keys.map((k) => CUES[k])).size).toBe(keys.length);
+    const levels = Object.fromEntries(keys.map((k) => [k, PRESETS[CUES[k]][0]]));
+    expect(levels).toEqual({
+      research: 0.5,
+      achievement: 0.7,
+      contractDone: 0.6,
+      contractFail: 0.45,
+      outpost: 0.55,
+      shipLoss: 0.7,
+    });
+  });
+
+  it('plays each cue dead centre at gain 1, so the preset level is applied once', () => {
+    for (const k of keys) {
+      expect(cueVoice(k)).toEqual({ id: CUES[k], gain: 1, pan: 0, rate: 1, cutoff: CENTER_CUTOFF });
+    }
+  });
+
+  it('plays a failed contract as its own cue without the deny buzz', () => {
+    expect(cueBatch([{ level: 'warn', text: 'Contract failed: …', event: 'contractFail' }])).toEqual({
+      deny: false,
+      cues: ['contractFail'],
+    });
+    expect(
+      cueBatch([
+        { level: 'warn', text: 'Contract failed: …', event: 'contractFail' },
+        { level: 'warn', text: 'Not enough resources in the station bank' },
+      ]),
+    ).toEqual({ deny: true, cues: ['contractFail'] });
+  });
+
+  it('lets an achievement unlocked with a contract payout replace the payout chime', () => {
+    expect(
+      cueBatch([
+        { level: 'major', text: 'Contract complete: …', event: 'contractDone' },
+        { level: 'major', text: 'Achievement unlocked: Contractor. …', achievement: 'contractor' },
+      ]),
+    ).toEqual({ deny: false, cues: ['achievement'] });
   });
 
   it('collapses a same-batch burst to one cue per identity', () => {
@@ -109,9 +140,9 @@ describe('event cues', () => {
         { level: 'info', text: 'Researched Optics 1.', event: 'research' },
         { level: 'warn', text: 'Not enough resources in the station bank' },
         {
-          level: 'major',
-          text: 'Contract complete: …',
-          event: 'contractDone',
+          level: 'info',
+          text: 'Outpost deployed on a large …',
+          event: 'outpost',
         },
         {
           level: 'major',
@@ -121,7 +152,7 @@ describe('event cues', () => {
       ]),
     ).toEqual({
       deny: true,
-      cues: ['research', 'contractDone', 'achievement'],
+      cues: ['research', 'outpost', 'achievement'],
     });
   });
 

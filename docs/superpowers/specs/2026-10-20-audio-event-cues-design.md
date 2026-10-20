@@ -64,10 +64,9 @@ all non-positional (`pan: 0`, `rate: 1`, `cutoff: CENTER_CUTOFF`):
 ```ts
 export type CueKey = LogEvent | "achievement";
 
-export interface Cue {
-  id: SoundId;
-  gain: number;
-}
+export const CUES: Readonly<Record<CueKey, SoundId>>;
+
+export function cueVoice(key: CueKey): Voice; // gain 1, centre
 
 export function cueBatch(log: readonly LogEntry[]): {
   deny: boolean;
@@ -75,19 +74,22 @@ export function cueBatch(log: readonly LogEntry[]): {
 };
 ```
 
-`cueBatch` is the whole grouping rule: it returns whether any warn-level line exists
-(→ one `uiDeny`, as today) and the **distinct** `CueKey`s in the batch (a set; a burst in
-the same ~0.1 s log window collapses to one cue per identity). The engine then
+`cueBatch` is the whole grouping rule: it returns whether any warn-level line without
+its own event exists (→ one `uiDeny`, as today for rejected commands; a failed contract
+plays its own cue instead of the buzz) and the **distinct** `CueKey`s in the batch (a set;
+a burst in the same ~0.1 s log window collapses to one cue per identity). When an
+achievement unlocks in the same batch as a contract payout (Contractor, Trusted Supplier),
+only the achievement fanfare plays, since the two chimes are the closest-sounding pair. The engine then
 plays one voice per key through the existing `RateLimiter` and voice-counted `MAX_VOICES`.
 
-| CueKey         | preset         | gain | MIN_GAP (s) | reverb send | Sound in words                                   |
-| -------------- | -------------- | ---- | ----------- | ----------- | ------------------------------------------------ |
-| `research`     | `research`     | 0.5  | 0.15        | 0           | short rising arpeggio, three notes, perky        |
-| `achievement`  | `achievement`  | 0.7  | 0.5         | 0.22        | bright fanfare, longer tail                      |
-| `contractDone` | `contractDone` | 0.6  | 0.3         | 0.22        | major-key two-note "paid" chime                  |
-| `contractFail` | `contractFail` | 0.45 | 0.3         | 0           | falling minor pair, the opposite of "paid"       |
-| `outpost`      | `outpost`      | 0.55 | 0.3         | 0           | solid thud + short confirming tone: placed       |
-| `shipLoss`     | `loss`         | 0.7  | 0.4         | 0.32        | low non-positional loss tone under the explosion |
+| CueKey         | preset         | level | MIN_GAP (s) | reverb send | Sound in words                                   |
+| -------------- | -------------- | ----- | ----------- | ----------- | ------------------------------------------------ |
+| `research`     | `research`     | 0.5   | 0.15        | 0           | short rising arpeggio, three notes, perky        |
+| `achievement`  | `achievement`  | 0.7   | 0.5         | 0.22        | bright fanfare, longer tail                      |
+| `contractDone` | `contractDone` | 0.6   | 0.3         | 0.22        | major-key two-note "paid" chime                  |
+| `contractFail` | `contractFail` | 0.45  | 0.3         | 0           | falling minor pair, the opposite of "paid"       |
+| `outpost`      | `outpost`      | 0.55  | 0.3         | 0           | solid thud + short confirming tone: placed       |
+| `shipLoss`     | `loss`         | 0.7   | 0.4         | 0.32        | low non-positional loss tone under the explosion |
 
 - Six new `SoundId`s, six new ZzFX presets (randomness 0, like all others), six new
   `MIN_GAP` rows. Distinctness of ids is a spec requirement so the HUD `PRESETS` render
@@ -100,11 +102,13 @@ plays one voice per key through the existing `RateLimiter` and voice-counted `MA
 - Reverb sends join the existing table (`REVERB_SEND` in `mix.ts`): milestone chimes
   share `dock`'s 0.22 room; the loss tone shares `explode`'s 0.32. The functional short
   tones (research, outpost, contractFail) stay dry.
+- The level column is each preset's own ZzFX volume (`PRESETS[id][0]`); `cueVoice` plays
+  at gain 1 like the other non-positional sounds, so the level is applied once, not squared.
 - TypeScript safety: `ui('uiClick' | 'uiDeny')` keeps its narrow parameter; cue voices
-  go through a new `playCue(CueKey)` private in the engine that builds the `Voice`, so a
-  cue id cannot be passed to `ui()` or appear at a positional call site.
+  are built by the pure `cueVoice(CueKey)`, so a cue id cannot be passed to `ui()` or
+  appear at a positional call site.
 - `consumeLog` becomes: `cueBatch(log)` → throttle `uiDeny` and each cue through the
-  existing `allow()` path (one `Voice` per cue, gains from the table; reverb sends apply
+  existing `allow()` path (one `cueVoice` per cue; reverb sends apply
   automatically via `REVERB_SEND` keyed on the preset id). Nothing else in the engine moves.
 
 ### Pause policy
