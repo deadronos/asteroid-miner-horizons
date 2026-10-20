@@ -623,8 +623,8 @@ button.danger {
 button.danger:hover:not(:disabled) {
   background: rgba(160, 40, 40, 0.6);
 }
-.menu {
-  width: min(620px, calc(100vw - 24px));
+.modal .menu {
+  width: min(680px, calc(100vw - 24px));
   min-height: 360px;
 }
 .menu-head {
