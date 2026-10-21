@@ -4,6 +4,7 @@ import {
   LOG_VERBOSITY_IDS,
   QUALITY,
   QUALITY_IDS,
+  QUALITY_MODES,
   SHAKE_IDS,
   SHAKE_SCALE,
   SettingsStore,
@@ -56,7 +57,7 @@ describe('settings store', () => {
     expect(s.quality).toBe(DEFAULTS.quality);
     expect(s.shake).toBe(DEFAULTS.shake);
     expect(s.logVerbosity).toBe(DEFAULTS.logVerbosity);
-    expect(QUALITY[s.quality]).toBeDefined();
+    expect(QUALITY[QUALITY_IDS[0]]).toBeDefined();
     expect(SHAKE_SCALE[s.shake]).toBeDefined();
   });
 
@@ -67,6 +68,16 @@ describe('settings store', () => {
       expect(SettingsStore.merge({ logVerbosity }).logVerbosity).toBe(logVerbosity);
     for (const autosaveSec of [0, 10, 30, 60] as const)
       expect(SettingsStore.merge({ autosaveSec }).autosaveSec).toBe(autosaveSec);
+  });
+
+  it('supports Auto quality and validates the independent render scale', () => {
+    expect(QUALITY_MODES).toEqual(['auto', 'low', 'medium', 'high']);
+    expect(SettingsStore.merge({ quality: 'auto', renderScale: 0.75 })).toMatchObject({
+      quality: 'auto',
+      renderScale: 0.75,
+    });
+    expect(SettingsStore.merge({ renderScale: 0.5 }).renderScale).toBe(DEFAULTS.renderScale);
+    expect(SettingsStore.merge({ renderScale: '75%' }).renderScale).toBe(DEFAULTS.renderScale);
   });
 
   it('falls back on non-finite and out-of-range numbers', () => {

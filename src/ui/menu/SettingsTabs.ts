@@ -1,7 +1,7 @@
 // Gameplay, Graphics and Interface tabs: plain settings forms.
 
 import { TUNING } from '../../data/tuning';
-import { AUTO_RESERVE_VALUES, type SettingsStore } from '../../settings';
+import { AUTO_RESERVE_VALUES, QUALITY_MODES, type SettingsStore } from '../../settings';
 import { rangeRow, section, selectRow, toggleRow } from './form';
 
 export function renderGameplay(settings: SettingsStore): Node[] {
@@ -88,12 +88,30 @@ export function renderGraphics(settings: SettingsStore): Node[] {
       settings,
       'quality',
       'Preset',
+      QUALITY_MODES.map(
+        (quality) =>
+          [
+            quality,
+            quality === 'auto'
+              ? 'Auto: adjusts resolution and effects to keep frames smooth'
+              : quality === 'low'
+                ? 'Low: 1× resolution, fewer stars & particles'
+                : quality === 'medium'
+                  ? 'Medium: up to 1.5× resolution'
+                  : 'High: up to 2× resolution, full effects',
+          ] as [typeof quality, string],
+      ),
+      "Resolution is capped at your display's pixel density; Auto starts at High",
+    ),
+    selectRow(
+      settings,
+      'renderScale',
+      'Render scale',
       [
-        ['low', 'Low: 1× resolution, fewer stars & particles'],
-        ['medium', 'Medium: up to 1.5× resolution'],
-        ['high', 'High: up to 2× resolution, full effects'],
+        [1, '100%'],
+        [0.75, '75%'],
       ],
-      "Resolution is capped at your display's pixel density",
+      'Multiplies the preset resolution cap.',
     ),
     toggleRow(settings, 'nebula', 'Nebula backdrop'),
     toggleRow(settings, 'antialias', 'Anti-aliasing', 'Smooth edges. Takes effect after reloading the page.'),

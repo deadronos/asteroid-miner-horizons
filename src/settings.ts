@@ -5,7 +5,8 @@
 import { HAZARD_LEVEL_IDS, type HazardLevel } from './data/hazards';
 import { safeStorage } from './sim/save';
 
-export type Quality = 'low' | 'medium' | 'high';
+export type Quality = 'auto' | 'low' | 'medium' | 'high';
+export type RenderScale = 0.75 | 1;
 export type Shake = 'off' | 'low' | 'full';
 export type LogVerbosity = 'all' | 'important';
 
@@ -43,6 +44,7 @@ export interface Settings {
   autoReserve: 0 | 50 | 100 | 250 | 500 | 1000;
   // Graphics
   quality: Quality;
+  renderScale: RenderScale;
   nebula: boolean;
   antialias: boolean;
   shake: Shake;
@@ -118,6 +120,7 @@ export const DEFAULTS: Settings = {
   autoRepairAt: 0.5,
   autoReserve: 100,
   quality: 'high',
+  renderScale: 1,
   nebula: true,
   antialias: true,
   shake: 'full',
@@ -136,13 +139,17 @@ export const DEFAULTS: Settings = {
 };
 
 /** What each quality preset means for the renderer. `bloom` is the glow strength (0 = no post-processing). */
-export const QUALITY: Record<Quality, { pixelRatioCap: number; stars: number; particles: number; bloom: number }> = {
+export const QUALITY: Record<
+  Exclude<Quality, 'auto'>,
+  { pixelRatioCap: number; stars: number; particles: number; bloom: number }
+> = {
   low: { pixelRatioCap: 1, stars: 0.3, particles: 0.3, bloom: 0 },
   medium: { pixelRatioCap: 1.5, stars: 0.6, particles: 0.65, bloom: 0.75 },
   high: { pixelRatioCap: 2, stars: 1, particles: 1, bloom: 0.9 },
 };
 
-export const QUALITY_IDS = Object.keys(QUALITY) as Quality[];
+export const QUALITY_IDS = Object.keys(QUALITY) as Exclude<Quality, 'auto'>[];
+export const QUALITY_MODES: Quality[] = ['auto', ...QUALITY_IDS];
 
 export const SHAKE_SCALE: Record<Shake, number> = { off: 0, low: 0.35, full: 1 };
 
@@ -226,7 +233,10 @@ export class SettingsStore {
       }
       switch (k) {
         case 'quality':
-          if (QUALITY_IDS.includes(d[k] as Quality)) out.quality = d[k] as Quality;
+          if (QUALITY_MODES.includes(d[k] as Quality)) out.quality = d[k] as Quality;
+          continue;
+        case 'renderScale':
+          if (d[k] === 0.75 || d[k] === 1) out.renderScale = d[k];
           continue;
         case 'shake':
           if (SHAKE_IDS.includes(d[k] as Shake)) out.shake = d[k] as Shake;

@@ -3,7 +3,7 @@ import { contextAntialias, useComposer } from '../src/render/aa';
 import { QUALITY, type Quality } from '../src/settings';
 
 describe('contextAntialias', () => {
-  const qualities: Quality[] = ['low', 'medium', 'high'];
+  const qualities: Exclude<Quality, 'auto'>[] = ['low', 'medium', 'high'];
 
   for (const q of qualities) {
     it(`${q}: context AA only when AA is on and the preset has no bloom`, () => {
