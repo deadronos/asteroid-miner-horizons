@@ -6,9 +6,11 @@
 import { formatDuration } from '../../core/format';
 import type { SaveActions } from '../../session';
 import {
+  MAX_IMPORT_JSON_BYTES,
   SLOT_COUNT,
   exportCompact,
   exportText,
+  isCompactText,
   parseImportText,
   type SaveRecord,
   type SlotStatus,
@@ -270,6 +272,10 @@ export class SavesTab {
   private onFilePicked = async (): Promise<void> => {
     const file = this.fileInput.files?.[0];
     if (!file) return;
+    if (file.size > MAX_IMPORT_JSON_BYTES) {
+      alert(`Couldn't import ${file.name}: it is too large to be a save.`);
+      return;
+    }
     const res = await parseImportText(await file.text());
     if (!res.ok) {
       alert(`Couldn't import ${file.name}: ${res.error}`);
@@ -310,7 +316,13 @@ export class SavesTab {
   }
 
   private async exportWindow(slot: number, state: GameState): Promise<void> {
-    const text = await exportCompact(state);
+    let text: string;
+    try {
+      text = await exportCompact(state);
+    } catch {
+      alert(`Couldn't export slot ${slot + 1}. Try Download instead.`);
+      return;
+    }
     const copy = h('button', { text: 'Copy' });
     const dl = h('button', {
       text: 'Download .json',
@@ -318,7 +330,8 @@ export class SavesTab {
     });
     const { area } = this.textWindow(
       `Export slot ${slot + 1}`,
-      `${summary(state)[0]}. Copy this text somewhere safe; paste it into an empty slot to restore it.`,
+      `${summary(state)[0]}. Copy this text somewhere safe; paste it into an empty slot to restore it.` +
+        (isCompactText(text) ? '' : " This browser can't compress saves, so it is the full JSON."),
       text,
       true,
       [copy, dl],

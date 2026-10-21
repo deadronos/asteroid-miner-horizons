@@ -2,7 +2,8 @@
 // so a save is its JSON minus the transient outbox, wrapped in a small record:
 //   { format: 'amh-save', savedAt: <epoch ms>, state: { version, profile, run } }
 // Slots keep exact floats. Export rounds them to a few significant digits, and
-// the copy-paste text is that JSON gzipped and base64'd behind a short prefix.
+// the copy-paste text is that JSON gzipped and base64'd behind a short prefix
+// (or the plain JSON where the browser can't compress).
 // Import accepts the compact text, a record or a bare state object. Older
 // versions are upgraded through sim/migrations; saves from a newer version are
 // rejected rather than half-loaded.
@@ -26,6 +27,13 @@ const FORMAT = 'amh-save';
 const COMPACT_PREFIX = 'amh1:';
 /** Significant digits kept for non-integer numbers in exported text. */
 const EXPORT_DIGITS = 6;
+/** Reject compact payloads above this compressed byte size. */
+const MAX_COMPACT_BYTES = 2 * 1024 * 1024;
+/** Reject import JSON (pasted, from a file, or inflated from compact text) above this byte size. */
+export const MAX_IMPORT_JSON_BYTES = 4 * 1024 * 1024;
+const TOO_LARGE_ERROR = 'This save text is too large to import safely.';
+const DAMAGED_ERROR = 'This save text is damaged or incomplete.';
+const UNSUPPORTED_ERROR = "This browser can't read compact save text. Import the downloaded .json file instead.";
 
 export interface SaveRecord {
   savedAt: number;
@@ -83,10 +91,22 @@ export function exportText(state: GameState, savedAt = Date.now()): string {
   return JSON.stringify(record, roundFloat);
 }
 
-/** Copy-paste export: `exportText` gzipped and base64'd, roughly a quarter of the exact save's size. */
+/** True for text from `exportCompact` that was actually compressed (not the plain-JSON fallback). */
+export function isCompactText(text: string): boolean {
+  return text.startsWith(COMPACT_PREFIX);
+}
+
+/** Copy-paste export: compact text when supported, else plain export text. */
 export async function exportCompact(state: GameState, savedAt = Date.now()): Promise<string> {
-  const gz = new Blob([exportText(state, savedAt)]).stream().pipeThrough(new CompressionStream('gzip'));
-  return COMPACT_PREFIX + toBase64(new Uint8Array(await new Response(gz).arrayBuffer()));
+  const json = exportText(state, savedAt);
+  const Compression = globalThis.CompressionStream;
+  if (typeof Compression !== 'function') return json;
+  try {
+    const gz = new Blob([json]).stream().pipeThrough(new Compression('gzip'));
+    return COMPACT_PREFIX + toBase64(new Uint8Array(await new Response(gz).arrayBuffer()));
+  } catch {
+    return json;
+  }
 }
 
 /** Like `parseImport`, but also accepts compact text from `exportCompact`. */
@@ -95,16 +115,51 @@ export async function parseImportText(
   opts?: MigrateOptions,
 ): Promise<{ ok: true; record: SaveRecord } | { ok: false; error: string }> {
   const t = text.trim();
+  // Characters never outnumber UTF-8 bytes, so this can only under-count.
+  if (t.length > MAX_IMPORT_JSON_BYTES) return { ok: false, error: TOO_LARGE_ERROR };
   if (!t.startsWith(COMPACT_PREFIX)) return parseImport(t, opts);
   let json: string;
   try {
-    const bytes = fromBase64(t.slice(COMPACT_PREFIX.length).replace(/\s+/g, ''));
-    const raw = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-    json = await new Response(raw).text();
+    const b64 = t.slice(COMPACT_PREFIX.length).replace(/\s+/g, '');
+    if (b64.length > Math.ceil((MAX_COMPACT_BYTES * 4) / 3) + 4) return { ok: false, error: TOO_LARGE_ERROR };
+    const bytes = fromBase64(b64);
+    if (bytes.byteLength > MAX_COMPACT_BYTES) return { ok: false, error: TOO_LARGE_ERROR };
+    const Decompression = globalThis.DecompressionStream;
+    if (typeof Decompression !== 'function') return { ok: false, error: UNSUPPORTED_ERROR };
+    const raw = new Blob([bytes]).stream().pipeThrough(new Decompression('gzip'));
+    const inflated = await readLimited(raw, MAX_IMPORT_JSON_BYTES);
+    if (!inflated) return { ok: false, error: TOO_LARGE_ERROR };
+    json = new TextDecoder().decode(inflated);
   } catch {
-    return { ok: false, error: 'This save text is damaged or incomplete.' };
+    return { ok: false, error: DAMAGED_ERROR };
   }
   return parseImport(json, opts);
+}
+
+/** All of `stream`'s bytes, or null (with the stream cancelled) once they pass `maxBytes`. */
+async function readLimited(stream: ReadableStream<Uint8Array>, maxBytes: number): Promise<Uint8Array | null> {
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    // oxlint-disable-next-line no-await-in-loop -- a stream is read one chunk at a time
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      // oxlint-disable-next-line no-await-in-loop -- a stream is read one chunk at a time
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let at = 0;
+  for (const c of chunks) {
+    out.set(c, at);
+    at += c.byteLength;
+  }
+  return out;
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -119,6 +174,11 @@ function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
+}
+
+/** A stored `savedAt` that is a real past time, else `now`; a future one (clock skew, hand edits) clamps to `now`. */
+function sanitizeSavedAt(value: unknown, now: number): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? Math.min(value, now) : now;
 }
 
 /** Parses exported text (a save record or a bare state). */
@@ -150,7 +210,7 @@ export function parseImport(
   }
   return {
     ok: true,
-    record: { savedAt: isRecord && typeof rec.savedAt === 'number' ? rec.savedAt : Date.now(), state },
+    record: { savedAt: sanitizeSavedAt(isRecord ? rec.savedAt : undefined, Date.now()), state },
   };
 }
 
