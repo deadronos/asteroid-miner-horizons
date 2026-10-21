@@ -15,6 +15,7 @@ import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
 import { findRock } from '../sim/generate';
 import { findShip, isAlive, selectedShip } from '../sim/ships';
 import type { GameState, Rock, StarSystem } from '../sim/types';
+import { autoQualitySettings } from './autoQuality';
 import { contextAntialias, useComposer } from './aa';
 import { Backdrop } from './backdrop';
 import { CameraRig } from './camera';
@@ -112,7 +113,8 @@ export class Renderer {
     private container: HTMLElement,
     settings: Settings,
   ) {
-    this.contextAA = contextAntialias(settings.antialias, QUALITY[settings.quality].bloom);
+    const initialQuality = settings.quality === 'auto' ? 'high' : settings.quality;
+    this.contextAA = contextAntialias(settings.antialias, QUALITY[initialQuality].bloom);
     this.gl = new THREE.WebGLRenderer({ antialias: this.contextAA, powerPreference: 'high-performance' });
     this.gl.setClearColor(0x03060d);
     // Counters span the whole frame: every composer pass adds to them, and render() resets them once.
@@ -149,9 +151,11 @@ export class Renderer {
     this.applySettings(settings);
   }
 
-  applySettings(s: Settings): void {
-    const q = QUALITY[s.quality];
-    this.gl.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatioCap));
+  applySettings(s: Settings, autoLevel = 0): void {
+    const automatic = s.quality === 'auto' ? autoQualitySettings(autoLevel) : null;
+    const quality = automatic ? automatic.quality : s.quality === 'auto' ? 'high' : s.quality;
+    const q = QUALITY[quality];
+    this.gl.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatioCap) * s.renderScale * (automatic?.scale ?? 1));
     this.bloomOn = q.bloom > 0;
     this.viaComposer = useComposer(this.bloomOn, this.msaa > 0, this.contextAA);
     // Bloom off but still via the composer (runtime fallback, until reload): close to the canvas look, not identical.

@@ -7,6 +7,7 @@ import { TUNING } from './data/tuning';
 import { Input } from './input';
 import { pauseAudio, pauseBanner, pauseKind, renderDue } from './pause';
 import { recordLoss } from './reloadGuard';
+import { AutoQuality } from './render/autoQuality';
 import { Renderer } from './render/Renderer';
 import { GameSession } from './session';
 import type { HazardLevel } from './data/hazards';
@@ -19,6 +20,7 @@ import { Hud } from './ui/Hud';
 import { TitleScreen } from './ui/TitleScreen';
 
 const settings = new SettingsStore();
+const autoQuality = new AutoQuality();
 const app = document.getElementById('app')!;
 const sceneEl = document.createElement('div');
 sceneEl.id = 'scene';
@@ -69,12 +71,17 @@ const input = new Input(
 let assists: Assists = { avoid: true, autoDock: true, chain: true };
 let hazards: HazardLevel = 'normal';
 let automation: FleetAuto = { repairAt: 0.5, reserve: 100 };
+let qualityMode = settings.value.quality;
 function applySettings(): void {
   const s = settings.value;
+  if (qualityMode !== s.quality) {
+    qualityMode = s.quality;
+    autoQuality.reset();
+  }
   assists = { avoid: s.assistAvoid, autoDock: s.assistAutoDock, chain: s.assistChain };
   automation = { repairAt: s.autoRepairAt, reserve: s.autoReserve };
   hazards = s.hazards;
-  renderer.applySettings(s);
+  renderer.applySettings(s, autoQuality.level);
 }
 settings.onChange(applySettings);
 applySettings();
@@ -171,6 +178,10 @@ function step(now: number): void {
   const busy = renderNow || renderer.busy || state.out.fx.length > 0 || (now - lastInput) / 1000 < INPUT_GRACE;
   if (renderDue(paused, renderAcc, busy)) {
     renderer.render(state, Math.min(0.25, renderAcc), input.moveMark);
+    if (s.quality === 'auto' && !paused) {
+      const level = autoQuality.update(dt * 1000);
+      if (level !== null) renderer.applySettings(s, level);
+    }
     renderAcc = 0;
     renderNow = false;
   }
@@ -203,5 +214,5 @@ requestAnimationFrame(frame);
 
 // Debug hook for automated checks in the browser console.
 Object.assign(window, {
-  __amh: { state: () => session.state, send, settings, renderer, audio, info: () => renderer.info, title },
+  __amh: { state: () => session.state, send, settings, renderer, audio, autoQuality, info: () => renderer.info, title },
 });

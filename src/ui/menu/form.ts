@@ -9,6 +9,7 @@ export type NumKey = { [K in keyof Settings]: Settings[K] extends number ? K : n
 export type SelectKey =
   | 'autosaveSec'
   | 'quality'
+  | 'renderScale'
   | 'shake'
   | 'logVerbosity'
   | 'hazards'
