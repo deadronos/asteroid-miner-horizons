@@ -130,9 +130,9 @@ It goes away after the first warp; × hides it for that save.
   under ⚙ → Gameplay.
 - **Saves**: the ⚙ menu has three save slots in `localStorage`. The running game
   autosaves to its slot every 10 s (in the browser's next idle moment) and when the tab is
-  hidden or closed. Filled slots can be loaded, exported as compact text (to copy) or
-  downloaded as a `.json` file, and deleted. Exports round positions and timers to six
-  significant digits; the slots themselves keep full precision. The
+  hidden or closed. Filled slots can be loaded, exported as compact text (or plain JSON text
+  where compact export is unavailable), downloaded as a `.json` file, and deleted. Exports
+  round positions and timers to six significant digits; the slots themselves keep full precision. The
   running slot can instead be restarted as a new game. Empty slots can start a new game,
   import a `.json` file, or take pasted save text. Imports are validated and give a
   readable error. The ⚙ menu also has a Controls tab.

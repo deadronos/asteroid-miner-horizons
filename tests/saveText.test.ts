@@ -1,7 +1,15 @@
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { runBot } from '../scripts/harness';
 import { newGame } from '../src/sim/create';
-import { exportCompact, exportText, parseImportText, readSlot, serialize, writeSlot } from '../src/sim/save';
+import {
+  exportCompact,
+  exportText,
+  parseImport,
+  parseImportText,
+  readSlot,
+  serialize,
+  writeSlot,
+} from '../src/sim/save';
 import type { GameState } from '../src/sim/types';
 import { memStorage } from './memStorage';
 
@@ -15,6 +23,22 @@ beforeAll(() => {
 beforeEach(() => {
   Object.defineProperty(globalThis, 'localStorage', { value: memStorage(), configurable: true });
 });
+
+const originalCompressionStream = Object.getOwnPropertyDescriptor(globalThis, 'CompressionStream');
+
+afterEach(() => {
+  vi.restoreAllMocks();
+  if (originalCompressionStream) Object.defineProperty(globalThis, 'CompressionStream', originalCompressionStream);
+  else Reflect.deleteProperty(globalThis, 'CompressionStream');
+});
+
+async function compactText(text: string): Promise<string> {
+  const gz = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  const bytes = new Uint8Array(await new Response(gz).arrayBuffer());
+  let bin = '';
+  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+  return `amh1:${btoa(bin)}`;
+}
 
 /** Every number in `a`, paired with the number at the same path in `b`. */
 function pairs(a: unknown, b: unknown, out: [number, number][] = []): [number, number][] {
@@ -61,6 +85,31 @@ describe('save export text', () => {
       error: 'This save text is damaged or incomplete.',
     });
     expect((await parseImportText('amh1:not base64!')).ok).toBe(false);
+  });
+
+  it('falls back to plain JSON when compact export is unavailable', async () => {
+    Object.defineProperty(globalThis, 'CompressionStream', { configurable: true, value: undefined });
+    const text = await exportCompact(played, 42);
+    expect(text.startsWith('amh1:')).toBe(false);
+    expect(parseImport(text)).toEqual({ ok: true, record: { savedAt: 42, state: expect.anything() } });
+  });
+
+  it('rejects compact text that inflates beyond the safe import size', async () => {
+    const huge = `${exportText(played, 7).slice(0, -1)},"padding":"${'x'.repeat(5 * 1024 * 1024)}"}`;
+    expect(await parseImportText(await compactText(huge))).toEqual({
+      ok: false,
+      error: 'This save text is too large to import safely.',
+    });
+  });
+
+  it('replaces out-of-range savedAt with the current time on import', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(777);
+    const raw = JSON.stringify({
+      format: 'amh-save',
+      savedAt: 9_000_000_000_000_000,
+      state: JSON.parse(serialize(played)),
+    });
+    expect(parseImport(raw)).toEqual({ ok: true, record: { savedAt: 777, state: expect.anything() } });
   });
 
   it('slots keep full precision', () => {

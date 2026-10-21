@@ -26,6 +26,16 @@ const FORMAT = 'amh-save';
 const COMPACT_PREFIX = 'amh1:';
 /** Significant digits kept for non-integer numbers in exported text. */
 const EXPORT_DIGITS = 6;
+/** Reject compact payloads above this compressed byte size. */
+const MAX_COMPACT_BYTES = 2 * 1024 * 1024;
+/** Reject compact payloads that inflate beyond this JSON byte size. */
+const MAX_IMPORT_JSON_BYTES = 4 * 1024 * 1024;
+/** `Date` can only represent timestamps inside this range. */
+const MAX_DATE_MS = 8_640_000_000_000_000;
+const TOO_LARGE_ERROR = 'This save text is too large to import safely.';
+const DAMAGED_ERROR = 'This save text is damaged or incomplete.';
+
+class TooLargeSaveError extends Error {}
 
 export interface SaveRecord {
   savedAt: number;
@@ -83,10 +93,17 @@ export function exportText(state: GameState, savedAt = Date.now()): string {
   return JSON.stringify(record, roundFloat);
 }
 
-/** Copy-paste export: `exportText` gzipped and base64'd, roughly a quarter of the exact save's size. */
+/** Copy-paste export: compact text when supported, else plain export text. */
 export async function exportCompact(state: GameState, savedAt = Date.now()): Promise<string> {
-  const gz = new Blob([exportText(state, savedAt)]).stream().pipeThrough(new CompressionStream('gzip'));
-  return COMPACT_PREFIX + toBase64(new Uint8Array(await new Response(gz).arrayBuffer()));
+  const json = exportText(state, savedAt);
+  const Compression = globalThis.CompressionStream;
+  if (typeof Compression !== 'function') return json;
+  try {
+    const gz = new Blob([json]).stream().pipeThrough(new Compression('gzip'));
+    return COMPACT_PREFIX + toBase64(new Uint8Array(await new Response(gz).arrayBuffer()));
+  } catch {
+    return json;
+  }
 }
 
 /** Like `parseImport`, but also accepts compact text from `exportCompact`. */
@@ -98,13 +115,32 @@ export async function parseImportText(
   if (!t.startsWith(COMPACT_PREFIX)) return parseImport(t, opts);
   let json: string;
   try {
-    const bytes = fromBase64(t.slice(COMPACT_PREFIX.length).replace(/\s+/g, ''));
-    const raw = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
-    json = await new Response(raw).text();
-  } catch {
-    return { ok: false, error: 'This save text is damaged or incomplete.' };
+    const b64 = t.slice(COMPACT_PREFIX.length).replace(/\s+/g, '');
+    if (b64.length > Math.ceil((MAX_COMPACT_BYTES * 4) / 3) + 4) return { ok: false, error: TOO_LARGE_ERROR };
+    const bytes = fromBase64(b64);
+    if (bytes.byteLength > MAX_COMPACT_BYTES) return { ok: false, error: TOO_LARGE_ERROR };
+    const Decompression = globalThis.DecompressionStream;
+    if (typeof Decompression !== 'function') return { ok: false, error: DAMAGED_ERROR };
+    const raw = new Blob([bytes]).stream().pipeThrough(new Decompression('gzip'));
+    json = await new Response(limitBytes(raw, MAX_IMPORT_JSON_BYTES)).text();
+  } catch (err) {
+    if (err instanceof TooLargeSaveError) return { ok: false, error: TOO_LARGE_ERROR };
+    return { ok: false, error: DAMAGED_ERROR };
   }
   return parseImport(json, opts);
+}
+
+function limitBytes(stream: ReadableStream<Uint8Array>, maxBytes: number): ReadableStream<Uint8Array> {
+  let total = 0;
+  return stream.pipeThrough(
+    new TransformStream({
+      transform(chunk: Uint8Array, controller): void {
+        total += chunk.byteLength;
+        if (total > maxBytes) throw new TooLargeSaveError();
+        controller.enqueue(chunk);
+      },
+    }),
+  );
 }
 
 function toBase64(bytes: Uint8Array): string {
@@ -119,6 +155,10 @@ function fromBase64(b64: string): Uint8Array<ArrayBuffer> {
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
   return bytes;
+}
+
+function validSavedAt(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= MAX_DATE_MS;
 }
 
 /** Parses exported text (a save record or a bare state). */
@@ -150,7 +190,7 @@ export function parseImport(
   }
   return {
     ok: true,
-    record: { savedAt: isRecord && typeof rec.savedAt === 'number' ? rec.savedAt : Date.now(), state },
+    record: { savedAt: isRecord && validSavedAt(rec.savedAt) ? rec.savedAt : Date.now(), state },
   };
 }
 
