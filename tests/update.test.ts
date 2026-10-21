@@ -5,8 +5,8 @@ import { newGame } from '../src/sim/create';
 import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
 import { flagship, makeShip, shipStats } from '../src/sim/ships';
-import { applyCommands, tick } from '../src/sim/update';
-import { DT } from './helpers';
+import { applyCommands } from '../src/sim/update';
+import { DT, runTicks } from './helpers';
 
 describe('applyCommands', () => {
   it('applies queued commands in order and drains the queue', () => {
@@ -38,7 +38,7 @@ describe('tick critical mutation paths', () => {
     ship.pos = { x: 4321, z: -987 };
     ship.respawn = DT / 2;
 
-    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+    runTicks(state, 1);
 
     expect(ship.respawn).toBe(0);
     expect(ship.pos).toEqual(state.run.system.station.pos);
@@ -59,7 +59,7 @@ describe('tick critical mutation paths', () => {
     const runValueBefore = state.run.runValue;
     const value = walletValue(cargoBefore);
 
-    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+    runTicks(state, 1);
 
     for (const r of RESOURCES) {
       expect(ship.cargo[r]).toBe(0);
@@ -78,19 +78,19 @@ describe('tick critical mutation paths', () => {
     ship.vel = { x: 0, z: 0 };
     state.run.time = 2.99;
 
-    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+    runTicks(state, 1);
 
     expect(state.out.log.some((l) => l.text.includes('overheating near the star'))).toBe(true);
 
     state.out.log.length = 0;
     state.run.time = 3.1;
-    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+    runTicks(state, 1);
 
     expect(state.out.log.some((l) => l.text.includes('overheating near the star'))).toBe(false);
 
     // Crossing into second 4 is a boundary, but not a multiple of 3.
     state.run.time = 3.99;
-    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+    runTicks(state, 1);
 
     expect(state.out.log.some((l) => l.text.includes('overheating near the star'))).toBe(false);
   });
@@ -105,7 +105,7 @@ describe('tick critical mutation paths', () => {
     state.run.ships.push(drone);
     state.run.time = 2.99;
 
-    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+    runTicks(state, 1);
 
     const warnings = state.out.log.filter((l) => l.text.includes('overheating near the star'));
     expect(warnings).toHaveLength(1);
@@ -128,7 +128,7 @@ describe('tick critical mutation paths', () => {
 
     const index = new SimIndex();
     const durabilityBefore = ship.hull + ship.shield;
-    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, index);
+    runTicks(state, 1, { index });
 
     const impactsAfterFirst = state.out.fx.filter((f) => f.t === 'impact');
     const durabilityAfterFirst = ship.hull + ship.shield;
@@ -138,7 +138,7 @@ describe('tick critical mutation paths', () => {
 
     ship.pos = { x: 1000, z: 0 };
     ship.vel = { x: 200, z: 0 };
-    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, index);
+    runTicks(state, 1, { index });
 
     expect(state.out.fx.filter((f) => f.t === 'impact')).toHaveLength(1);
     expect(ship.hull + ship.shield).toBeGreaterThanOrEqual(durabilityAfterFirst);
@@ -148,7 +148,7 @@ describe('tick critical mutation paths', () => {
     for (let i = 0; i < 60 && state.out.fx.filter((f) => f.t === 'impact').length < 2; i++) {
       ship.pos = { x: 1000, z: 0 };
       ship.vel = { x: 200, z: 0 };
-      tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, index);
+      runTicks(state, 1, { index });
     }
 
     expect(state.out.fx.filter((f) => f.t === 'impact')).toHaveLength(2);
