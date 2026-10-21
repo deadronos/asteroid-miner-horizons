@@ -102,6 +102,34 @@ describe('save export text', () => {
     });
   });
 
+  it('rejects oversized plain JSON before parsing it', async () => {
+    const huge = `${exportText(played, 7).slice(0, -1)},"padding":"${'x'.repeat(5 * 1024 * 1024)}"}`;
+    expect(await parseImportText(huge)).toEqual({ ok: false, error: 'This save text is too large to import safely.' });
+  });
+
+  it('says compact text needs a newer browser when DecompressionStream is missing', async () => {
+    const text = await exportCompact(played, 7);
+    const original = Object.getOwnPropertyDescriptor(globalThis, 'DecompressionStream')!;
+    Object.defineProperty(globalThis, 'DecompressionStream', { configurable: true, value: undefined });
+    try {
+      const res = await parseImportText(text);
+      expect(res.ok).toBe(false);
+      expect(!res.ok && res.error).toMatch(/can't read compact save text/);
+    } finally {
+      Object.defineProperty(globalThis, 'DecompressionStream', original);
+    }
+  });
+
+  it('clamps a future savedAt to the current time on import', () => {
+    vi.spyOn(Date, 'now').mockReturnValue(1000);
+    const raw = exportText(played, 5000);
+    expect(parseImport(raw)).toEqual({ ok: true, record: { savedAt: 1000, state: expect.anything() } });
+    expect(parseImport(exportText(played, 400))).toEqual({
+      ok: true,
+      record: { savedAt: 400, state: expect.anything() },
+    });
+  });
+
   it('replaces out-of-range savedAt with the current time on import', () => {
     vi.spyOn(Date, 'now').mockReturnValue(777);
     const raw = JSON.stringify({
