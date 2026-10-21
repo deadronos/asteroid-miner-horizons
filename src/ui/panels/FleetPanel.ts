@@ -8,6 +8,7 @@ import { hullBlock, isDocked } from '../../sim/economy';
 import { droneCount, findShip, fleetCap, isAlive, isFlagship, isHauler, isHoldFull, shipStats } from '../../sim/ships';
 import type { GameState, Ship } from '../../sim/types';
 import { Panel, bar, h, setBlocked, setText } from '../dom';
+import { collapsibleHeading } from './collapsible';
 import type { PanelCtx } from './context';
 
 function status(state: GameState, s: Ship): string {
@@ -30,17 +31,29 @@ function status(state: GameState, s: Ship): string {
 
 export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
   const st = ctx.getState;
-  return new Panel(
+  let collapsed = false;
+  let panel: Panel;
+  const toggle = (): void => {
+    collapsed = !collapsed;
+    panel.invalidate();
+    panel.refresh();
+  };
+  panel = new Panel(
     el,
     () => {
       const s = st();
       const outposts = s.run.automation.outposts.map((o) => o.rockId).join(',');
-      return s.run.ships.map((x) => `${x.id}:${x.hullId}`).join(',') + `|${fleetCap(s.profile)}|${outposts}`;
+      return (
+        s.run.ships.map((x) => `${x.id}:${x.hullId}`).join(',') +
+        `|${fleetCap(s.profile)}|${outposts}|${collapsed ? 'c' : 'o'}`
+      );
     },
     (bind) => {
       const s0 = st();
-      const head = h('h3');
-      bind(() => setText(head, `Fleet · ${droneCount(st().run)}/${fleetCap(st().profile)} drones`));
+      const head = collapsibleHeading('Fleet', collapsed, toggle);
+      const headTitle = head.querySelector('.panel-title') as HTMLElement;
+      bind(() => setText(headTitle, `Fleet · ${droneCount(st().run)}/${fleetCap(st().profile)} drones`));
+      if (collapsed) return [head];
       const rows = s0.run.ships.map((ship) => {
         const id = ship.id;
         const name = h('span', { class: 'nm', text: `${isFlagship(ship) ? '★' : '▸'} ${ship.name}` });
@@ -72,7 +85,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             mode.dataset.title = 'Assist: work near the flagship · Auto: work near the station';
             ctl.append(mode);
           }
-          const toggle = (kind: 'repair' | 'upgrade', text: string, title: string): HTMLButtonElement => {
+          const autoToggle = (kind: 'repair' | 'upgrade', text: string, title: string): HTMLButtonElement => {
             const btn = h('button', {
               class: 'mode auto',
               text,
@@ -92,12 +105,12 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             ctl.append(btn);
             return btn;
           };
-          repair = toggle(
+          repair = autoToggle(
             'repair',
             'REPAIR',
             'Autorepair: fly home and repair below the hull threshold (Menu → Gameplay)',
           );
-          upgrade = toggle(
+          upgrade = autoToggle(
             'upgrade',
             'UPGRADE',
             'Autoupgrade: while docked, spend the bank above the reserve on slots and tiers',
@@ -164,4 +177,5 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       return [head, ...rows, outHead, ...outRows, ...(outRows.length ? [] : [outHint]), yard, ...buys];
     },
   );
+  return panel;
 }

@@ -16,6 +16,7 @@ import { applySystemStats } from '../../sim/modifiers';
 import { findShip, isAlive, isFlagship, selectedShip, shipStats } from '../../sim/ships';
 import type { Fitted, Ship } from '../../sim/types';
 import { Panel, bar, h, setBlocked, setDisabled, setText, slotRow } from '../dom';
+import { collapsibleHeading } from './collapsible';
 import type { PanelCtx } from './context';
 
 /** One `<option>` of an empty slot's install select. */
@@ -73,28 +74,37 @@ export function shipPanelKey(ship: Ship | undefined): string {
 }
 
 export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
-  return new Panel(
+  let collapsed = false;
+  let panel: Panel;
+  const toggle = (): void => {
+    collapsed = !collapsed;
+    panel.invalidate();
+    panel.refresh();
+  };
+  panel = new Panel(
     el,
     () => {
       const s = ctx.getState();
-      return shipPanelKey(selectedShip(s.run));
+      return `${shipPanelKey(selectedShip(s.run))}|${collapsed ? 'c' : 'o'}`;
     },
     (bind) => {
       const st = ctx.getState;
       const s0 = st();
       const ship0 = selectedShip(s0.run);
-      if (!ship0) return [h('h3', { text: 'No ship selected' })];
+      const head = collapsibleHeading('Ship', collapsed, toggle);
+      const headTitle = head.querySelector('.panel-title') as HTMLElement;
+      if (!ship0) return [head];
       const id = ship0.id;
       const cur = (): Ship | undefined => findShip(st().run, id);
       const send = ctx.send;
 
-      const title = h(
-        'h3',
-        { text: `${ship0.name}` },
-        h('small', {
-          text: ` ${HULLS[ship0.hullId].name} · ${ship0.slots.length}/${HULLS[ship0.hullId].maxSlots} slots`,
-        }),
-      );
+      bind(() => {
+        const s = cur();
+        if (!s) return;
+        setText(headTitle, `${s.name} · ${HULLS[s.hullId].name} · ${s.slots.length}/${HULLS[s.hullId].maxSlots} slots`);
+      });
+      if (collapsed) return [head];
+
       const hull = bar('hull');
       const shield = bar('shield');
       const cargo = bar('cargo');
@@ -224,7 +234,8 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         slotRows.push(row);
       }
 
-      return [title, hull.el, shield.el, cargo.el, cargoDetail, stats, actions, notice, slotsHead, ...slotRows];
+      return [head, hull.el, shield.el, cargo.el, cargoDetail, stats, actions, notice, slotsHead, ...slotRows];
     },
   );
+  return panel;
 }

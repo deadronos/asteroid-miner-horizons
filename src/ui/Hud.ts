@@ -8,6 +8,7 @@ import type { SaveActions } from '../session';
 import type { Command } from '../sim/commands';
 import { keyLabel, type SettingsStore } from '../settings';
 import type { GameState, LogEntry, Outpost, Rock } from '../sim/types';
+import { shouldAutoHideHelp } from './helpBox';
 import { type Panel, h, setText } from './dom';
 import { hazardBanner } from './hazardBanner';
 import { Menu } from './Menu';
@@ -45,6 +46,8 @@ export class Hud {
   private tooltip = h('div', { class: 'tooltip' });
   private flash = h('div', { class: 'flash' });
   private help: HTMLElement;
+  private helpToggle: HTMLButtonElement;
+  private helpAutoHidden = false;
   private paused = h('div', { class: 'paused hidden' });
   private hazard = h('div', { class: 'hazard hidden' });
   private fps = h('div', { class: 'fps hidden' });
@@ -87,9 +90,15 @@ export class Hud {
     this.research = new ResearchPanel(mk('research', 'modal hidden'), ctx);
 
     this.help = mk('help');
+    this.helpToggle = h('button', {
+      class: 'help-toggle hidden',
+      text: '?',
+      title: 'Show help',
+      onclick: () => this.settings.set({ showHelp: true }),
+    });
 
     this.menu = new Menu(root, actions.saves, settings, getState);
-    root.append(this.tooltip, this.flash, this.paused, this.hazard, this.fps, this.toasts);
+    root.append(this.tooltip, this.flash, this.paused, this.hazard, this.fps, this.toasts, this.helpToggle);
     settings.onChange(() => this.applySettings());
     this.applySettings();
   }
@@ -108,6 +117,7 @@ export class Hud {
       <b>Automation</b> ${k('outpost')} over a large asteroid deploys an outpost · haulers collect from it<br>
       <b>View</b> wheel zoom · drag to pan · ${k('follow')} follow · ${k('map')} map<br>
       <b>Menus</b> ${k('research')} research · ${k('pause')} pause · ${k('help')} hide help · ⚙ saves & settings`;
+    this.helpToggle.classList.toggle('hidden', s.showHelp);
     this.fps.classList.toggle('hidden', !s.showFps);
   }
 
@@ -196,6 +206,10 @@ export class Hud {
 
   refresh(): void {
     const state = this.getState();
+    if (shouldAutoHideHelp(state.run.time, this.settings.value.showHelp, this.helpAutoHidden)) {
+      this.helpAutoHidden = true;
+      this.settings.set({ showHelp: false });
+    }
     for (const line of state.out.log.splice(0)) this.pushLog(line);
     for (const p of this.panels) p.refresh();
     this.research.refresh();

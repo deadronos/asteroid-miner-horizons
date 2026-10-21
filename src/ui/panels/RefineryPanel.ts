@@ -6,7 +6,9 @@ import { RESOURCE_INFO } from '../../data/resources';
 import { describeRecipe, findJob, jobProgress, maxBatches, refineBlock } from '../../sim/refining';
 import type { GameState } from '../../sim/types';
 import { Panel, bar, h, setBlocked, setText, slotRow } from '../dom';
+import { collapsibleHeading } from './collapsible';
 import type { PanelCtx } from './context';
+import { type RefineryCollapseState, syncRefineryCollapse, toggleRefineryCollapse } from './refineryCollapse';
 
 /**
  * Structure key for the panel: seed, system number and the queue's
@@ -20,12 +22,23 @@ export function refineryKey(state: GameState): string {
 
 export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
   const st = ctx.getState;
-  return new Panel(
+  let collapse: RefineryCollapseState = { collapsed: false, keepOpenWhenEmpty: false };
+  let panel: Panel;
+  const toggle = (): void => {
+    collapse = toggleRefineryCollapse(collapse, st().run.refinery.queue.length);
+    panel.invalidate();
+    panel.refresh();
+  };
+  panel = new Panel(
     el,
-    () => refineryKey(st()),
+    () => {
+      collapse = syncRefineryCollapse(collapse, st().run.refinery.queue.length);
+      return `${refineryKey(st())}|${collapse.collapsed ? 'c' : 'o'}`;
+    },
     (bind) => {
       const queue0 = st().run.refinery.queue;
-      const nodes: Node[] = [h('h3', { text: 'Refinery' })];
+      const nodes: Node[] = [collapsibleHeading('Refinery', collapse.collapsed, toggle)];
+      if (collapse.collapsed) return nodes;
 
       for (const id of RECIPE_IDS) {
         const row = h('div', { class: 'row' });
@@ -83,4 +96,5 @@ export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       return nodes;
     },
   );
+  return panel;
 }

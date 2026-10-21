@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../src/sim/create';
 import { queueRefine } from '../src/sim/refining';
+import { syncRefineryCollapse, toggleRefineryCollapse } from '../src/ui/panels/refineryCollapse';
 import { refineryKey } from '../src/ui/panels/RefineryPanel';
 
 // The panel rebuilds only when this key changes; distinct states must not collide.
@@ -42,5 +43,36 @@ describe('refineryKey', () => {
     queueRefine(a.run, 'alloy', 3);
     queueRefine(b.run, 'alloy', 3);
     expect(refineryKey(a)).toBe(refineryKey(b));
+  });
+});
+
+describe('refinery collapse state', () => {
+  it('auto-collapses while empty unless manually kept open', () => {
+    expect(syncRefineryCollapse({ collapsed: false, keepOpenWhenEmpty: false }, 0)).toEqual({
+      collapsed: true,
+      keepOpenWhenEmpty: false,
+    });
+    expect(syncRefineryCollapse({ collapsed: false, keepOpenWhenEmpty: true }, 0)).toEqual({
+      collapsed: false,
+      keepOpenWhenEmpty: true,
+    });
+  });
+
+  it('re-opens and clears manual hold once queue work exists', () => {
+    expect(syncRefineryCollapse({ collapsed: true, keepOpenWhenEmpty: true }, 1)).toEqual({
+      collapsed: false,
+      keepOpenWhenEmpty: false,
+    });
+  });
+
+  it('records manual expand on an empty queue and clears it on collapse', () => {
+    expect(toggleRefineryCollapse({ collapsed: true, keepOpenWhenEmpty: false }, 0)).toEqual({
+      collapsed: false,
+      keepOpenWhenEmpty: true,
+    });
+    expect(toggleRefineryCollapse({ collapsed: false, keepOpenWhenEmpty: true }, 0)).toEqual({
+      collapsed: true,
+      keepOpenWhenEmpty: false,
+    });
   });
 });

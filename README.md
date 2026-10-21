@@ -38,20 +38,20 @@ Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 
 ## How to play
 
-| Input                      | Action                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------ |
-| `WASD` / arrows            | Fly the selected ship directly (cancels its order)                                               |
-| Click empty space          | Move order (autopilot steers around rocks)                                                       |
-| Click asteroid             | Mine: the ship closes to laser range and burns it; it automatically moves on to the fragments    |
-| Click station              | Dock and unload cargo into the station bank                                                      |
-| Click ship / `Tab` / `1–9` | Select a ship                                                                                    |
-| Right-click                | Order the selected ship without changing the selection                                           |
-| Mouse wheel                | Zoom (toward the cursor when not following)                                                      |
-| Drag                       | Pan (camera stops following) · `F` follows again                                                 |
-| `M`                        | System map toggle; the station and planets are labelled when zoomed out                          |
-| `O` over a large asteroid  | Deploy a mining outpost there (the flagship must be beside it)                                   |
-| `R`                        | Research (prestige) panel · `P` pause · `H` hides help · `Esc` closes menus, else stops the ship |
-| ⚙ button                   | Menu: save slots, stats & achievements, settings, key rebinding                                  |
+| Input                      | Action                                                                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `WASD` / arrows            | Fly the selected ship directly (cancels its order)                                                                  |
+| Click empty space          | Move order (autopilot steers around rocks)                                                                          |
+| Click asteroid             | Mine: the ship closes to laser range and burns it; it automatically moves on to the fragments                       |
+| Click station              | Dock and unload cargo into the station bank                                                                         |
+| Click ship / `Tab` / `1–9` | Select a ship                                                                                                       |
+| Right-click                | Order the selected ship without changing the selection                                                              |
+| Mouse wheel                | Zoom (toward the cursor when not following)                                                                         |
+| Drag                       | Pan (camera stops following) · `F` follows again                                                                    |
+| `M`                        | System map toggle; the station and planets are labelled when zoomed out                                             |
+| `O` over a large asteroid  | Deploy a mining outpost there (the flagship must be beside it)                                                      |
+| `R`                        | Research (prestige) panel · `P` pause · `H` toggles help (`?` reopens it) · `Esc` closes menus, else stops the ship |
+| ⚙ button                   | Menu: save slots, stats & achievements, settings, key rebinding                                                     |
 
 All keys can be rebound in ⚙ → Controls.
 

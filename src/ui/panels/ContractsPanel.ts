@@ -5,24 +5,33 @@ import { formatCountdown } from '../../core/format';
 import { formatCost } from '../../data/resources';
 import { describeContract } from '../../sim/contracts';
 import { Panel, bar, h, setDisabled, setText } from '../dom';
+import { collapsibleHeading } from './collapsible';
 import type { PanelCtx } from './context';
 
 const ACTIVE_REASON = 'Finish or abandon the current contract first';
 
 export function createContractsPanel(el: HTMLElement, ctx: PanelCtx): Panel {
   const st = ctx.getState;
-  return new Panel(
+  let collapsed = false;
+  let panel: Panel;
+  const toggle = (): void => {
+    collapsed = !collapsed;
+    panel.invalidate();
+    panel.refresh();
+  };
+  panel = new Panel(
     el,
     () => {
       const s = st();
       const b = s.run.contracts;
       // Board ids restart per run/system, so seed+system are needed to tell boards apart.
-      return `${s.profile.seed}:${s.run.system.number}|${b.active?.id ?? '-'}|${b.offers.map((o) => o.id).join(',')}`;
+      return `${s.profile.seed}:${s.run.system.number}|${b.active?.id ?? '-'}|${b.offers.map((o) => o.id).join(',')}|${collapsed ? 'c' : 'o'}`;
     },
     (bind) => {
       const s0 = st();
       const board0 = s0.run.contracts;
-      const nodes: Node[] = [h('h3', { text: 'Contracts' })];
+      const nodes: Node[] = [collapsibleHeading('Contracts', collapsed, toggle)];
+      if (collapsed) return nodes;
 
       const active = board0.active;
       if (active) {
@@ -70,4 +79,5 @@ export function createContractsPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       return nodes;
     },
   );
+  return panel;
 }
