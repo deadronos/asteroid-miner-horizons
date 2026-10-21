@@ -4,7 +4,7 @@ import type { Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
-import { flagship, shipStats } from '../src/sim/ships';
+import { flagship, makeShip, shipStats } from '../src/sim/ships';
 import { applyCommands, tick } from '../src/sim/update';
 import { DT } from './helpers';
 
@@ -29,7 +29,10 @@ describe('tick critical mutation paths', () => {
   it('rebuilds a flagship at the station when its respawn timer elapses', () => {
     const state = newGame(11);
     const ship = flagship(state.run);
+    // The default loadout has no shield, so fit one or the shield check is 0 === 0.
+    ship.slots[ship.slots.length - 1] = { type: 'shield', variant: 'standard', tier: 1 };
     const st = shipStats(ship, state.profile);
+    expect(st.maxShield).toBeGreaterThan(0);
     ship.hull = 0;
     ship.shield = 0;
     ship.pos = { x: 4321, z: -987 };
@@ -84,6 +87,29 @@ describe('tick critical mutation paths', () => {
     tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
 
     expect(state.out.log.some((l) => l.text.includes('overheating near the star'))).toBe(false);
+
+    // Crossing into second 4 is a boundary, but not a multiple of 3.
+    state.run.time = 3.99;
+    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+
+    expect(state.out.log.some((l) => l.text.includes('overheating near the star'))).toBe(false);
+  });
+
+  it('warns about overheating only for the selected ship', () => {
+    const state = newGame(17);
+    const ship = flagship(state.run);
+    const nearStar = { x: state.run.system.starRadius + 1, z: 0 };
+    ship.pos = { ...nearStar };
+    ship.vel = { x: 0, z: 0 };
+    const drone = makeShip(state.run, state.profile, 'drone', 'Drone', nearStar);
+    state.run.ships.push(drone);
+    state.run.time = 2.99;
+
+    tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, new SimIndex());
+
+    const warnings = state.out.log.filter((l) => l.text.includes('overheating near the star'));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]!.text).toContain(ship.name);
   });
 
   it('applies one impact hit, then suppresses repeats while collision cooldown is active', () => {
@@ -116,5 +142,15 @@ describe('tick critical mutation paths', () => {
 
     expect(state.out.fx.filter((f) => f.t === 'impact')).toHaveLength(1);
     expect(ship.hull + ship.shield).toBeGreaterThanOrEqual(durabilityAfterFirst);
+
+    // Once the cooldown runs out, the next impact lands. Each bounce pushes the
+    // ship clear, so put it back on a collision course every tick.
+    for (let i = 0; i < 60 && state.out.fx.filter((f) => f.t === 'impact').length < 2; i++) {
+      ship.pos = { x: 1000, z: 0 };
+      ship.vel = { x: 200, z: 0 };
+      tick(state, DT, { thrust: { x: 0, z: 0 }, commands: [] }, index);
+    }
+
+    expect(state.out.fx.filter((f) => f.t === 'impact')).toHaveLength(2);
   });
 });
