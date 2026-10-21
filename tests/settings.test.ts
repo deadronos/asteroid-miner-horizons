@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULTS,
+  HELP_MODES,
   LOG_VERBOSITY_IDS,
   QUALITY,
   QUALITY_IDS,
@@ -50,6 +51,28 @@ describe('settings store', () => {
     expect(SettingsStore.merge({ hazards: 'off' }).hazards).toBe('off');
     expect(SettingsStore.merge({ hazards: 'brutal' }).hazards).toBe('normal');
     expect(SettingsStore.merge({ hazards: 3 }).hazards).toBe('normal');
+  });
+
+  it('loads the help mode, mapping the old on/off toggle', () => {
+    expect(SettingsStore.merge(null).help).toBe('auto');
+    expect(SettingsStore.merge({ showHelp: true }).help).toBe('auto');
+    expect(SettingsStore.merge({ showHelp: false }).help).toBe('off');
+    for (const help of HELP_MODES) expect(SettingsStore.merge({ help, showHelp: false }).help).toBe(help);
+    expect(SettingsStore.merge({ help: 'sometimes' }).help).toBe('auto');
+  });
+
+  it('keeps only known panels with boolean collapse choices', () => {
+    const s = SettingsStore.merge({ hudCollapsed: { fleet: true, refinery: false, ship: 'yes', map: true } });
+    expect(s.hudCollapsed).toEqual({ fleet: true, refinery: false });
+    expect(SettingsStore.merge({ hudCollapsed: 'all' }).hudCollapsed).toEqual({});
+    expect(SettingsStore.merge({ hudCompact: true }).hudCompact).toBe(true);
+  });
+
+  it('never shares the default collapse object', () => {
+    const s = SettingsStore.merge({ hudCollapsed: { contracts: true } });
+    expect(DEFAULTS.hudCollapsed).toEqual({});
+    expect(SettingsStore.merge(null).hudCollapsed).not.toBe(DEFAULTS.hudCollapsed);
+    expect(s.hudCollapsed).toEqual({ contracts: true });
   });
 
   it('rejects unknown stored enums and leaves defaults usable', () => {

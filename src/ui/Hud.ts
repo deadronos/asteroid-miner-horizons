@@ -1,15 +1,17 @@
 // DOM HUD composer: places the panels (top bar, fleet, contracts, selected
 // ship, refinery, research, first-steps goals) and owns the small overlays — event log, help, hover
 // tooltip, warp flash, pause banner, toasts (achievements, offline summary) and FPS counter. All actions go out as sim
-// Commands via `send`.
+// Commands via `send`. The side panels sit in two flex columns that share the window height, and each can be
+// collapsed (#161).
 
 import { ACHIEVEMENTS } from '../data/achievements';
 import type { SaveActions } from '../session';
 import type { Command } from '../sim/commands';
-import { keyLabel, type SettingsStore } from '../settings';
+import { type HudPanelId, type SettingsStore, keyLabel } from '../settings';
 import type { GameState, LogEntry, Outpost, Rock } from '../sim/types';
 import { type Panel, h, setText } from './dom';
 import { hazardBanner } from './hazardBanner';
+import { helpVisible, isCollapsed, toggledCollapse } from './hudLayout';
 import { Menu } from './Menu';
 import type { PanelCtx } from './panels/context';
 import { createContractsPanel } from './panels/ContractsPanel';
@@ -45,6 +47,8 @@ export class Hud {
   private tooltip = h('div', { class: 'tooltip' });
   private flash = h('div', { class: 'flash' });
   private help: HTMLElement;
+  /** Collapsible panel containers and their toggle buttons. */
+  private collapsibles: { id: HudPanelId; el: HTMLElement; btn: HTMLButtonElement }[] = [];
   private paused = h('div', { class: 'paused hidden' });
   private hazard = h('div', { class: 'hazard hidden' });
   private fps = h('div', { class: 'fps hidden' });
@@ -64,26 +68,48 @@ export class Hud {
   ) {
     this.root = root;
     this.getState = getState;
-    const mk = (id: string, cls = 'hud'): HTMLElement => {
+    const mk = (id: string, cls = 'hud', parent: HTMLElement = root): HTMLElement => {
       const e = h('div', { class: cls });
       e.id = id;
-      root.append(e);
+      parent.append(e);
       return e;
     };
+    const left = h('div', { class: 'hud-col left' });
+    const right = h('div', { class: 'hud-col right' });
+    // A collapsible panel: a fixed toggle button over a body that the panel fills and that scrolls on its own.
+    const fold = (id: HudPanelId, parent: HTMLElement): HTMLElement => {
+      const el = mk(id, 'hud collapsible', parent);
+      const btn = h('button', {
+        class: 'collapse',
+        onclick: () => {
+          const prefs = toggledCollapse(id, settings.value.hudCollapsed, getState());
+          settings.set({ hudCollapsed: prefs });
+          this.applyCollapse();
+        },
+      });
+      const body = h('div', { class: 'body' });
+      el.append(btn, body);
+      this.collapsibles.push({ id, el, btn });
+      return body;
+    };
+    const topbar = mk('topbar');
+    root.append(left, right);
     const ctx: PanelCtx = { getState, send: actions.send, settings };
     this.panels = [
-      createTopBar(mk('topbar'), ctx, {
+      createTopBar(topbar, ctx, {
         toggleResearch: () => this.toggleResearch(),
         toggleMenu: () => this.menu.toggle(),
+        toggleHelp: () => this.toggleHelp(),
+        helpVisible: () => this.helpShown(),
       }),
-      createFleetPanel(mk('fleet'), ctx),
-      createContractsPanel(mk('contracts'), ctx),
-      createShipPanel(mk('ship'), ctx),
-      createRefineryPanel(mk('refinery'), ctx),
+      createFleetPanel(fold('fleet', left), ctx),
+      createContractsPanel(fold('contracts', left), ctx),
+      createShipPanel(fold('ship', right), ctx),
+      createRefineryPanel(fold('refinery', right), ctx),
       createGoalsPanel(mk('goals', 'hud hidden'), ctx),
     ];
     this.log.id = 'log';
-    root.append(this.log);
+    left.append(this.log);
     this.research = new ResearchPanel(mk('research', 'modal hidden'), ctx);
 
     this.help = mk('help');
@@ -97,7 +123,8 @@ export class Hud {
   private applySettings(): void {
     const s = this.settings.value;
     this.root.style.setProperty('--hud-scale', String(s.hudScale));
-    this.help.classList.toggle('hidden', !s.showHelp);
+    this.root.classList.toggle('compact', s.hudCompact);
+    this.applyHelp();
     // Help text follows the current key bindings.
     const k = (a: keyof typeof s.keys): string => s.keys[a].filter(Boolean).map(keyLabel).join('/') || 'unbound';
     this.help.innerHTML = `
@@ -109,6 +136,37 @@ export class Hud {
       <b>View</b> wheel zoom · drag to pan · ${k('follow')} follow · ${k('map')} map<br>
       <b>Menus</b> ${k('research')} research · ${k('pause')} pause · ${k('help')} hide help · ⚙ saves & settings`;
     this.fps.classList.toggle('hidden', !s.showFps);
+  }
+
+  /** Shows or hides the help box for the help mode and lifetime play time. */
+  private applyHelp(): void {
+    const mode = this.settings.value.help;
+    this.help.classList.toggle('hidden', !helpVisible(mode, this.getState().profile.stats.time));
+    this.help.classList.toggle('auto', mode === 'auto');
+  }
+
+  /** Marks each side panel collapsed or open, and labels its button to match. */
+  private applyCollapse(): void {
+    const state = this.getState();
+    for (const { id, el, btn } of this.collapsibles) {
+      const folded = isCollapsed(id, this.settings.value.hudCollapsed, state);
+      if (el.classList.contains('collapsed') === folded && btn.textContent) continue;
+      el.classList.toggle('collapsed', folded);
+      btn.textContent = folded ? '+' : '−';
+      btn.title = folded ? 'Expand' : 'Collapse';
+      btn.setAttribute('aria-label', `${folded ? 'Expand' : 'Collapse'} ${id}`);
+      btn.setAttribute('aria-expanded', String(!folded));
+    }
+  }
+
+  /** Whether the help box is on screen; CSS also hides auto help in narrow windows. */
+  private helpShown(): boolean {
+    return this.help.getClientRects().length > 0;
+  }
+
+  /** The `?` button and help key: hide the help box if shown, otherwise show it until hidden again. */
+  toggleHelp(): void {
+    this.settings.set({ help: this.helpShown() ? 'off' : 'on' });
   }
 
   /** Shows the pause banner with the reason (manual, menu, unfocused). */
@@ -169,7 +227,9 @@ export class Hud {
   /** Client rectangles of the visible HUD panels and banners, which map labels keep clear of. */
   blockerRects(): { x: number; y: number; w: number; h: number }[] {
     const out: { x: number; y: number; w: number; h: number }[] = [];
-    for (const e of this.root.querySelectorAll(':scope > .hud, :scope > .paused, :scope > .hazard')) {
+    for (const e of this.root.querySelectorAll(
+      ':scope > .hud, :scope > .hud-col > .hud, :scope > .paused, :scope > .hazard',
+    )) {
       const r = e.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) out.push({ x: r.left, y: r.top, w: r.width, h: r.height });
     }
@@ -197,7 +257,9 @@ export class Hud {
   refresh(): void {
     const state = this.getState();
     for (const line of state.out.log.splice(0)) this.pushLog(line);
+    this.applyHelp();
     for (const p of this.panels) p.refresh();
+    this.applyCollapse();
     this.research.refresh();
     const banner = hazardBanner(state.run);
     this.hazard.classList.toggle('hidden', !banner);

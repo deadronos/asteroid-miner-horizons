@@ -110,7 +110,7 @@ export class Input {
         this.renderer.toggleMap(s.run.system);
         return;
       case 'help':
-        this.settings.set({ showHelp: !this.settings.value.showHelp });
+        this.hud.toggleHelp();
         return;
       case 'research':
         this.hud.toggleResearch();

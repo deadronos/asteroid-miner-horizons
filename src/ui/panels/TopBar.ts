@@ -1,9 +1,10 @@
-// Top bar: system name, system modifier chips, bank, Horizon Data, warp button, research and menu buttons.
+// Top bar: system name, system modifier chips, bank, Horizon Data, warp button, research, help and menu buttons.
 
 import { MODIFIERS } from '../../data/modifiers';
 import { PERK_IDS } from '../../data/perks';
 import { RESOURCES, RESOURCE_INFO } from '../../data/resources';
 import { dataGain, perkCost, warpCost } from '../../sim/economy';
+import { keyLabel } from '../../settings';
 import { describeModifier } from '../../sim/modifiers';
 import type { GameState } from '../../sim/types';
 import { Panel, h, setDisabled, setText } from '../dom';
@@ -13,6 +14,8 @@ import type { PanelCtx } from './context';
 export interface TopBarHooks {
   toggleResearch: () => void;
   toggleMenu: () => void;
+  toggleHelp: () => void;
+  helpVisible: () => boolean;
 }
 
 const fmt = (n: number): string => (n >= 10000 ? `${(n / 1000).toFixed(1)}k` : `${Math.floor(n)}`);
@@ -58,6 +61,8 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
       warp.dataset.title =
         'Jump to a fresh system. Resets your fleet and bank; keeps research. Grants Horizon Data based on value delivered this run.';
       const researchBtn = h('button', { text: 'Research', onclick: hooks.toggleResearch });
+      const help = h('button', { class: 'icon help-btn', text: '?', onclick: hooks.toggleHelp });
+      help.setAttribute('aria-label', 'Help');
       const menu = h('button', {
         class: 'icon gear',
         title: 'Menu: saves & controls',
@@ -67,6 +72,11 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
       menu.setAttribute('aria-label', 'Menu');
       bind(() => {
         const s = st();
+        const shown = hooks.helpVisible();
+        if (help.getAttribute('aria-pressed') !== String(shown)) help.setAttribute('aria-pressed', String(shown));
+        const key = ctx.settings.value.keys.help.find(Boolean);
+        const title = `${shown ? 'Hide' : 'Show'} help${key ? ` (${keyLabel(key)})` : ''}`;
+        if (help.title !== title) help.title = title;
         const k = s.run.system;
         setText(sys, `SYS ${k.number} · ${k.name} · ${k.starClass}-class`);
         setText(data, `✦ ${s.profile.data} HD`);
@@ -90,6 +100,7 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
         data,
         warp,
         researchBtn,
+        help,
         menu,
       ];
     },

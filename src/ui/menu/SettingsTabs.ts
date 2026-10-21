@@ -135,7 +135,18 @@ export function renderInterface(settings: SettingsStore): Node[] {
       'Always show ship bars',
       'Otherwise only for the selected, damaged or loaded ships',
     ),
-    toggleRow(settings, 'showHelp', 'Show help box'),
+    toggleRow(settings, 'hudCompact', 'Compact HUD', 'Tighter panels and a shorter event log'),
+    selectRow(
+      settings,
+      'help',
+      'Help box',
+      [
+        ['auto', 'First minutes only'],
+        ['on', 'Always'],
+        ['off', 'Hidden'],
+      ],
+      'The ? button and the help key toggle it',
+    ),
     selectRow(
       settings,
       'logVerbosity',

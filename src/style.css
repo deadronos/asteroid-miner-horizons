@@ -237,14 +237,83 @@ button.glow {
   border-color: #ffe680;
 }
 
+/* Side columns: fleet, contracts and log on the left; ship and refinery on the right. Each column runs from
+   below the top bar to the bottom edge and its panels share that height, so none needs a viewport guess. The
+   column itself is click-through; only its panels take pointer events. */
+.hud-col {
+  position: absolute;
+  top: calc(64px * var(--hud-scale, 1));
+  bottom: calc(10px * var(--hud-scale, 1));
+  display: flex;
+  flex-direction: column;
+  gap: calc(10px * var(--hud-scale, 1));
+  pointer-events: none;
+}
+.hud-col.left {
+  left: calc(10px * var(--hud-scale, 1));
+  align-items: flex-start;
+}
+.hud-col.right {
+  right: calc(10px * var(--hud-scale, 1));
+  align-items: flex-end;
+}
+.hud-col > .hud {
+  position: relative;
+  flex: 0 1 auto;
+  min-height: 0;
+  pointer-events: auto;
+}
+/* The lower panel of each column sits at the bottom, as before. */
+#contracts,
+#refinery {
+  margin-top: auto;
+}
+
+/* Collapsible panel: the toggle stays put while the body scrolls. Collapsed, only the first heading shows. */
+.hud.collapsible {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.collapsible > .body {
+  min-height: 0;
+  overflow-y: auto;
+}
+.collapsible > .body > h3:first-child {
+  padding-right: 22px;
+}
+.collapsible.collapsed > .body > :not(:first-child) {
+  display: none;
+}
+.collapsible.collapsed > .body > h3:first-child {
+  margin: 0;
+}
+button.collapse {
+  position: absolute;
+  top: 6px;
+  right: 8px;
+  z-index: 1;
+  width: 20px;
+  height: 18px;
+  padding: 0;
+  line-height: 16px;
+  font-size: 13px;
+  background: transparent;
+  border-color: transparent;
+  color: var(--dim);
+}
+button.collapse:hover {
+  color: var(--txt);
+  border-color: var(--edge);
+}
+
 /* Fleet (left) */
 #fleet {
-  top: 64px;
-  left: 10px;
   width: 250px;
-  max-height: calc(100vh - 530px);
-  min-height: 120px;
-  overflow-y: auto;
+  min-height: 90px;
+}
+#fleet.collapsed {
+  min-height: 0;
 }
 .shiprow {
   display: grid;
@@ -301,11 +370,7 @@ button.buy small {
 
 /* Contracts (left, above the log) */
 #contracts {
-  left: 10px;
-  bottom: 210px;
   width: 250px;
-  max-height: min(240px, calc(100vh - 400px));
-  overflow-y: auto;
 }
 
 /* Bars */
@@ -349,12 +414,11 @@ button.buy small {
 
 /* Selected ship (right) */
 #ship {
-  top: 64px;
-  right: 10px;
   width: 300px;
-  max-height: calc(100vh - 320px);
-  min-height: 160px;
-  overflow-y: auto;
+  min-height: 120px;
+}
+#ship.collapsed {
+  min-height: 0;
 }
 #ship .row {
   margin: 6px 0;
@@ -399,19 +463,15 @@ button.buy small {
 
 /* Refinery (right, below the ship) */
 #refinery {
-  right: 10px;
-  bottom: 10px;
   width: 300px;
-  max-height: 220px;
-  overflow-y: auto;
+  flex-shrink: 0;
 }
 
 /* Log + help */
 #log {
-  left: 10px;
-  bottom: 10px;
   width: min(440px, calc(100vw - 20px));
   max-height: 190px;
+  flex-shrink: 0;
   overflow-y: auto;
   font-size: 12px;
   color: var(--dim);
@@ -549,16 +609,92 @@ button.buy small {
   z-index: 40;
 }
 
-/* Below 1200 px wide, bottom-anchored #help (right: 320px, ~411px) would
-   overlap the left #log, so hide it. Modifier chips shrink to icons to keep
-   the top bar on screen. */
+/* Up to 1279 px wide, narrow the side columns to leave the playfield more room. */
+@media (max-width: 1279px) {
+  #fleet,
+  #contracts {
+    width: 230px;
+  }
+  #ship,
+  #refinery {
+    width: 270px;
+  }
+  #help {
+    right: 290px;
+  }
+}
+
+/* Below 1200 px wide, bottom-anchored #help would overlap the left #log: auto help stays hidden, and help the
+   player asked for is centred over the log instead. Modifier chips shrink to icons to keep the top bar on
+   screen. */
 @media (max-width: 1199px) {
   .mod-name {
     display: none;
   }
-  #help {
+  #help.auto {
     display: none;
   }
+  #help {
+    right: auto;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 1;
+    width: max-content;
+    max-width: calc(100vw - 20px);
+  }
+}
+
+/* Short windows (720p and 768p): a shorter log and tighter spacing, so the fleet panel's shipyard and the ship
+   panel's slots fit without scrolling. */
+@media (max-height: 800px) {
+  .hud {
+    padding: 8px 10px;
+  }
+  h3 {
+    margin: 7px 0 4px;
+  }
+  #log {
+    max-height: 110px;
+  }
+  .slot {
+    padding: 4px 0;
+  }
+  #ship .row {
+    margin: 4px 0;
+  }
+}
+
+/* Compact HUD (Interface setting): tighter, narrower panels and a three-line log. */
+.compact .hud {
+  padding: 6px 9px;
+}
+.compact h3 {
+  margin: 6px 0 3px;
+}
+.compact .shiprow {
+  padding: 3px 6px;
+  margin-bottom: 2px;
+}
+.compact .slot {
+  padding: 3px 0;
+}
+.compact #ship .row {
+  margin: 3px 0;
+}
+.compact #fleet,
+.compact #contracts {
+  width: 220px;
+}
+.compact #ship,
+.compact #refinery {
+  width: 260px;
+}
+.compact #log {
+  max-height: 64px;
+  width: min(380px, calc(100vw - 20px));
+}
+.compact #help {
+  right: 280px;
 }
 
 /* Small screens: stack panels. */
@@ -572,24 +708,13 @@ button.buy small {
   .mod {
     padding: 1px 4px;
   }
-  #fleet {
-    width: 200px;
-    /* Stop above #contracts: 64px top + 110px bottom + its 30vh + 10px gap. */
-    max-height: min(38vh, calc(70vh - 184px));
-    min-height: 0;
-  }
+  #fleet,
   #contracts {
     width: 200px;
-    bottom: 110px;
-    max-height: 30vh;
   }
-  #ship {
-    width: 230px;
-    max-height: calc(72vh - 90px);
-  }
+  #ship,
   #refinery {
     width: 230px;
-    max-height: 28vh;
   }
   #log {
     max-height: 90px;
