@@ -157,8 +157,10 @@ It goes away after the first warp; × hides it for that save.
     outpost deployments and ship losses each get their own short cue, and a burst plays a
     single sound instead of a stack (the fleet-loss tone stays audible no matter where on
     screen the explosion was). Ambient music is generated live: warm and slow around M
-    stars, neutral at G, cold and sparse at B, crossfading on every warp and playing on
-    through pauses. Beam hums go quiet while the game is paused. The low-hull / overheat
+    stars, neutral at G, cold and sparse at B, with each system taking its own key, chord
+    order and arpeggio timbre from the run seed. It darkens and adds a low pulse while a
+    flare or comet is coming, busies up while the fleet is mining, crossfades on every warp
+    and plays on through pauses. Beam hums go quiet while the game is paused. The low-hull / overheat
     alarm also goes quiet whenever you pause (`P`, or while a menu is open), but keeps
     sounding while the window stays visible and loses focus (a hidden tab suspends all
     audio).

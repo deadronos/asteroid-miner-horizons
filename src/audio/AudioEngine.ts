@@ -15,6 +15,7 @@
 import type { SettingsStore } from '../settings';
 import type { Fx, GameState, LogEntry } from '../sim/types';
 import { LIMITER, REVERB_RETURN, REVERB_SEND, reverbImpulse } from './mix';
+import { musicIntensity } from './music';
 import { MusicPlayer } from './MusicPlayer';
 import {
   alarmLevel,
@@ -314,14 +315,17 @@ export class AudioEngine {
   }
 
   /**
-   * Ambient music in the current system's star-class mood, crossfading on warp.
-   * Keeps playing through pauses; silent until the context runs. Read-only on `state`.
+   * Ambient music in the current system's variant of its star-class mood, crossfading on warp and
+   * following the flare/comet danger and fleet mining activity. Keeps playing through pauses; silent
+   * until the context runs. Read-only on `state`.
    */
   updateMusic(state: GameState): void {
     const { ctx, player } = this;
     if (!ctx || !player || ctx.state !== 'running') return;
     const s = this.settings.value;
-    player.update(state.run.system.starClass, state.run.system.number, s.volMaster > 0 && s.volMusic > 0);
+    const { system } = state.run;
+    const audible = s.volMaster > 0 && s.volMusic > 0;
+    player.update(system.starClass, state.profile.seed, system.number, audible, musicIntensity(state.run));
   }
 
   /** Rejected commands buzz, and each event identity in the batch gets one cue. Read-only. */
