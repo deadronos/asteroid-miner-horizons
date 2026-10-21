@@ -186,5 +186,14 @@ checks.
 
 ## Ideas for later
 
-Pirates and combat modules, trade contracts at the station, idle/offline progress,
-more hull classes and specialised drones (escorts), touch/pinch controls.
+Each of these is tracked as an open issue; the umbrella for game scope is
+[#42](https://github.com/deadronos/asteroid-miner-horizons/issues/42).
+
+- Pirates and combat modules — [#175](https://github.com/deadronos/asteroid-miner-horizons/issues/175)
+- A station market and trade routes — [#176](https://github.com/deadronos/asteroid-miner-horizons/issues/176)
+- Fleet roles and specialised drones such as escorts — [#174](https://github.com/deadronos/asteroid-miner-horizons/issues/174)
+- Contract variety and faction reputation — [#173](https://github.com/deadronos/asteroid-miner-horizons/issues/173)
+- Choosing between candidate systems on warp — [#172](https://github.com/deadronos/asteroid-miner-horizons/issues/172)
+- An endgame: the Horizon Gate and New Game+ — [#177](https://github.com/deadronos/asteroid-miner-horizons/issues/177)
+- Exploration: sensor ping, rich deposits and derelicts — [#38](https://github.com/deadronos/asteroid-miner-horizons/issues/38)
+- Touch and pinch controls — [#194](https://github.com/deadronos/asteroid-miner-horizons/issues/194)
