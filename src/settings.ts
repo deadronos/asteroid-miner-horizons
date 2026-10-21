@@ -9,6 +9,14 @@ export type Quality = 'auto' | 'low' | 'medium' | 'high';
 export type RenderScale = 0.75 | 1;
 export type Shake = 'off' | 'low' | 'full';
 export type LogVerbosity = 'all' | 'important';
+/** Help box: `auto` shows it only for a new profile's first minutes of play. */
+export type HelpMode = 'auto' | 'on' | 'off';
+
+/** HUD panels with a collapse button. */
+export const HUD_PANEL_IDS = ['fleet', 'contracts', 'ship', 'refinery'] as const;
+export type HudPanelId = (typeof HUD_PANEL_IDS)[number];
+/** Explicit collapse choices (true = collapsed); a missing panel follows its automatic state. */
+export type HudCollapse = Partial<Record<HudPanelId, boolean>>;
 
 export type KeyAction =
   | 'up'
@@ -52,7 +60,10 @@ export interface Settings {
   // Interface & camera
   hudScale: number;
   alwaysShowBars: boolean;
-  showHelp: boolean;
+  help: HelpMode;
+  /** Tighter panels and a shorter event log (#161). */
+  hudCompact: boolean;
+  hudCollapsed: HudCollapse;
   logVerbosity: LogVerbosity;
   followByDefault: boolean;
   zoomSpeed: number;
@@ -127,7 +138,9 @@ export const DEFAULTS: Settings = {
   showFps: false,
   hudScale: 1,
   alwaysShowBars: false,
-  showHelp: true,
+  help: 'auto',
+  hudCompact: false,
+  hudCollapsed: {},
   logVerbosity: 'all',
   followByDefault: true,
   zoomSpeed: 1,
@@ -156,6 +169,8 @@ export const SHAKE_SCALE: Record<Shake, number> = { off: 0, low: 0.35, full: 1 }
 export const SHAKE_IDS = Object.keys(SHAKE_SCALE) as Shake[];
 
 export const LOG_VERBOSITY_IDS = ['all', 'important'] as const;
+
+export const HELP_MODES: HelpMode[] = ['auto', 'on', 'off'];
 
 /** Human-readable name for a KeyboardEvent.code. */
 export function keyLabel(code: string | null): string {
@@ -222,9 +237,11 @@ export class SettingsStore {
 
   /** Defaults overlaid with whatever valid-typed values were stored. */
   static merge(data: unknown): Settings {
-    const out: Settings = { ...DEFAULTS, keys: structuredClone(DEFAULT_KEYS) };
+    const out: Settings = { ...DEFAULTS, hudCollapsed: {}, keys: structuredClone(DEFAULT_KEYS) };
     if (!data || typeof data !== 'object') return out;
     const d = data as Record<string, unknown>;
+    // Before #161 the help box was a plain on/off toggle.
+    if (d.showHelp === false) out.help = 'off';
     for (const k of Object.keys(DEFAULTS) as (keyof Settings)[]) {
       if (k === 'keys') continue;
       if (k === 'hazards') {
@@ -241,6 +258,18 @@ export class SettingsStore {
         case 'shake':
           if (SHAKE_IDS.includes(d[k] as Shake)) out.shake = d[k] as Shake;
           continue;
+        case 'help':
+          if (HELP_MODES.includes(d[k] as HelpMode)) out.help = d[k] as HelpMode;
+          continue;
+        case 'hudCollapsed': {
+          const c = d[k];
+          if (!c || typeof c !== 'object') continue;
+          for (const id of HUD_PANEL_IDS) {
+            const v = (c as Record<string, unknown>)[id];
+            if (typeof v === 'boolean') out.hudCollapsed[id] = v;
+          }
+          continue;
+        }
         case 'logVerbosity':
           if (LOG_VERBOSITY_IDS.includes(d[k] as LogVerbosity)) out.logVerbosity = d[k] as LogVerbosity;
           continue;

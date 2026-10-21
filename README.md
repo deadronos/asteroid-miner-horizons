@@ -50,7 +50,7 @@ Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 | Drag                       | Pan (camera stops following) · `F` follows again                                                 |
 | `M`                        | System map toggle; the station and planets are labelled when zoomed out                          |
 | `O` over a large asteroid  | Deploy a mining outpost there (the flagship must be beside it)                                   |
-| `R`                        | Research (prestige) panel · `P` pause · `H` hides help · `Esc` closes menus, else stops the ship |
+| `R`                        | Research (prestige) panel · `P` pause · `H` help (`?`) · `Esc` closes menus, else stops the ship |
 | ⚙ button                   | Menu: save slots, stats & achievements, settings, key rebinding                                  |
 
 All keys can be rebound in ⚙ → Controls.
@@ -143,8 +143,10 @@ It goes away after the first warp; × hides it for that save.
     avoidance, drone auto-unload, fragment chaining).
   - _Graphics_: Low/Medium/High quality (resolution cap, star and particle density),
     nebula, anti-aliasing (applies on reload), screen shake, FPS counter.
-  - _Interface_: HUD scale, always-on ship bars, help box, event log verbosity, camera
-    follow, zoom speed, edge panning.
+  - _Interface_: HUD scale, compact HUD (tighter panels, shorter log), always-on ship bars,
+    help box (first minutes only, always or hidden; the top bar's `?` toggles it), event log
+    verbosity, camera follow, zoom speed, edge panning. The fleet, contracts, ship and refinery
+    panels each have a collapse button; the refinery folds away while its queue is empty.
   - _Controls_: rebind every action (primary + secondary key). A key bound to another
     action is moved, and the help box follows your bindings.
   - _Audio_: master/effects/music volume. Sounds are positioned by where they are on

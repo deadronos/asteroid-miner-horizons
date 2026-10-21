@@ -12,6 +12,7 @@ export type SelectKey =
   | 'renderScale'
   | 'shake'
   | 'logVerbosity'
+  | 'help'
   | 'hazards'
   | 'autoRepairAt'
   | 'autoReserve';
