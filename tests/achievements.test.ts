@@ -51,7 +51,7 @@ describe('lifetime stats', () => {
     s.run.bank = { ore: 1000, ice: 1000, crystal: 0, alloy: 0, fuel: 1000 };
     applyCommand(s, { t: 'buyPerk', perk: 'optics' });
     applyCommand(s, { t: 'buyHull', hullId: 'drone' });
-    applyCommand(s, { t: 'warp' });
+    applyCommand(s, { t: 'warp', route: 0 });
     expect(s.profile.stats).toMatchObject({ perks: 1, drones: 1, warps: 1 });
   });
 
@@ -60,7 +60,7 @@ describe('lifetime stats', () => {
     s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
     applyCommand(s, { t: 'buyPerk', perk: 'optics' });
     applyCommand(s, { t: 'buyHull', hullId: 'drone' });
-    applyCommand(s, { t: 'warp' });
+    applyCommand(s, { t: 'warp', route: 0 });
     expect(s.profile.stats).toEqual(newStats());
   });
 });

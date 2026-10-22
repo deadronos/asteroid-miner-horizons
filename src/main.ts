@@ -144,6 +144,7 @@ function step(now: number): void {
         pauseUnfocused: s.pauseUnfocused,
         menuOpen: hud.menu.open,
         researchOpen: hud.researchOpen,
+        warpOpen: hud.warpOpen,
         focused: document.hasFocus(),
       });
   hud.setPaused(title.open ? null : pauseBanner(paused));

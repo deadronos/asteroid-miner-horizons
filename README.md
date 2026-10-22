@@ -114,7 +114,10 @@ It goes away after the first warp; × hides it for that save.
   hull. Armor reduces damage. A lost flagship is rebuilt at the station (its cargo is
   lost); lost drones are gone.
 - **Warp / prestige**: warping costs fuel from the bank, and the cost rises 35% per warp.
-  It resets the bank, ships and components and generates the next system. It grants
+  It resets the bank, ships and components. Pressing WARP opens a route picker with three
+  candidate systems, each previewing its star class, hazard level, belts, rock count,
+  richness and modifiers; the one you pick is the next system. The candidates depend only
+  on the save's seed and the warp count, so they never change under you. A warp grants
   **Horizon Data** = ⌊√(value delivered this run / 60)⌋. Research spends it on permanent
   perks: yield, laser damage, speed, fleet capacity, a starter kit, cheaper warps, a faster
   refinery (Catalytic Furnace) and more batches per refinery cycle (Bulk Hoppers).
@@ -193,7 +196,6 @@ Each of these is tracked as an open issue; the umbrella for game scope is
 - A station market and trade routes — [#176](https://github.com/deadronos/asteroid-miner-horizons/issues/176)
 - Fleet roles and specialised drones such as escorts — [#174](https://github.com/deadronos/asteroid-miner-horizons/issues/174)
 - Contract variety and faction reputation — [#173](https://github.com/deadronos/asteroid-miner-horizons/issues/173)
-- Choosing between candidate systems on warp — [#172](https://github.com/deadronos/asteroid-miner-horizons/issues/172)
 - An endgame: the Horizon Gate and New Game+ — [#177](https://github.com/deadronos/asteroid-miner-horizons/issues/177)
 - Exploration: sensor ping, rich deposits and derelicts — [#38](https://github.com/deadronos/asteroid-miner-horizons/issues/38)
 - Touch and pinch controls — [#194](https://github.com/deadronos/asteroid-miner-horizons/issues/194)

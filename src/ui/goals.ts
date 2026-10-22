@@ -41,7 +41,11 @@ export const GOALS: readonly GoalDef[] = [
     label: 'Complete a contract',
     how: 'Accept an offer in the contracts panel, then meet its goal in time.',
   },
-  { id: 'warp', label: 'Warp to a new system', how: 'Refine ice into fuel, then press WARP in the top bar.' },
+  {
+    id: 'warp',
+    label: 'Warp to a new system',
+    how: 'Refine ice into fuel, then press WARP in the top bar and pick a route.',
+  },
 ];
 
 /** True once goal `id` is met. */

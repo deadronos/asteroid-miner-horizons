@@ -73,6 +73,9 @@ export const TUNING = {
   /** Chance a system rolls a second modifier. */
   modifierTwoChance: 0.25,
 
+  /** Candidate systems a warp offers to choose between (#172). */
+  warpRoutes: 3,
+
   // Hazards.
   /** First system number that schedules comets and flares. */
   hazardMinSystem: 2,

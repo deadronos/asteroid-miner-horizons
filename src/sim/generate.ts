@@ -1,5 +1,5 @@
 // Procedural star systems: star class, planets with moons, asteroid belts and
-// the mining station. Every system is a pure function of (seed, number).
+// the mining station. Every system is a pure function of (seed, number, route).
 
 import { chance, int, makeRng, next, pick, range, type Rng } from '../core/rng';
 import { fromAngle, type Vec2 } from '../core/vec';
@@ -35,8 +35,14 @@ function name(r: Rng, syllables: number): string {
   return s[0]!.toUpperCase() + s.slice(1);
 }
 
-export function generateSystem(seed: number, number: number): StarSystem {
-  const r = makeRng(seed ^ (number * 0x9e3779b1));
+/** Seed for one warp route. Route 0 keeps the seed, so it is the system every save before #172 generated. */
+const routeSeed = (seed: number, route: number): number =>
+  route === 0 ? seed : (seed ^ Math.imul(route, 0x632be5ab)) >>> 0;
+
+/** The system reached by warp route `route` (see `src/sim/routes.ts`); route 0 is the default. */
+export function generateSystem(seed: number, number: number, route = 0): StarSystem {
+  const s = routeSeed(seed, route);
+  const r = makeRng(s ^ (number * 0x9e3779b1));
   const starClass: StarClass = number === 1 ? 'G' : pick(r, ['M', 'G', 'G', 'B'] as const);
   const sc = STAR_CLASSES[starClass];
   const sysName = name(r, 2);
@@ -81,7 +87,7 @@ export function generateSystem(seed: number, number: number): StarSystem {
     belts.push({ inner: 1950, outer: 2150, mix: { ore: 0.35, ice: 0.35, crystal: 0.3 }, initialCount: 90 });
   }
 
-  const modifiers = rollModifiers(seed, number);
+  const modifiers = rollModifiers(s, number);
   applyBeltModifiers(belts, modifiers);
 
   const stationAngle = range(r, 0, Math.PI * 2);

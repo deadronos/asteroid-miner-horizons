@@ -13,6 +13,8 @@ import type { PanelCtx } from './context';
 
 export interface TopBarHooks {
   toggleResearch: () => void;
+  /** Opens the warp route picker. */
+  openWarp: () => void;
   toggleMenu: () => void;
   toggleHelp: () => void;
   helpVisible: () => boolean;
@@ -57,9 +59,9 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
         return e;
       });
       const data = h('span', { class: 'res data', title: 'Horizon Data — spend on permanent research' });
-      const warp = h('button', { class: 'warp', onclick: () => ctx.send({ t: 'warp' }) });
+      const warp = h('button', { class: 'warp', onclick: hooks.openWarp });
       warp.dataset.title =
-        'Jump to a fresh system. Resets your fleet and bank; keeps research. Grants Horizon Data based on value delivered this run.';
+        'Choose a fresh system to jump to. Resets your fleet and bank; keeps research. Grants Horizon Data based on value delivered this run.';
       const researchBtn = h('button', { text: 'Research', onclick: hooks.toggleResearch });
       const help = h('button', { class: 'icon help-btn', text: '?', onclick: hooks.toggleHelp });
       help.setAttribute('aria-label', 'Help');

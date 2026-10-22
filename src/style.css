@@ -599,6 +599,68 @@ button.buy small {
   margin: 0 0 10px;
 }
 
+/* Warp route picker (#172) */
+.modal .box.routes {
+  width: min(860px, calc(100vw - 24px));
+}
+.route-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.route {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--edge);
+  border-radius: 8px;
+  background: rgba(20, 40, 70, 0.35);
+}
+.route h3 {
+  margin: 0;
+  font-size: 1em;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+}
+.route .badge {
+  font-size: 0.75em;
+  font-weight: 600;
+  padding: 1px 7px;
+  border-radius: 9px;
+  color: #ffe680;
+  border: 1px solid rgba(255, 230, 128, 0.6);
+}
+.route .star-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  vertical-align: middle;
+}
+.route .hazard-low {
+  color: var(--accent);
+}
+.route .hazard-moderate {
+  color: var(--warn);
+}
+.route .hazard-high {
+  color: var(--bad);
+}
+.route-mods {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 0.9em;
+  flex: 1;
+}
+.route .row.end {
+  margin-top: auto;
+}
+
 /* Warp white-out */
 .flash {
   position: fixed;

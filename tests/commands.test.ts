@@ -8,6 +8,7 @@ import { halve, investedCost, scrapValue, warpCost } from '../src/sim/economy';
 import { makeRock } from '../src/sim/generate';
 import { describeModifiers, rollModifiers } from '../src/sim/modifiers';
 import { handlers } from '../src/sim/handlers';
+import { warpRoutes } from '../src/sim/routes';
 import { flagship, makeShip } from '../src/sim/ships';
 import { bankDelta, send } from './helpers';
 
@@ -235,9 +236,29 @@ describe('command handlers', () => {
   it('warp', () => {
     const s = newGame(1);
     s.run.bank.fuel = 1000;
-    send(s, { t: 'warp' });
+    send(s, { t: 'warp', route: 0 });
     expect(s.profile.warps).toBe(1);
     expect(s.run.system.number).toBe(2);
+  });
+  it('warp lands in the system its route previewed', () => {
+    for (let route = 0; route < TUNING.warpRoutes; route++) {
+      const s = newGame(5);
+      s.profile.warps = 2;
+      s.run.bank.fuel = 1000;
+      const preview = warpRoutes(s.profile)[route]!;
+      send(s, { t: 'warp', route });
+      expect(s.run.system).toEqual(preview);
+    }
+  });
+  it('rejects a warp to an unknown route and changes nothing', () => {
+    for (const route of [-1, TUNING.warpRoutes, 0.5, Number.NaN]) {
+      const s = newGame(1);
+      s.run.bank.fuel = 1000;
+      const before = { profile: structuredClone(s.profile), run: structuredClone(s.run) };
+      send(s, { t: 'warp', route });
+      expect(s.out.log.at(-1)).toMatchObject({ level: 'warn', text: 'Unknown warp route.' });
+      expect({ profile: s.profile, run: s.run }).toEqual(before);
+    }
   });
 
   it('warp logs the new system modifiers right after Warp complete', () => {
@@ -247,7 +268,7 @@ describe('command handlers', () => {
     s.profile.warps = 1;
     s.run.bank.fuel = 1000;
     s.out.log.length = 0;
-    send(s, { t: 'warp' });
+    send(s, { t: 'warp', route: 0 });
     const i = s.out.log.findIndex((l) => l.text.startsWith('Warp complete'));
     expect(i).toBeGreaterThanOrEqual(0);
     expect(s.run.system.modifiers.length).toBeGreaterThan(0);
@@ -256,14 +277,14 @@ describe('command handlers', () => {
   it('warp into system 2 logs no modifier line', () => {
     const s = newGame(1);
     s.run.bank.fuel = 1000;
-    send(s, { t: 'warp' });
+    send(s, { t: 'warp', route: 0 });
     expect(s.run.system.number).toBe(2);
     expect(s.out.log.some((l) => l.text.startsWith('System modifiers'))).toBe(false);
   });
   it('rejects a warp funded with ice only', () => {
     const s = newGame(1);
     s.run.bank.ice = 1000;
-    send(s, { t: 'warp' });
+    send(s, { t: 'warp', route: 0 });
     expect(s.profile.warps).toBe(0);
     expect(s.out.log.at(-1)).toMatchObject({
       level: 'warn',
@@ -276,7 +297,7 @@ describe('command handlers', () => {
     s.run.bank.fuel = 1000;
     send(s, { t: 'acceptContract', contractId: s.run.contracts.offers[0]!.id });
     s.out.log.length = 0;
-    send(s, { t: 'warp' });
+    send(s, { t: 'warp', route: 0 });
     expect(s.run.contracts.active).toBeNull();
     expect(s.out.log.some((l) => l.level === 'warn' && l.text.startsWith('Contract left behind'))).toBe(true);
   });
@@ -341,7 +362,7 @@ describe('command handlers', () => {
     send(s, { t: 'refine', recipe: 'alloy', count: 5 });
     s.out.log.length = 0;
 
-    send(s, { t: 'warp' });
+    send(s, { t: 'warp', route: 0 });
 
     expect(s.run.refinery.queue).toHaveLength(0);
     const complete = s.out.log.findIndex((l) => l.text.startsWith('Warp complete'));
@@ -447,7 +468,7 @@ describe('command handlers', () => {
     s.run.bank.fuel = 1000;
     const rock = s.run.rocks.find((r) => r.size === 0)!;
     s.run.automation.outposts.push(makeOutpost(rock));
-    send(s, { t: 'warp' });
+    send(s, { t: 'warp', route: 0 });
     expect(s.run.automation.outposts).toEqual([]);
     expect(s.out.log.some((l) => l.level === 'warn' && l.text.startsWith('Outposts left behind: 1'))).toBe(true);
   });
