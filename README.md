@@ -146,7 +146,7 @@ It goes away after the first warp; × hides it for that save.
     avoidance, drone auto-unload, fragment chaining).
   - _Graphics_: Low/Medium/High quality (resolution cap, star and particle density),
     nebula, anti-aliasing (applies on reload), screen shake, FPS counter, and automatic
-    reduced-motion support from your OS preference (disables shake and softens pulse/flash effects).
+    reduced-motion support from your OS preference (disables shake and softens the beam pulse and warp dive).
   - _Interface_: HUD scale, compact HUD (tighter panels, shorter log), always-on ship bars,
     help box (first minutes only, always or hidden; the top bar's `?` toggles it), event log
     verbosity, camera follow, zoom speed, edge panning. The fleet, contracts, ship and refinery

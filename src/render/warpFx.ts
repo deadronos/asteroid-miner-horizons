@@ -53,14 +53,14 @@ export function warpFrame(t: number, out: WarpFrame = { ...WARP_REST }): WarpFra
 }
 
 /**
- * Scales down warp motion/flash for reduced-motion displays while preserving
- * the timeline and hidden/reveal phases.
+ * Scales down warp motion for reduced-motion displays while preserving the
+ * timeline and hidden/reveal phases. The flash is left at full strength: it is
+ * what masks the system swap, and a visible pop would be the harsher cut.
  */
 export function toneDownWarpMotion(frame: WarpFrame, motion = 1): WarpFrame {
   const k = motion < 0 ? 0 : motion > 1 ? 1 : motion;
   frame.stretch *= 0.55 + 0.45 * k;
   frame.zoom = 1 + (frame.zoom - 1) * (0.5 + 0.5 * k);
-  frame.flash *= 0.25 + 0.75 * k;
   frame.shudder *= k;
   return frame;
 }

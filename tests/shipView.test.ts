@@ -213,10 +213,15 @@ describe('ShipView GPU disposal', () => {
   it('reduces beam pulsing under reduced motion', () => {
     const { state, view, ship } = setupBeam();
     vi.spyOn(Math, 'random').mockReturnValue(0.5);
-    view.update(state, 0.23, DT, 1, false, 1);
-    const full = partsOf(view, ship.id).beam.scale.z;
-    view.update(state, 0.23, DT, 1, false, 0.45);
-    const reduced = partsOf(view, ship.id).beam.scale.z;
-    expect(reduced).toBeLessThan(full);
+    // Peak-to-peak beam width over half a second of frames.
+    const swing = (motion: number): number => {
+      const widths: number[] = [];
+      for (let t = 0; t < 0.5; t += 0.004) {
+        view.update(state, t, DT, 1, false, motion);
+        widths.push(partsOf(view, ship.id).beam.scale.z);
+      }
+      return Math.max(...widths) - Math.min(...widths);
+    };
+    expect(swing(0.45)).toBeLessThan(swing(1) * 0.8);
   });
 });

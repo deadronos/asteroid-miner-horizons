@@ -66,14 +66,15 @@ describe('toneDownWarpMotion', () => {
     expect(toneDownWarpMotion({ ...frame }, 1)).toEqual(frame);
   });
 
-  it('damps stretch, zoom delta, flash and shudder under reduced motion', () => {
+  it('damps stretch, zoom delta and shudder but keeps the swap-masking flash', () => {
     const frame = warpFrame(0.3);
     const reduced = toneDownWarpMotion({ ...frame }, 0.45);
     expect(reduced.hidden).toBe(frame.hidden);
     expect(reduced.stretch).toBeLessThan(frame.stretch);
     expect(Math.abs(reduced.zoom - 1)).toBeLessThan(Math.abs(frame.zoom - 1));
-    expect(reduced.flash).toBeLessThan(frame.flash);
+    expect(reduced.flash).toBe(frame.flash);
     expect(reduced.shudder).toBeLessThan(frame.shudder);
+    expect(toneDownWarpMotion(warpFrame(WARP_OUT), 0).flash).toBe(1);
   });
 
   it('clamps the motion factor to [0, 1]', () => {

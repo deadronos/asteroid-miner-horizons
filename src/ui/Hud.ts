@@ -48,6 +48,8 @@ export class Hud {
   private routes: WarpPanel;
   private log = h('div', { class: 'hud' }) as HTMLElement;
   private tooltip = h('div', { class: 'tooltip' });
+  /** Tooltip size, re-measured only when its text changes so hovering does not force a layout every frame. */
+  private tipSize = { text: '', w: 0, h: 0 };
   private flash = h('div', { class: 'flash' });
   private help: HTMLElement;
   /** Collapsible panel containers and their toggle buttons. */
@@ -318,11 +320,17 @@ export class Hud {
     const text = rock ? rockTooltip(rock, outpost, key ? keyLabel(key) : undefined) : label!;
     setText(this.tooltip, text);
     this.tooltip.style.display = 'block';
+    const size = this.tipSize;
+    if (size.text !== text) {
+      size.text = text;
+      size.w = this.tooltip.offsetWidth;
+      size.h = this.tooltip.offsetHeight;
+    }
     const pos = placeTooltip({
       x,
       y,
-      tooltipW: this.tooltip.offsetWidth,
-      tooltipH: this.tooltip.offsetHeight,
+      tooltipW: size.w,
+      tooltipH: size.h,
       viewportW: window.innerWidth,
       viewportH: window.innerHeight,
     });
