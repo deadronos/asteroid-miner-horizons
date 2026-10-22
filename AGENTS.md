@@ -16,7 +16,7 @@ with Vitest, linted and formatted with the Oxc toolchain.
 | `npm run dev`     | Vite dev server on http://localhost:5173                                        |
 | `npm run build`   | `tsc --noEmit` then a production build into `dist/`                             |
 | `npm run bench`   | Headless tick benchmark: mean/p95 ms per tick                                   |
-| `npm run balance` | Bot plays 10 seeds × 10 warps, rewrites `docs/balance.md`                       |
+| `npm run balance` | Bot plays 30 seeds × 10 warps, rewrites `docs/balance.md`                       |
 
 `npm run check` is exactly what CI runs (plus a build, a warn-only bench and a warn-only
 balance-report freshness check). Green means done.

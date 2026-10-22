@@ -6,7 +6,7 @@
 // checked against the ≥40% target from #46.
 //
 //   npm run balance
-//   npm run balance -- --seeds 10 --warps 10 --out docs/balance.md
+//   npm run balance -- --seeds 30 --warps 10 --out docs/balance.md
 //   npm run balance -- --hazards off --out /tmp/calm.md   (hazards default to 'normal', the game's default)
 //
 // The per-warp table counts seeds whose time more than doubles (> 2× prev),
@@ -426,7 +426,7 @@ async function playAll(seedList: number[], warps: number, hazards: HazardLevel):
 }
 
 if (isMainThread) {
-  const seeds = Number(arg('seeds', '10'));
+  const seeds = Number(arg('seeds', '30'));
   const warps = Number(arg('warps', '10'));
   const seedStart = Number(arg('seed-start', '1000'));
   const out = arg('out', 'docs/balance.md');

@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { botCommands } from '../scripts/bot';
 import { runBot } from '../scripts/harness';
 import { contractReward } from '../src/sim/contracts';
-import { isVariant } from '../src/data/components';
+import { isVariant, type Tier } from '../src/data/components';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
 import { makeOutpost } from '../src/sim/automation';
@@ -313,10 +313,13 @@ describe('balance bot hazard reflexes', () => {
 });
 
 /** Docked at the station with a rich bank, nothing else to decide, and `drones` mining drones. */
-function docked(drones: number): GameState {
+/** Docked with a rich bank and `drones` drones; the flagship's laser is at `laserTier` (default past the laser-first rule). */
+function docked(drones: number, laserTier: Tier = 2): GameState {
   const s = newGame(1000);
   const st = s.run.system.station.pos;
-  flagship(s.run).pos = { ...st };
+  const fs = flagship(s.run);
+  fs.pos = { ...st };
+  fs.slots[0] = { type: 'laser', variant: 'focused', tier: laserTier };
   s.run.contracts.offers = [];
   s.profile.perks.bay = 1;
   for (let i = 0; i < drones; i++) s.run.ships.push(makeShip(s.run, s.profile, 'drone', `Drone-${i}`, st));
@@ -343,6 +346,22 @@ describe('balance bot automation', () => {
 
   it('still buys a second drone before any hauler', () => {
     expect(botCommands(docked(1), { warp: false })).toEqual([{ t: 'buyHull', hullId: 'drone' }]);
+  });
+
+  it('buys a first drone before the tier-2 laser', () => {
+    expect(botCommands(docked(0, 1), { warp: false })).toEqual([{ t: 'buyHull', hullId: 'drone' }]);
+  });
+
+  it('upgrades the flagship laser to tier 2 before a second drone', () => {
+    const s = docked(1, 1);
+    expect(botCommands(s, { warp: false })).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
+  });
+
+  it('saves for the tier-2 laser instead of buying a second drone', () => {
+    const s = docked(1, 1);
+    // Enough for an 80-ore drone above the ice reserve (banked fuel covers it), short of the 150-ore laser.
+    s.run.bank = { ore: 100, ice: 60, crystal: 0, alloy: 0, fuel: 25 };
+    expect(botCommands(s, { warp: false }).some((c) => c.t === 'buyHull')).toBe(false);
   });
 
   it('deploys an outpost on a large rock beside the flagship once it has a hauler', () => {
