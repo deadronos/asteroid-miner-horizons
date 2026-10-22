@@ -8,6 +8,7 @@ const running: PauseInput = {
   pauseUnfocused: true,
   menuOpen: false,
   researchOpen: false,
+  warpOpen: false,
   focused: true,
 };
 
@@ -20,12 +21,14 @@ describe('pauseKind', () => {
     expect(pauseKind({ ...running, manual: true, menuOpen: true, focused: false })).toBe('manual');
   });
 
-  it('reports an open menu or research panel only when pauseInMenus is on', () => {
+  it('reports an open menu, research panel or warp route picker only when pauseInMenus is on', () => {
     expect(pauseKind({ ...running, menuOpen: true })).toBe('menu');
     expect(pauseKind({ ...running, researchOpen: true })).toBe('menu');
+    expect(pauseKind({ ...running, warpOpen: true })).toBe('menu');
     expect(pauseKind({ ...running, menuOpen: true, pauseInMenus: false })).toBeNull();
     // Pins the parens: an open Research panel alone must not bypass the gate.
     expect(pauseKind({ ...running, researchOpen: true, pauseInMenus: false })).toBeNull();
+    expect(pauseKind({ ...running, warpOpen: true, pauseInMenus: false })).toBeNull();
   });
 
   it('reports unfocused only when pauseUnfocused is on', () => {

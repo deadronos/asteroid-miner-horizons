@@ -1,5 +1,5 @@
 // DOM HUD composer: places the panels (top bar, fleet, contracts, selected
-// ship, refinery, research, first-steps goals) and owns the small overlays — event log, help, hover
+// ship, refinery, research, warp routes, first-steps goals) and owns the small overlays — event log, help, hover
 // tooltip, warp flash, pause banner, toasts (achievements, offline summary) and FPS counter. All actions go out as sim
 // Commands via `send`. The side panels sit in two flex columns that share the window height, and each can be
 // collapsed (#161).
@@ -21,6 +21,7 @@ import { createRefineryPanel } from './panels/RefineryPanel';
 import { ResearchPanel } from './panels/ResearchPanel';
 import { createShipPanel } from './panels/ShipPanel';
 import { createTopBar } from './panels/TopBar';
+import { WarpPanel } from './panels/WarpPanel';
 import { rockTooltip } from './rockTooltip';
 
 const MAX_LOG = 60;
@@ -43,6 +44,7 @@ export class Hud {
   private getState: () => GameState;
   private panels: Panel[];
   private research: ResearchPanel;
+  private routes: WarpPanel;
   private log = h('div', { class: 'hud' }) as HTMLElement;
   private tooltip = h('div', { class: 'tooltip' });
   private flash = h('div', { class: 'flash' });
@@ -98,6 +100,7 @@ export class Hud {
     this.panels = [
       createTopBar(topbar, ctx, {
         toggleResearch: () => this.toggleResearch(),
+        openWarp: () => this.toggleWarp(true),
         toggleMenu: () => this.menu.toggle(),
         toggleHelp: () => this.toggleHelp(),
         helpVisible: () => this.helpShown(),
@@ -111,6 +114,7 @@ export class Hud {
     this.log.id = 'log';
     left.append(this.log);
     this.research = new ResearchPanel(mk('research', 'modal hidden'), ctx);
+    this.routes = new WarpPanel(mk('routes', 'modal hidden'), ctx);
 
     this.help = mk('help');
 
@@ -243,7 +247,19 @@ export class Hud {
       this.toggleResearch(false);
       return true;
     }
+    if (this.routes.open) {
+      this.toggleWarp(false);
+      return true;
+    }
     return false;
+  }
+
+  get warpOpen(): boolean {
+    return this.routes.open;
+  }
+
+  toggleWarp(force?: boolean): void {
+    this.routes.toggle(force);
   }
 
   get researchOpen(): boolean {
@@ -261,6 +277,7 @@ export class Hud {
     for (const p of this.panels) p.refresh();
     this.applyCollapse();
     this.research.refresh();
+    this.routes.refresh();
     const banner = hazardBanner(state.run);
     this.hazard.classList.toggle('hidden', !banner);
     this.hazard.classList.toggle('active', state.run.hazards.flare?.phase === 'active');

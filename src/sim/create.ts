@@ -29,9 +29,10 @@ export function newProfile(seed: number): Profile {
   };
 }
 
-export function newRun(profile: Profile): Run {
+/** A fresh run in system `profile.warps + 1`, reached by warp route `route` (0 for a new game). */
+export function newRun(profile: Profile, route = 0): Run {
   const number = profile.warps + 1;
-  const system = generateSystem(profile.seed, number);
+  const system = generateSystem(profile.seed, number, route);
   const kit = profile.perks.kit;
   const run: Run = {
     system,

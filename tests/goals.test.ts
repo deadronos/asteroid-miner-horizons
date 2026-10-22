@@ -114,7 +114,7 @@ describe('first-steps goals', () => {
     expect(goalsVisible(s)).toBe(false);
     const t = fresh();
     t.run.bank.fuel = warpCost(t);
-    send(t, { t: 'warp' });
+    send(t, { t: 'warp', route: 0 });
     expect(goalsVisible(t)).toBe(false);
   });
 

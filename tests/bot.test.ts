@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { botCommands, ICE_RESERVE } from '../scripts/bot';
+import { botCommands, chooseRoute, ICE_RESERVE } from '../scripts/bot';
 import { runBot } from '../scripts/harness';
 import { contractReward } from '../src/sim/contracts';
 import { isVariant, type Tier } from '../src/data/components';
@@ -8,6 +8,7 @@ import { newGame } from '../src/sim/create';
 import { makeOutpost } from '../src/sim/automation';
 import { cometPathEscape, inFlareZone } from '../src/sim/hazards';
 import { warpCost } from '../src/sim/economy';
+import { routeValue, warpRoutes } from '../src/sim/routes';
 import { droneCount, flagship, makeShip, shipStats } from '../src/sim/ships';
 import type { Command } from '../src/sim/commands';
 import type { Contract, GameState, Rock } from '../src/sim/types';
@@ -30,6 +31,29 @@ const rock = (id: number, kind: Rock['kind'], x: number, z: number): Rock => ({
   maxHp: 10,
   units: 10,
   belt: 0,
+});
+
+/** A game in system 4 whose bank can pay for the warp. */
+const ready = (seed: number): GameState => {
+  const s = newGame(seed);
+  s.profile.warps = 3;
+  s.run.bank.fuel = 1e6;
+  return s;
+};
+
+describe('balance bot route choice', () => {
+  it('warps to the route with the most rock value', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const s = ready(seed);
+      const values = warpRoutes(s.profile).map(routeValue);
+      expect(botCommands(s)).toEqual([{ t: 'warp', route: values.indexOf(Math.max(...values)) }]);
+      expect(chooseRoute(s)).toBe(values.indexOf(Math.max(...values)));
+    }
+  });
+
+  it('takes route 0 under the first policy', () => {
+    expect(botCommands(ready(4), { route: 'first' })).toEqual([{ t: 'warp', route: 0 }]);
+  });
 });
 
 describe('balance bot', () => {

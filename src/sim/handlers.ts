@@ -28,6 +28,7 @@ import {
 import { findRock } from './generate';
 import { describeModifiers } from './modifiers';
 import { batchCost, cancelRefine, jobLabel, queueRefine } from './refining';
+import { isRoute } from './routes';
 import { droneCount, findShip, flagship, isAlive, isFlagship, makeShip, shipStats } from './ships';
 import { canMine } from './traits';
 import type { Fitted, GameState, Ship } from './types';
@@ -95,8 +96,9 @@ export const handlers: Handlers = {
     for (const s of run.ships) clampToStats(state, s);
   },
 
-  warp: (state) => {
+  warp: (state, cmd) => {
     const { run, profile, out } = state;
+    if (!isRoute(cmd.route)) return fail(state, 'Unknown warp route.');
     const cost = warpCost(state);
     if (run.bank.fuel < cost) return fail(state, `Warp needs ${cost} fuel in the station bank.`);
     const gain = dataGain(state);
@@ -107,7 +109,7 @@ export const handlers: Handlers = {
     const dropped = run.contracts.active;
     const left = run.refinery.queue;
     const outposts = run.automation.outposts.length;
-    state.run = newRun(profile);
+    state.run = newRun(profile, cmd.route);
     out.fx.push({ t: 'warp' });
     out.log.push({
       level: 'major',

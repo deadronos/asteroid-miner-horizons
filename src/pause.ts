@@ -14,6 +14,7 @@ export interface PauseInput {
   pauseUnfocused: boolean;
   menuOpen: boolean;
   researchOpen: boolean;
+  warpOpen: boolean;
   focused: boolean;
 }
 
@@ -32,12 +33,12 @@ const ALARM_CONTINUOUS: ContinuousPolicy = Object.freeze({ hums: false, alarm: t
 
 /**
  * The highest-priority reason the sim is frozen, or null while it runs: manual,
- * then an open menu (either panel), then an unfocused window, each reason gated
- * by its own setting.
+ * then an open menu (the menu, research or the warp route picker), then an
+ * unfocused window, each reason gated by its own setting.
  */
 export function pauseKind(i: PauseInput): PauseKind | null {
   if (i.manual) return 'manual';
-  if (i.pauseInMenus && (i.menuOpen || i.researchOpen)) return 'menu';
+  if (i.pauseInMenus && (i.menuOpen || i.researchOpen || i.warpOpen)) return 'menu';
   if (i.pauseUnfocused && !i.focused) return 'unfocused';
   return null;
 }

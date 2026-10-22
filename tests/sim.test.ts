@@ -141,7 +141,7 @@ describe('warp / prestige', () => {
     const gain = dataGain(s);
     expect(gain).toBeGreaterThan(0);
     const oldName = s.run.system.name;
-    runFor(s, DT, { commands: [{ t: 'warp' }] });
+    runFor(s, DT, { commands: [{ t: 'warp', route: 0 }] });
     expect(s.profile.warps).toBe(1);
     expect(s.profile.data).toBe(gain);
     expect(s.run.system.number).toBe(2);
@@ -159,7 +159,7 @@ describe('warp / prestige', () => {
 
   it('refuses to warp without fuel', () => {
     const s = newGame(12);
-    runFor(s, DT, { commands: [{ t: 'warp' }] });
+    runFor(s, DT, { commands: [{ t: 'warp', route: 0 }] });
     expect(s.profile.warps).toBe(0);
   });
 

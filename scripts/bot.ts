@@ -2,7 +2,8 @@
 // purely through sim Commands, like the UI would; drones keep their own AI.
 //
 // Each call looks at the state and returns the commands for the next tick:
-//   buy affordable perks → warp once the bank has the fuel → accept a
+//   buy affordable perks → warp once the bank has the fuel (to the route
+//   with the most rock value, lower hazard on a tie) → accept a
 //   serviceable contract → dock when the hold is full → while docked,
 //   repair / buy one thing (after the first drone, the flagship's tier-2
 //   laser before any more hulls) → deploy an outpost on a large rock alongside (once
@@ -36,6 +37,7 @@ import { outpostAt, outpostBlock } from '../src/sim/automation';
 import { findRock } from '../src/sim/generate';
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
+import { richestRoute, warpRoutes } from '../src/sim/routes';
 import { flagship, isAlive, isFlagship, isHauler, isHoldFull, shipStats, type ShipStats } from '../src/sim/ships';
 import { canMine } from '../src/sim/traits';
 import type { GameState, Rock, Run, Ship } from '../src/sim/types';
@@ -66,7 +68,12 @@ const COMET_STEP = 150;
 export interface BotOptions {
   /** Allow the bot to warp (the bench turns this off to stay in one system). */
   warp?: boolean;
+  /** Warp route policy: `best` scores the candidates (the default), `first` always takes route 0. */
+  route?: 'best' | 'first';
 }
+
+/** The warp route the bot takes: the richest candidate (see `richestRoute`). */
+export const chooseRoute = (state: GameState): number => richestRoute(warpRoutes(state.profile));
 
 export function botCommands(state: GameState, opts: BotOptions = {}): Command[] {
   const { run, profile } = state;
@@ -76,7 +83,8 @@ export function botCommands(state: GameState, opts: BotOptions = {}): Command[] 
   if (perk) return [{ t: 'buyPerk', perk }];
 
   const wc = warpCost(state);
-  if (opts.warp !== false && run.bank.fuel >= wc) return [{ t: 'warp' }];
+  if (opts.warp !== false && run.bank.fuel >= wc)
+    return [{ t: 'warp', route: opts.route === 'first' ? 0 : chooseRoute(state) }];
 
   if (!isAlive(fs)) return [];
 
