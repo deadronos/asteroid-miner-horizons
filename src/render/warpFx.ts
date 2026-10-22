@@ -52,6 +52,19 @@ export function warpFrame(t: number, out: WarpFrame = { ...WARP_REST }): WarpFra
   return set(out, v * v * 0.6, 1 + 1.2 * v * v * v, v * v, false, 0);
 }
 
+/**
+ * Scales down warp motion for reduced-motion displays while preserving the
+ * timeline and hidden/reveal phases. The flash is left at full strength: it is
+ * what masks the system swap, and a visible pop would be the harsher cut.
+ */
+export function toneDownWarpMotion(frame: WarpFrame, motion = 1): WarpFrame {
+  const k = motion < 0 ? 0 : motion > 1 ? 1 : motion;
+  frame.stretch *= 0.55 + 0.45 * k;
+  frame.zoom = 1 + (frame.zoom - 1) * (0.5 + 0.5 * k);
+  frame.shudder *= k;
+  return frame;
+}
+
 const STREAKS = 700;
 
 /** Radial streak lines drawn in view space around the camera centre. */

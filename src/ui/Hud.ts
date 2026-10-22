@@ -23,6 +23,7 @@ import { createShipPanel } from './panels/ShipPanel';
 import { createTopBar } from './panels/TopBar';
 import { WarpPanel } from './panels/WarpPanel';
 import { rockTooltip } from './rockTooltip';
+import { placeTooltip } from './tooltipPlacement';
 
 const MAX_LOG = 60;
 /** How long a toast stays up, in ms. */
@@ -47,6 +48,8 @@ export class Hud {
   private routes: WarpPanel;
   private log = h('div', { class: 'hud' }) as HTMLElement;
   private tooltip = h('div', { class: 'tooltip' });
+  /** Tooltip size, re-measured only when its text changes so hovering does not force a layout every frame. */
+  private tipSize = { text: '', w: 0, h: 0 };
   private flash = h('div', { class: 'flash' });
   private help: HTMLElement;
   /** Collapsible panel containers and their toggle buttons. */
@@ -317,6 +320,20 @@ export class Hud {
     const text = rock ? rockTooltip(rock, outpost, key ? keyLabel(key) : undefined) : label!;
     setText(this.tooltip, text);
     this.tooltip.style.display = 'block';
-    this.tooltip.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
+    const size = this.tipSize;
+    if (size.text !== text) {
+      size.text = text;
+      size.w = this.tooltip.offsetWidth;
+      size.h = this.tooltip.offsetHeight;
+    }
+    const pos = placeTooltip({
+      x,
+      y,
+      tooltipW: size.w,
+      tooltipH: size.h,
+      viewportW: window.innerWidth,
+      viewportH: window.innerHeight,
+    });
+    this.tooltip.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
   }
 }
