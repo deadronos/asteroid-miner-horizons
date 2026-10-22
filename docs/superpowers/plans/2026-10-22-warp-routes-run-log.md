@@ -20,7 +20,7 @@ with the targeted test files, and `npm run check` ran green before the balance r
 - Task 3: `tests/pause.test.ts` and the `routeCard` / `warpPanelKey` tests; then in the dev server: the WARP button
   opens three cards, the sim shows _PAUSED: menu open_, and a card's button warped into that card's system and
   closed the picker.
-- Task 4: `tests/bot.test.ts`; `npm run balance` regenerated `docs/balance.md`.
+- Task 4: `tests/bot.test.ts`; `npm run balance` regenerated `docs/balance.md` at `32c9bc6` (both targets PASS; systems 2–10 run about 5–15% faster by median now the bot picks the richest route).
 
 ## Deviations from the plan
 
@@ -32,10 +32,10 @@ with the targeted test files, and `npm run check` ran green before the balance r
 
 | Task                         | Sessions | Rounds | Commit       |
 | ---------------------------- | -------- | ------ | ------------ |
-| 1 Route-seeded generation    | 1        | 1      | single squash |
-| 2 `warp` carries a route     | 1        | 1      | single squash |
-| 3 Route picker               | 1        | 1      | single squash |
-| 4 Bot route choice + balance | 1        | 1      | single squash |
+| 1 Route-seeded generation    | 1        | 1      | `32c9bc6`     |
+| 2 `warp` carries a route     | 1        | 1      | `32c9bc6`     |
+| 3 Route picker               | 1        | 1      | `32c9bc6`     |
+| 4 Bot route choice + balance | 1        | 1      | `32c9bc6`     |
 
 ## Notes
 
