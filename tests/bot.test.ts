@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { botCommands } from '../scripts/bot';
+import { botCommands, ICE_RESERVE } from '../scripts/bot';
 import { runBot } from '../scripts/harness';
 import { contractReward } from '../src/sim/contracts';
 import { isVariant, type Tier } from '../src/data/components';
@@ -7,6 +7,7 @@ import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
 import { makeOutpost } from '../src/sim/automation';
 import { cometPathEscape, inFlareZone } from '../src/sim/hazards';
+import { warpCost } from '../src/sim/economy';
 import { droneCount, flagship, makeShip, shipStats } from '../src/sim/ships';
 import type { Command } from '../src/sim/commands';
 import type { Contract, GameState, Rock } from '../src/sim/types';
@@ -200,12 +201,13 @@ describe('balance bot', () => {
     fs.pos = { ...s.run.system.station.pos };
     s.run.contracts.active = null;
     s.run.contracts.offers = [];
-    // 200 ice cracks down to the 25-fuel reserve (125 ice) and still leaves 75
-    // ice, so the drone is affordable in the same cycle the refine fires.
-    s.run.bank = { ore: 200, ice: 200, crystal: 0, alloy: 0, fuel: 0 };
+    // The ice cracks down to the fuel reserve (5 ice per fuel) and still leaves
+    // 75 ice, so the drone is affordable in the same cycle the refine fires.
+    const reserve = ICE_RESERVE * warpCost(s);
+    s.run.bank = { ore: 200, ice: reserve * 5 + 75, crystal: 0, alloy: 0, fuel: 0 };
 
     expect(botCommands(s, { warp: false })).toEqual([
-      { t: 'refine', recipe: 'fuel', count: 25 },
+      { t: 'refine', recipe: 'fuel', count: reserve },
       { t: 'buyHull', hullId: 'drone' },
     ]);
   });

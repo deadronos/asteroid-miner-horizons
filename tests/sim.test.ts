@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { COMPONENTS, COMPONENT_IDS, type Tier } from '../src/data/components';
 import { RESOURCES, walletTotal, walletValue } from '../src/data/resources';
+import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
 import { newGame } from '../src/sim/create';
 import { dataGain, warpCost } from '../src/sim/economy';
@@ -147,6 +148,13 @@ describe('warp / prestige', () => {
     expect(s.run.system.name).not.toBe(oldName);
     expect(s.run.bank.ore).toBeLessThan(999);
     expect(s.run.runValue).toBe(0);
+  });
+
+  it('prices the first warp on its own knob and later warps on the growth curve', () => {
+    const s = newGame(11);
+    expect(warpCost(s)).toBe(TUNING.firstWarpFuel);
+    s.profile.warps = 1;
+    expect(warpCost(s)).toBe(Math.round(TUNING.warpBaseFuel * TUNING.warpCostGrowth));
   });
 
   it('refuses to warp without fuel', () => {
