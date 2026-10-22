@@ -1,7 +1,14 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../src/sim/create';
 import { queueRefine } from '../src/sim/refining';
-import { HELP_AUTO_HIDE_SEC, autoCollapsed, helpVisible, isCollapsed, toggledCollapse } from '../src/ui/hudLayout';
+import {
+  HELP_AUTO_HIDE_SEC,
+  autoCollapsed,
+  helpVisible,
+  isCollapsed,
+  toggledCollapse,
+  touchControlsShown,
+} from '../src/ui/hudLayout';
 
 describe('help box visibility', () => {
   it('auto shows help only for the first minutes of lifetime play', () => {
@@ -52,5 +59,48 @@ describe('panel collapse', () => {
     toggledCollapse('ship', prefs, s);
     toggledCollapse('contracts', prefs, s);
     expect(prefs).toEqual({ ship: true });
+  });
+});
+
+describe('touch controls visibility', () => {
+  it('auto follows the pointer; on and off ignore it', () => {
+    expect(touchControlsShown('auto', true)).toBe(true);
+    expect(touchControlsShown('auto', false)).toBe(false);
+    expect(touchControlsShown('on', false)).toBe(true);
+    expect(touchControlsShown('off', true)).toBe(false);
+  });
+});
+
+describe('panel collapse on a narrow screen', () => {
+  it('folds every panel by default, while explicit choices still win', () => {
+    const s = newGame(7);
+    for (const id of ['fleet', 'contracts', 'ship', 'refinery'] as const) {
+      expect(autoCollapsed(id, s, true)).toBe(true);
+      expect(isCollapsed(id, {}, s, true)).toBe(true);
+    }
+    expect(isCollapsed('ship', { ship: false }, s, true)).toBe(false);
+  });
+
+  it('opens one panel at a time', () => {
+    const s = newGame(7);
+    const fleet = toggledCollapse('fleet', {}, s, true);
+    expect(fleet).toEqual({ fleet: false });
+    const ship = toggledCollapse('ship', fleet, s, true);
+    expect(ship).toEqual({ ship: false });
+    // Folding the open panel returns to all folded.
+    expect(toggledCollapse('ship', ship, s, true)).toEqual({});
+  });
+
+  it('keeps explicit folded choices when another panel opens', () => {
+    const s = newGame(7);
+    expect(toggledCollapse('ship', { fleet: false, refinery: true }, s, true)).toEqual({
+      refinery: true,
+      ship: false,
+    });
+  });
+
+  it('is not an accordion on a wide screen', () => {
+    const s = newGame(7);
+    expect(toggledCollapse('refinery', { fleet: false }, s)).toEqual({ fleet: false, refinery: false });
   });
 });

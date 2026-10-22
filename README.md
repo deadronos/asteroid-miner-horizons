@@ -55,6 +55,12 @@ Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 
 All keys can be rebound in ⚙ → Controls.
 
+**On a phone or tablet** a tap is a click and a long-press is the right-click order; drag pans,
+pinch zooms and two fingers pan. A thrust stick and buttons for Map, Follow, next ship, Research,
+Pause and Outpost (arm it, then tap an asteroid) appear on touch screens; ⚙ → Interface → Touch
+shows or hides them anywhere. On a phone-sized screen the side panels start folded and open one at
+a time.
+
 **The loop:** mine → collect debris (fly close; the tractor pulls it in) → dock to unload
 → spend the bank on components and ships → automate with drones → refine ice into fuel → warp.
 
@@ -200,4 +206,3 @@ Each of these is tracked as an open issue; the umbrella for game scope is
 - Contract variety and faction reputation — [#173](https://github.com/deadronos/asteroid-miner-horizons/issues/173)
 - An endgame: the Horizon Gate and New Game+ — [#177](https://github.com/deadronos/asteroid-miner-horizons/issues/177)
 - Exploration: sensor ping, rich deposits and derelicts — [#38](https://github.com/deadronos/asteroid-miner-horizons/issues/38)
-- Touch and pinch controls — [#194](https://github.com/deadronos/asteroid-miner-horizons/issues/194)

@@ -1149,3 +1149,181 @@ button.bind.capturing {
 .setting.locked .lbl > span {
   color: var(--dim);
 }
+
+/* Touch controls (#194): a thrust stick bottom left and an action strip bottom right, inside the safe area. While
+   they show, everything anchored to the bottom edge moves up above their band. */
+button {
+  touch-action: manipulation;
+}
+.touch {
+  --touch-band: 148px;
+}
+.touch-ctl {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 12px;
+  padding: 0 max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom))
+    max(12px, env(safe-area-inset-left));
+  pointer-events: none;
+  z-index: 5;
+}
+.touch-ctl > * {
+  pointer-events: auto;
+}
+.stick {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 124px;
+  height: 124px;
+  border-radius: 50%;
+  border: 1px solid var(--edge);
+  background: radial-gradient(circle, rgba(110, 200, 255, 0.1), rgba(7, 14, 28, 0.6) 70%);
+  touch-action: none;
+}
+.stick .knob {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  border: 1px solid var(--accent);
+  background: rgba(89, 255, 160, 0.22);
+  pointer-events: none;
+}
+.touch-actions {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(58px, 72px));
+  gap: 6px;
+}
+.touch-actions button {
+  height: 42px;
+  padding: 0 4px;
+  font-size: 12px;
+  background: var(--panel);
+  backdrop-filter: blur(6px);
+}
+.touch-actions button.on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.touch .hud-col {
+  bottom: var(--touch-band);
+}
+.touch #help {
+  bottom: var(--touch-band);
+}
+.touch .paused.gfx-reset.actionable {
+  bottom: var(--touch-band);
+}
+
+/* Phone layout (#194), the same query as Hud's NARROW_QUERY. The top bar wraps rather than scrolls, the columns
+   start below it, panels start folded and open one at a time (Hud), a folded panel is just its heading and an
+   open one covers at most the screen width. First steps, the hazard banner and toasts sit below the folded
+   headings; the pause banner sits above the log. */
+@media (max-width: 640px), (max-height: 500px) {
+  #topbar {
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 4px 10px;
+    width: max-content;
+    padding: 6px 10px;
+    white-space: normal;
+    overflow-x: visible;
+  }
+  .hud-col {
+    top: calc(var(--topbar-bottom, 54px) + 8px);
+  }
+  /* The log spans the screen width at the bottom of the left column, so the right column stops above it. */
+  .hud-col.right {
+    bottom: calc(var(--touch-band, 10px) + 80px);
+  }
+  .hud-col > .hud {
+    max-width: calc(100vw - 20px);
+  }
+  /* #app outranks the per-panel width and min-height rules, which use ids. */
+  #app .hud-col > .hud.collapsed {
+    width: auto;
+    min-height: 0;
+    min-width: 0;
+    max-width: calc(50vw - 15px);
+  }
+  #app .hud-col > .hud.collapsible:not(.collapsed) {
+    width: min(340px, calc(100vw - 20px));
+    z-index: 2;
+  }
+  .collapsed > .body > h3:first-child {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  #contracts,
+  #refinery {
+    margin-top: 0;
+  }
+  #log {
+    margin-top: auto;
+    width: calc(100vw - 20px);
+    max-height: 4.4em;
+    font-size: 11.5px;
+  }
+  #goals {
+    top: calc(var(--topbar-bottom, 54px) + 96px);
+    width: min(320px, calc(100vw - 20px));
+    min-width: 0;
+  }
+  .paused {
+    top: auto;
+    bottom: calc(var(--touch-band, 10px) + 5.5em + 16px);
+    text-align: center;
+  }
+  .hazard {
+    top: calc(var(--topbar-bottom, 54px) + 96px);
+    white-space: normal;
+    max-width: calc(100vw - 20px);
+  }
+  .toasts {
+    top: calc(var(--topbar-bottom, 54px) + 96px);
+    width: calc(100vw - 20px);
+  }
+  .modal .box {
+    max-height: calc(100dvh - 24px);
+    padding: 14px;
+  }
+  .tabs {
+    flex-wrap: wrap;
+  }
+}
+/* A phone on its side has little height: a smaller stick and strip, a two-line log beside first steps, which
+   moves up between the folded headings, and a right column that runs down to the strip. */
+@media (max-height: 500px) {
+  .touch {
+    --touch-band: 112px;
+  }
+  .stick {
+    width: 96px;
+    height: 96px;
+  }
+  .stick .knob {
+    width: 40px;
+    height: 40px;
+  }
+  .touch-actions button {
+    height: 34px;
+  }
+  #log {
+    width: min(360px, 44vw);
+    max-height: 3em;
+  }
+  .hud-col.right {
+    bottom: var(--touch-band, 10px);
+  }
+  #goals {
+    top: calc(var(--topbar-bottom, 54px) + 8px);
+    width: min(300px, 100vw - 360px);
+  }
+}

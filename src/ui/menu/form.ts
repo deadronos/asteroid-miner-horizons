@@ -13,6 +13,7 @@ export type SelectKey =
   | 'shake'
   | 'logVerbosity'
   | 'help'
+  | 'touchControls'
   | 'hazards'
   | 'autoRepairAt'
   | 'autoReserve';

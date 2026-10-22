@@ -1,6 +1,9 @@
 // Keyboard + pointer input. Translates raw events into sim Commands and view
 // changes. Picking is done in world space against sim data (no raycasting).
+// Touch (#194): a tap is the left click, a long-press the right click, and two
+// fingers pinch-zoom and pan; mouse and pen keep the desktop behaviour.
 
+import { type Point, pinchStep } from './core/gesture';
 import { dist, type Vec2 } from './core/vec';
 import { HULLS } from './data/hulls';
 import type { Command } from './sim/commands';
@@ -11,10 +14,29 @@ import type { HoverTarget, Renderer } from './render/Renderer';
 import type { Hud } from './ui/Hud';
 import { actionFor, type KeyAction, type SettingsStore } from './settings';
 
+/** How long a still finger must stay down to count as a long-press (the right click), in ms. */
+const LONG_PRESS_MS = 450;
+/** How far a press may wander and still be a click or tap, in pixels: mouse, then touch. */
+const CLICK_SLOP = 6;
+const TAP_SLOP = 10;
+/** How far a pinch's midpoint must get from where it started before it also pans (dropping camera follow), in px. */
+const PINCH_PAN_SLOP = 12;
+/** How long a tap keeps the hover tooltip up for what was tapped, in ms. */
+const TAP_TIP_MS = 2500;
+
 export class Input {
   private held = new Set<string>();
-  private drag: { x: number; y: number; button: number; moved: boolean } | null = null;
+  private drag: { x: number; y: number; button: number; moved: boolean; touch: boolean; long: boolean } | null = null;
   private mouse = { x: -1, y: -1, inside: false };
+  /** Every pointer currently down on the canvas, by `pointerId`. */
+  private pointers = new Map<number, Point>();
+  /** Set when a second finger lands; the fingers left down do nothing until all are lifted. */
+  private multi = false;
+  /** The current pinch's net midpoint movement, until it passes the pan slop; null once the pinch pans. */
+  private pinchDrift: Point | null = null;
+  private longPress: ReturnType<typeof setTimeout> | undefined;
+  /** While a tap's tooltip shows: when it hides, from `performance.now()`. 0 otherwise. */
+  private tipUntil = 0;
   /** Last click-to-move destination, shown as a marker until reached. */
   moveMark: Vec2 | null = null;
 
@@ -34,28 +56,67 @@ export class Input {
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     canvas.addEventListener('pointerdown', (e) => {
       canvas.setPointerCapture(e.pointerId);
-      this.drag = { x: e.clientX, y: e.clientY, button: e.button, moved: false };
+      this.pointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      const touch = e.pointerType === 'touch';
+      if (touch) this.hideTapTip();
+      if (this.pointers.size > 1) {
+        // A second finger turns the gesture into a pinch: no tap, long-press or one-finger pan.
+        this.multi = true;
+        this.drag = null;
+        this.pinchDrift = { x: 0, y: 0 };
+        clearTimeout(this.longPress);
+        return;
+      }
+      this.drag = { x: e.clientX, y: e.clientY, button: e.button, moved: false, touch, long: false };
+      if (touch) this.longPress = setTimeout(() => this.onLongPress(), LONG_PRESS_MS);
     });
     canvas.addEventListener('pointermove', (e) => {
-      this.mouse = { x: e.clientX, y: e.clientY, inside: true };
+      if (e.pointerType !== 'touch') this.mouse = { x: e.clientX, y: e.clientY, inside: true };
+      const prev = this.pointers.get(e.pointerId);
+      const next = { x: e.clientX, y: e.clientY };
+      if (prev) this.pointers.set(e.pointerId, next);
+      if (prev && this.pointers.size === 2) {
+        const other = [...this.pointers].find(([id]) => id !== e.pointerId)![1];
+        const step = pinchStep(prev, other, next, other);
+        // Fingers report one at a time, so the midpoint jitters during a plain pinch; only net drift pans.
+        const drift = this.pinchDrift;
+        if (drift) {
+          drift.x += step.dx;
+          drift.y += step.dy;
+          if (Math.hypot(drift.x, drift.y) > PINCH_PAN_SLOP) this.pinchDrift = null;
+        } else renderer.panPixels(step.dx, step.dy);
+        if (step.zoom !== 1) renderer.zoomAt(step.zoom, step.cx, step.cy);
+        return;
+      }
       const d = this.drag;
       if (!d) return;
       const dx = e.clientX - d.x;
       const dy = e.clientY - d.y;
-      if (!d.moved && Math.hypot(dx, dy) < 6) return;
-      // Right/middle drag always pans; left drag pans too once it moves.
+      if (!d.moved && Math.hypot(dx, dy) < (d.touch ? TAP_SLOP : CLICK_SLOP)) return;
+      // Right/middle drag always pans; left drag (or one finger) pans too once it moves.
       d.moved = true;
+      clearTimeout(this.longPress);
       renderer.panPixels(dx, dy);
       d.x = e.clientX;
       d.y = e.clientY;
     });
-    canvas.addEventListener('pointerup', (e) => {
+    const release = (e: PointerEvent, cancelled: boolean): void => {
+      this.pointers.delete(e.pointerId);
+      if (this.pointers.size === 0) this.multi = false;
+      clearTimeout(this.longPress);
       const d = this.drag;
       this.drag = null;
-      if (d && !d.moved && d.button === 0) this.click(e.clientX, e.clientY);
-      if (d && !d.moved && d.button === 2) this.click(e.clientX, e.clientY, true);
+      if (cancelled || !d || d.moved || d.long) return;
+      if (d.touch) this.tap(e.clientX, e.clientY);
+      else if (d.button === 0) this.click(e.clientX, e.clientY);
+      else if (d.button === 2) this.click(e.clientX, e.clientY, true);
+    };
+    canvas.addEventListener('pointerup', (e) => release(e, false));
+    canvas.addEventListener('pointercancel', (e) => release(e, true));
+    // A lifted finger also leaves the canvas; only the mouse leaving ends the hover.
+    canvas.addEventListener('pointerleave', (e) => {
+      if (e.pointerType !== 'touch') this.mouse.inside = false;
     });
-    canvas.addEventListener('pointerleave', () => (this.mouse.inside = false));
     canvas.addEventListener(
       'wheel',
       (e) => {
@@ -64,6 +125,7 @@ export class Input {
       },
       { passive: false },
     );
+    hud.touch.onAction = (action) => this.runAction(action);
   }
 
   private selected() {
@@ -93,12 +155,25 @@ export class Input {
     if (action || e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
     this.held.add(e.code);
     if (e.repeat) return;
+    if (action) {
+      this.runAction(action, e.shiftKey);
+      return;
+    }
+    if (/^Digit[1-9]$/.test(e.code)) {
+      const ship = this.getState().run.ships[Number(e.code.slice(5)) - 1];
+      if (ship) this.send({ t: 'select', shipId: ship.id });
+      this.autoFollow();
+    }
+  }
+
+  /** Runs a one-shot action: from its key, or from the touch strip's button. Thrust actions are held, not run. */
+  runAction(action: KeyAction, reverse = false): void {
     const s = this.getState();
     switch (action) {
       case 'cycleShip': {
         const ships = s.run.ships;
         const i = ships.findIndex((x) => x.id === s.run.selectedId);
-        const next = ships[(i + (e.shiftKey ? -1 : 1) + ships.length) % ships.length];
+        const next = ships[(i + (reverse ? -1 : 1) + ships.length) % ships.length];
         if (next) this.send({ t: 'select', shipId: next.id });
         this.autoFollow();
         return;
@@ -125,31 +200,31 @@ export class Input {
         return;
       }
     }
-    if (/^Digit[1-9]$/.test(e.code)) {
-      const ship = s.run.ships[Number(e.code.slice(5)) - 1];
-      if (ship) this.send({ t: 'select', shipId: ship.id });
-      this.autoFollow();
-    }
   }
 
-  /** Thrust vector for the selected ship from the bound keys (screen up = −z). */
+  /**
+   * Thrust vector for the selected ship (screen up = −z): full thrust from the bound keys while any is held,
+   * else the touch stick's analogue tilt.
+   */
   thrust(): Vec2 {
     if (this.hud.menu.open) return { x: 0, z: 0 };
     const keys = this.settings.value.keys;
     const down = (a: KeyAction): boolean => keys[a].some((c) => c != null && this.held.has(c));
     const x = (down('right') ? 1 : 0) - (down('left') ? 1 : 0);
     const z = (down('down') ? 1 : 0) - (down('up') ? 1 : 0);
-    if (x || z) {
+    const l = Math.hypot(x, z);
+    const out = l ? { x: x / l, z: z / l } : this.hud.touch.thrust;
+    if (out.x || out.z) {
       this.moveMark = null;
       this.autoFollow();
     }
-    const l = Math.hypot(x, z) || 1;
-    return { x: x / l, z: z / l };
+    return out;
   }
 
   /** Pans when the cursor rests near a screen edge (if enabled). Returns whether it panned. */
   edgePan(dt: number): boolean {
-    if (!this.settings.value.edgePan || !this.mouse.inside || this.drag || this.hud.menu.open) return false;
+    if (!this.settings.value.edgePan || !this.mouse.inside || this.tipUntil || this.drag || this.hud.menu.open)
+      return false;
     const r = this.renderer.canvas.getBoundingClientRect();
     const m = 14;
     const speed = 900 * dt;
@@ -181,6 +256,34 @@ export class Input {
     return best;
   }
 
+  /** A still finger held down: the right click at the press point, unless the finger moved or another landed. */
+  private onLongPress(): void {
+    const d = this.drag;
+    if (!d || d.moved) return;
+    d.long = true;
+    navigator.vibrate?.(12);
+    this.click(d.x, d.y, true);
+  }
+
+  /** A tap: deploys an armed outpost, else the left click, and shows the tooltip for what was tapped. */
+  private tap(clientX: number, clientY: number): void {
+    if (this.hud.touch.outpostArmed) {
+      this.hud.touch.setArmed(false);
+      const hit = this.pick(clientX, clientY);
+      if (hit?.kind === 'rock') this.send({ t: 'deployOutpost', rockId: hit.rock.id });
+      return;
+    }
+    this.click(clientX, clientY);
+    this.mouse = { x: clientX, y: clientY, inside: true };
+    this.tipUntil = performance.now() + TAP_TIP_MS;
+  }
+
+  private hideTapTip(): void {
+    if (!this.tipUntil) return;
+    this.tipUntil = 0;
+    this.mouse.inside = false;
+  }
+
   /** Left click: select / mine / dock / move. Right click: same but never changes selection. */
   private click(clientX: number, clientY: number, keepSelection = false): void {
     const sel = this.selected();
@@ -206,6 +309,7 @@ export class Input {
 
   /** Per-frame hover update (ring + tooltip). */
   updateHover(): void {
+    if (this.tipUntil && performance.now() > this.tipUntil) this.hideTapTip();
     const sel = this.selected();
     if (this.moveMark && (!sel || sel.order?.kind !== 'move')) this.moveMark = null;
     if (!this.mouse.inside || this.drag?.moved) {
