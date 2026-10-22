@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { LIMITER, REVERB_DECAY, REVERB_SECONDS, REVERB_SEND, reverbImpulse } from '../src/audio/mix';
+import {
+  DUCK,
+  Ducker,
+  duckEnvelope,
+  LIMITER,
+  REVERB_DECAY,
+  REVERB_SECONDS,
+  REVERB_SEND,
+  reverbImpulse,
+} from '../src/audio/mix';
 
 /** Deterministic LCG so impulse assertions replay exactly. */
 const seeded = (seed: number) => () => {
@@ -60,5 +69,73 @@ describe('generated reverb impulse', () => {
 
   it('uses the 1.8 s default length', () => {
     expect(reverbImpulse(1000)[0]).toHaveLength(Math.floor(1000 * REVERB_SECONDS));
+  });
+});
+
+describe('music duck', () => {
+  const shape = { depth: 0.5, attack: 0.1, hold: 0.2, release: 0.4 };
+
+  it('ramps down, holds, then ramps back to nothing', () => {
+    expect(duckEnvelope(shape, -0.1)).toBe(0);
+    expect(duckEnvelope(shape, 0)).toBe(0);
+    expect(duckEnvelope(shape, 0.05)).toBeCloseTo(0.5);
+    expect(duckEnvelope(shape, 0.1)).toBe(1);
+    expect(duckEnvelope(shape, 0.25)).toBe(1);
+    expect(duckEnvelope(shape, 0.5)).toBeCloseTo(0.5);
+    expect(duckEnvelope(shape, 0.7)).toBeCloseTo(0);
+    expect(duckEnvelope(shape, 5)).toBe(0);
+  });
+
+  it('ducks under the alarm and big impacts, never under pickups or cracks', () => {
+    expect(new Set(Object.keys(DUCK))).toEqual(new Set(['alarm', 'explode', 'loss', 'warp']));
+    for (const s of Object.values(DUCK)) {
+      expect(s.depth).toBeGreaterThan(0);
+      expect(s.depth).toBeLessThan(1);
+    }
+    const d = new Ducker();
+    for (let i = 0; i < 20; i++) {
+      d.trigger('collect', 1, i * 0.07);
+      d.trigger('crack', 1, i * 0.07);
+      expect(d.level(i * 0.07 + 0.01)).toBe(1);
+    }
+  });
+
+  it('dips the music for an explosion, scaled by its gain, then fully recovers', () => {
+    const near = new Ducker();
+    const far = new Ducker();
+    near.trigger('explode', 1, 10);
+    far.trigger('explode', 0.3, 10);
+    const s = DUCK.explode!;
+    const held = 10 + s.attack + s.hold / 2;
+    expect(near.level(held)).toBeCloseTo(1 - s.depth);
+    expect(far.level(held)).toBeCloseTo(1 - 0.3 * s.depth);
+    expect(near.level(10 + s.attack + s.hold + s.release)).toBe(1);
+  });
+
+  it('holds steady under a repeating alarm instead of pumping', () => {
+    const d = new Ducker();
+    const s = DUCK.alarm!;
+    // The engine repeats the alarm every 1.1 s; sample every frame across several repeats.
+    const levels: number[] = [];
+    for (let t = 0; t < 5; t += 1 / 60) {
+      if (Math.abs(t / 1.1 - Math.round(t / 1.1)) < 1 / 120) d.trigger('alarm', 0.85, t);
+      if (t > 1.1) levels.push(d.level(t));
+      else d.level(t);
+    }
+    const floor = 1 - 0.85 * s.depth;
+    // Between repeats the music may recover a little, but never back to full.
+    expect(Math.min(...levels)).toBeCloseTo(floor);
+    expect(Math.max(...levels)).toBeLessThan(1);
+  });
+
+  it('takes the deepest overlapping dip rather than restarting or stacking', () => {
+    const d = new Ducker();
+    const s = DUCK.explode!;
+    d.trigger('explode', 1, 0);
+    expect(d.level(s.attack)).toBeCloseTo(1 - s.depth);
+    // A second boom mid-hold starts its own attack from zero; the first keeps the music down.
+    d.trigger('explode', 1, s.attack + 0.01);
+    expect(d.level(s.attack + 0.02)).toBeCloseTo(1 - s.depth);
+    expect(d.level(s.attack + 0.02)).toBeGreaterThanOrEqual(1 - s.depth);
   });
 });
