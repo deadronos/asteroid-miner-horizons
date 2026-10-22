@@ -104,7 +104,7 @@ const selectGeo = flat(new THREE.RingGeometry(0.92, 1, 48));
 // Never written after creation, so every ship shares them and none disposes them.
 const barBgMat = new THREE.MeshBasicMaterial({ color: 0x0b1424, transparent: true, opacity: 0.8, depthWrite: false });
 const cargoBarMat = new THREE.MeshBasicMaterial({ color: 0xffa040, depthWrite: false });
-const beamGlowMat = additive(0xff3a2a, 0.35);
+const beamGlowMat = additive(0xff5e30, 0.42);
 
 export class ShipView {
   readonly group = new THREE.Group();
@@ -116,10 +116,10 @@ export class ShipView {
    * `update` writes it once per frame instead. Never disposed, like `hullMats`.
    */
   private flameMat = additive(0xff8a3a, 0.9);
-  private beamMat = additive(0xff6a4a, 0.95);
+  private beamMat = additive(0xff905c, 1);
   private tipMat = new THREE.SpriteMaterial({
     map: glowTexture,
-    color: 0xffb070,
+    color: 0xffc28e,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
@@ -245,19 +245,21 @@ export class ShipView {
     dt: number,
     wpp: number,
     alwaysBars: boolean,
+    motion = 1,
   ): { x: number; z: number; ship: Ship }[] {
     const { run, profile } = state;
     const seen = this.seen;
     seen.clear();
     const hits: { x: number; z: number; ship: Ship }[] = [];
+    const motionK = Math.min(1, Math.max(0.35, motion));
     // Beam targets are looked up through a reused map, filled only on frames
     // where some ship is actually firing.
     const rockById = this.rockById;
     rockById.clear();
     if (run.ships.some((s) => s.beamOn && s.beamTargetId != null)) for (const r of run.rocks) rockById.set(r.id, r);
     this.flameMat.color.setHex(0xff8a3a).multiplyScalar(this.glow);
-    this.beamMat.color.setHex(0xff6a4a).multiplyScalar(this.glow);
-    this.tipMat.color.setHex(0xffb070).multiplyScalar(this.glow);
+    this.beamMat.color.setHex(0xff905c).multiplyScalar(this.glow);
+    this.tipMat.color.setHex(0xffc28e).multiplyScalar(this.glow);
 
     for (const ship of run.ships) {
       seen.add(ship.id);
@@ -319,7 +321,8 @@ export class ShipView {
       const showBars = alwaysBars || selected || hullF < 0.999 || cargoF > 0.01;
       v.barBg.visible = v.hpBar.visible = v.cargoBar.visible = showBars;
 
-      // Mining beam: a pulsing core quad + wide glow quad from ship to rock.
+      // Mining beam: bright core + wide glow from ship to rock, with subtle
+      // noise so it reads as energetic without overpowering the scene.
       const rock = ship.beamOn && ship.beamTargetId != null ? rockById.get(ship.beamTargetId) : undefined;
       if (rock) {
         const dx = rock.pos.x - ship.pos.x;
@@ -331,15 +334,20 @@ export class ShipView {
         const mx = (ship.pos.x + tx) / 2;
         const mz = (ship.pos.z + tz) / 2;
         const ang = -Math.atan2(dz, dx);
-        const pulse = 1 + Math.sin(time * 40 + ship.id) * 0.25;
+        const pulse = 1 + Math.sin(time * 40 + ship.id) * (0.12 + 0.16 * motionK);
+        const noise =
+          1 +
+          (Math.sin(time * 73 + ship.id * 2.7) * 0.55 + Math.sin(time * 121 + ship.id * 5.1) * 0.45) *
+            (0.05 + 0.05 * motionK);
         v.beam.position.set(mx, 18, mz);
         v.beam.rotation.y = ang;
-        v.beam.scale.set(L, 1, Math.max(1.5, 2.2 * wpp) * pulse);
+        v.beam.scale.set(L, 1, Math.max(2, 2.9 * wpp) * pulse * noise);
         v.beamGlow.position.set(mx, 17, mz);
         v.beamGlow.rotation.y = ang;
-        v.beamGlow.scale.set(L, 1, Math.max(5, 8 * wpp) * pulse);
+        v.beamGlow.scale.set(L, 1, Math.max(6.2, 10 * wpp) * (0.9 + 0.14 * pulse) * (0.92 + 0.08 * noise));
         v.tip.position.set(tx, 22, tz);
-        v.tip.scale.setScalar(Math.max(18, 26 * wpp) * (0.8 + Math.random() * 0.4));
+        const tipPulse = 1 + Math.sin(time * 62 + ship.id * 1.7) * (0.06 + 0.08 * motionK);
+        v.tip.scale.setScalar(Math.max(21, 32 * wpp) * tipPulse * (0.9 + Math.random() * 0.2 * motionK));
         v.beam.visible = v.beamGlow.visible = v.tip.visible = true;
         hits.push({ x: tx, z: tz, ship });
       } else {

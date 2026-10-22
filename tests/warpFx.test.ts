@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { WARP_OUT, WARP_REST, WARP_TOTAL, WarpStreaks, warpFrame } from '../src/render/warpFx';
+import { WARP_OUT, WARP_REST, WARP_TOTAL, WarpStreaks, toneDownWarpMotion, warpFrame } from '../src/render/warpFx';
 
 describe('warp transition timeline', () => {
   it('is at rest before it starts and once it ends', () => {
@@ -57,5 +57,28 @@ describe('warp streaks', () => {
     const short = span(0.2);
     expect(s.lines.visible).toBe(true);
     expect(span(1)).toBeGreaterThan(short);
+  });
+});
+
+describe('toneDownWarpMotion', () => {
+  it('keeps full motion untouched at 1', () => {
+    const frame = warpFrame(0.3);
+    expect(toneDownWarpMotion({ ...frame }, 1)).toEqual(frame);
+  });
+
+  it('damps stretch, zoom delta, flash and shudder under reduced motion', () => {
+    const frame = warpFrame(0.3);
+    const reduced = toneDownWarpMotion({ ...frame }, 0.45);
+    expect(reduced.hidden).toBe(frame.hidden);
+    expect(reduced.stretch).toBeLessThan(frame.stretch);
+    expect(Math.abs(reduced.zoom - 1)).toBeLessThan(Math.abs(frame.zoom - 1));
+    expect(reduced.flash).toBeLessThan(frame.flash);
+    expect(reduced.shudder).toBeLessThan(frame.shudder);
+  });
+
+  it('clamps the motion factor to [0, 1]', () => {
+    const frame = warpFrame(0.3);
+    expect(toneDownWarpMotion({ ...frame }, -5).shudder).toBe(0);
+    expect(toneDownWarpMotion({ ...frame }, 5)).toEqual(frame);
   });
 });

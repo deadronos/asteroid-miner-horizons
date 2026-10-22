@@ -2,7 +2,7 @@
 
 import { MODIFIERS } from '../../data/modifiers';
 import { PERK_IDS } from '../../data/perks';
-import { RESOURCES, RESOURCE_INFO } from '../../data/resources';
+import { RESOURCES, RESOURCE_INFO, type Resource } from '../../data/resources';
 import { dataGain, perkCost, warpCost } from '../../sim/economy';
 import { keyLabel } from '../../settings';
 import { describeModifier } from '../../sim/modifiers';
@@ -21,6 +21,17 @@ export interface TopBarHooks {
 }
 
 const fmt = (n: number): string => (n >= 10000 ? `${(n / 1000).toFixed(1)}k` : `${Math.floor(n)}`);
+const RESOURCE_TAG: Record<Resource, string> = {
+  ore: 'OR',
+  ice: 'IC',
+  crystal: 'CR',
+  alloy: 'AL',
+  fuel: 'FU',
+};
+
+/** Short, color-independent top-bar readout for one banked resource. */
+export const resourceReadout = (resource: Resource, amount: number): string =>
+  `${RESOURCE_TAG[resource]} ${RESOURCE_INFO[resource].icon} ${fmt(amount)}`;
 
 /** Panel key: rebuilds on warp and when a loaded slot has the same system number but different modifiers. */
 export function topBarKey(state: GameState): string {
@@ -54,7 +65,7 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
           // Keep crystal/alloy on screen while a job of that recipe is queued; fuel is always shown.
           const queued = s.run.refinery.queue.some((j) => j.recipe === r);
           e.style.display = late && b[r] <= 0 && !queued && s.run.system.number < 2 ? 'none' : '';
-          setText(e, `${RESOURCE_INFO[r].icon} ${fmt(b[r])}`);
+          setText(e, resourceReadout(r, b[r]));
         });
         return e;
       });

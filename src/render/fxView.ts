@@ -91,7 +91,10 @@ export class FxView {
     state.out.fx.length = 0;
 
     for (const h of hits) {
-      if (Math.random() < dt * 40) P.emit(h.x, h.z, col.setHex(0xffc080), 1, 90, 0.35);
+      if (Math.random() < dt * 55) {
+        P.emit(h.x, h.z, col.setHex(0xfff2d8), 1.8, 125, 0.24, { drag: 3.2 });
+        P.emit(h.x, h.z, col.setHex(0xff9f5d), 1.2, 90, 0.36, { drag: 2.6 });
+      }
     }
     // Comets trail a pale tail opposite their velocity.
     for (const r of state.run.rocks) {

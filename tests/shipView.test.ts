@@ -77,6 +77,19 @@ function setup(): { state: GameState; view: ShipView; a: Ship; b: Ship } {
   return { state, view, a, b };
 }
 
+/** A game where one ship is actively mining, so beam visuals are present. */
+function setupBeam(): { state: GameState; view: ShipView; ship: Ship } {
+  const state = newGame(2);
+  const ship = state.run.ships[0]!;
+  const rock = state.run.rocks[0]!;
+  ship.pos = { x: rock.pos.x - 120, z: rock.pos.z };
+  ship.beamOn = true;
+  ship.beamTargetId = rock.id;
+  const view = new ShipView();
+  view.update(state, 0, DT, 1, false);
+  return { state, view, ship };
+}
+
 describe('ShipView GPU disposal', () => {
   it('disposes the per-ship materials of a removed ship once and nothing shared', () => {
     const { state, view, a, b } = setup();
@@ -193,7 +206,17 @@ describe('ShipView GPU disposal', () => {
     view.glow = 2;
     view.update(state, 0, DT, 1, false);
     expect(colorOf(p.flame).equals(new THREE.Color(0xff8a3a).multiplyScalar(2))).toBe(true);
-    expect(colorOf(p.beam).equals(new THREE.Color(0xff6a4a).multiplyScalar(2))).toBe(true);
-    expect(colorOf(p.tip).equals(new THREE.Color(0xffb070).multiplyScalar(2))).toBe(true);
+    expect(colorOf(p.beam).equals(new THREE.Color(0xff905c).multiplyScalar(2))).toBe(true);
+    expect(colorOf(p.tip).equals(new THREE.Color(0xffc28e).multiplyScalar(2))).toBe(true);
+  });
+
+  it('reduces beam pulsing under reduced motion', () => {
+    const { state, view, ship } = setupBeam();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    view.update(state, 0.23, DT, 1, false, 1);
+    const full = partsOf(view, ship.id).beam.scale.z;
+    view.update(state, 0.23, DT, 1, false, 0.45);
+    const reduced = partsOf(view, ship.id).beam.scale.z;
+    expect(reduced).toBeLessThan(full);
   });
 });

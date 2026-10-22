@@ -32,7 +32,7 @@ import { ShipView } from './shipView';
 import { SystemView } from './systemView';
 import { additive, flat } from './util';
 import { withVisible } from './warmup';
-import { WARP_REST, WARP_TOTAL, type WarpFrame, WarpStreaks, warpFrame } from './warpFx';
+import { WARP_REST, WARP_TOTAL, type WarpFrame, WarpStreaks, toneDownWarpMotion, warpFrame } from './warpFx';
 
 /**
  * Final composer pass: presents the sRGB-encoded buffer as-is (no second
@@ -103,6 +103,7 @@ export class Renderer {
   hover: HoverTarget = null;
   private shakeScale = 1;
   private alwaysBars = false;
+  private reducedMotion = false;
 
   /**
    * `antialias` is fixed for the WebGL context's lifetime; it applies on reload. The context gets it only when
@@ -185,6 +186,13 @@ export class Renderer {
     this.fx.density = q.particles;
     this.shakeScale = SHAKE_SCALE[s.shake];
     this.alwaysBars = s.alwaysShowBars;
+  }
+
+  /** Applies the OS reduced-motion preference without changing saved settings. */
+  setReducedMotion(on: boolean): void {
+    if (this.reducedMotion === on) return;
+    this.reducedMotion = on;
+    this.dirty = true;
   }
 
   private ensureComposer(): { composer: EffectComposer; bloom: UnrealBloomPass } {
@@ -281,12 +289,14 @@ export class Renderer {
     this.warpT = Math.min(WARP_TOTAL, this.warpT + dt);
     for (const fx of state.out.fx) if (fx.t === 'warp') this.warpT = 0;
     const w = warpFrame(this.warpT, this.warp);
+    const motionK = this.reducedMotion ? 0.45 : 1;
+    if (motionK < 1) toneDownWarpMotion(w, motionK);
 
     // Camera: smooth zoom, follow the selected ship, then shake.
     const sel = selectedShip(run);
     this.cam.ease(dt, sel ? (isAlive(sel) ? sel.pos : sys.station.pos) : null);
     this.fx.decayShake(dt);
-    const amp = (this.fx.shake + w.shudder * 8) * this.shakeScale * this.wpp;
+    const amp = (this.fx.shake + w.shudder * 8) * (this.reducedMotion ? 0 : this.shakeScale) * this.wpp;
     const sx = (Math.random() - 0.5) * amp;
     const sz = (Math.random() - 0.5) * amp;
     const v = this.cam.place(sx, sz, w.zoom, this.cullView);
@@ -298,7 +308,7 @@ export class Renderer {
     this.rocks.update(run.rocks, run.pickups, run.time, v);
     this.outpostView.update(run.automation.outposts, (id) => findRock(run, id), run.time);
     const wpp = this.wpp;
-    const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars);
+    const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars, motionK);
     this.hazardView.update(run.hazards, run.time, wpp);
 
     if (this.fx.consume(state, hits, dt, (p) => this.cam.onScreen(p))) this.follow = true;

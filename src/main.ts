@@ -30,6 +30,15 @@ const commands: Command[] = [];
 const send = (c: Command): void => void commands.push(c);
 
 const renderer = new Renderer(sceneEl, settings.value);
+const reducedMotion =
+  typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-reduced-motion: reduce)') : null;
+const applyReducedMotion = () => renderer.setReducedMotion(!!reducedMotion?.matches);
+if (reducedMotion) {
+  if (typeof reducedMotion.addEventListener === 'function')
+    reducedMotion.addEventListener('change', applyReducedMotion);
+  else reducedMotion.addListener(applyReducedMotion);
+}
+applyReducedMotion();
 const audio = new AudioEngine(settings);
 // Every enabled button clicks; disabled ones never fire `click`.
 app.addEventListener('click', (e) => {

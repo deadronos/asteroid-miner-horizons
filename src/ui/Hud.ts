@@ -23,6 +23,7 @@ import { createShipPanel } from './panels/ShipPanel';
 import { createTopBar } from './panels/TopBar';
 import { WarpPanel } from './panels/WarpPanel';
 import { rockTooltip } from './rockTooltip';
+import { placeTooltip } from './tooltipPlacement';
 
 const MAX_LOG = 60;
 /** How long a toast stays up, in ms. */
@@ -317,6 +318,14 @@ export class Hud {
     const text = rock ? rockTooltip(rock, outpost, key ? keyLabel(key) : undefined) : label!;
     setText(this.tooltip, text);
     this.tooltip.style.display = 'block';
-    this.tooltip.style.transform = `translate(${x + 14}px, ${y + 14}px)`;
+    const pos = placeTooltip({
+      x,
+      y,
+      tooltipW: this.tooltip.offsetWidth,
+      tooltipH: this.tooltip.offsetHeight,
+      viewportW: window.innerWidth,
+      viewportH: window.innerHeight,
+    });
+    this.tooltip.style.transform = `translate(${pos.x}px, ${pos.y}px)`;
   }
 }
