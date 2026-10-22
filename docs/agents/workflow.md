@@ -59,8 +59,9 @@ After every task, before committing:
 
 ## Branches, commits, PRs
 
-- Branch names are prefixed by intent: `feat/`, `fix/`, `perf/`, `balance/`, `refactor/`. Issue number in the
-  PR, not the branch name.
+- Branch names are prefixed by intent: `feat/`, `fix/`, `perf/`, `balance/`, `refactor/`, `docs/`. Agent
+  sessions run on the `claude/<topic>` worktree branch they were given; keep it rather than renaming. Always
+  reference the issue number in the PR, whatever the branch is called.
 - Commit subjects are imperative and specific: "Bucket rocks by kind and shape so each kind uses its own pools
   (#20)". Reference the issue where there is one, and follow the file's own history for the local voice.
 - A pull request merges to `main` once CI is green. Keep the diff to what the plan describes; unrelated

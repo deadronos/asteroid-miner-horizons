@@ -9,9 +9,10 @@ are testability and determinism, not tidiness.
 
 - **Randomness goes through an `Rng`** (`src/core/rng.ts`), and the state lives in the save. Use `range`, `int`,
   `pick`, `chance`. Never call `Math.random` in `core`, `data` or `sim`.
-- **Give a new subsystem its own RNG stream.** `run.contracts.rng` and the modifier roller are derived from
-  `(seed, system)` rather than drawn from `run.rng`, precisely so adding a feature cannot shift the run's rock
-  and pickup sequence — and therefore cannot move the balance numbers. Copy that pattern.
+- **Give a new subsystem its own RNG stream.** `run.contracts.rng`, `run.hazards.rng` and the modifier roller are
+  derived from `(seed, system)` rather than drawn from `run.rng`, precisely so adding a feature cannot shift the
+  run's rock and pickup sequence — and therefore cannot move the balance numbers. Copy that pattern. Features
+  that need no randomness (automation, achievements) say so in their module header.
 - **Use the same id counter discipline.** `run.nextId` numbers ships and rocks; new subsystems keep their own
   counter (e.g. `board.nextId`) so ids can't collide or drift.
 - The only sanctioned `Math.random`/`Date` in the repo are `newGame`'s default seed and `savedAt` timestamps.
@@ -35,20 +36,24 @@ A player action is a `Command`: input and UI enqueue it, `tick()` applies it.
 Handlers mutate `state.run` / `state.profile`. Anything the renderer or HUD should react to must be pushed to
 `state.out.fx` or `state.out.log` — that outbox is the only channel out of the sim:
 
-|           |                                                                                                 |
-| --------- | ----------------------------------------------------------------------------------------------- |
-| `out.fx`  | `crack`, `collect`, `dock`, `impact`, `explode`, `warp` — the renderer turns these into visuals |
-| `out.log` | `info` (routine), `warn` (rejected command, danger), `major` (milestones, losses)               |
+|           |                                                                                                           |
+| --------- | --------------------------------------------------------------------------------------------------------- |
+| `out.fx`  | `crack`, `collect`, `dock`, `impact`, `explode`, `warp`, `hazard` — the renderer turns these into visuals |
+| `out.log` | `info` (routine), `warn` (rejected command, danger), `major` (milestones, losses)                         |
+
+A log line can also carry an `event` the audio layer cues on, or an `achievement` / `toast` the HUD shows as a
+toast; see `LogEntry` in `src/sim/types.ts`.
 
 ## Adding a tuning knob or content table
 
 - Numbers that should be tunable in one place go in **`src/data/tuning.ts`**, each with a one-line comment.
 - New game content goes in the matching data table (`components.ts`, `hulls.ts`, `perks.ts`, `refining.ts`,
-  `contracts.ts`). Tables are pure data and drive both the sim and the HUD text, so keep labels user-facing.
+  `contracts.ts`, `modifiers.ts`, `hazards.ts`, `traits.ts`, `achievements.ts`). Tables are pure data and drive
+  both the sim and the HUD text, so keep labels user-facing.
 - `src/data` is a leaf: a data module may import other `data/` modules (most use `resources.ts`; `hulls.ts` uses
   `components.ts`), never `core`, `sim` or anything above.
-- If you add a key to a table the sim indexes by string (like `MODIFIERS`), remember `fromData` in `save.ts`
-  checks every persisted key is known — update that validation.
+- If you add a key to a table the sim indexes by string (like `MODIFIERS`), remember `validateState` in
+  `src/sim/validate.ts` checks every persisted key is known — update that validation.
 
 ## Changing the save schema
 
@@ -58,9 +63,9 @@ A save is `{ version, profile, run }`. Two files, one rule: **an old save must a
 2. **`src/sim/migrations.ts`** — add `migrations[oldVersion]`, which upgrades a save at that version to the
    next one. Entries run in order, so a save several versions old replays each step. The input is freshly
    parsed JSON, so a migration may edit nested objects in place.
-3. **`src/sim/save.ts`** — if the new field is one the tick reads, add it to the `fromData` payload validation
-   so a malformed save is rejected with `{ ok: false }` instead of throwing mid-tick. `migrate()` already
-   downgrades a throwing migration to a rejection.
+3. **`src/sim/validate.ts`** — if the new field is one the tick reads, add it to `validateState`, which
+   `fromData` in `save.ts` runs on every migrated save, so a malformed save is rejected with `{ ok: false }`
+   instead of throwing mid-tick. `migrate()` already downgrades a throwing migration to a rejection.
 4. **`tests/migrations.test.ts`** — add a fixture under `tests/fixtures/save-vN.json` and assert the upgrade.
    Existing fixtures are the regression net for old saves; do not delete them.
 

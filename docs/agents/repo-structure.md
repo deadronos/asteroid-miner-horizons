@@ -7,7 +7,7 @@ is; `ls` a directory and read those for the rest.
 
 ```
 src/
-  core/          primitives, no project knowledge (rng, vec, spatialHash, array, format)
+  core/          primitives, no project knowledge (rng, vec, spatialHash, array, format, gesture)
   data/          pure tables and values, no logic
     tuning.ts      every global balance knob
   audio/         Web Audio: AudioEngine.ts owns the AudioContext, sfx.ts / music.ts hold the pure sound rules
@@ -18,14 +18,17 @@ src/
     handlers.ts    one handler per Command variant, in an exhaustive map
     update.ts      the fixed-step tick
     index.ts       SimIndex: per-session derived state, rebuilt per tick
-    save.ts        save slots, import/export format and validation
+    save.ts        save slots, import/export format
     migrations.ts  versioned save upgrades
+    validate.ts    validateState: shape checks on a migrated save
   render/        three.js; Renderer.ts composes the views, camera.ts the view state, fxView.ts the fx
-  ui/            DOM HUD; Hud.ts composes panels/, Menu.ts is the ⚙ modal over menu/
-  input.ts       keyboard/pointer -> Commands; world-space picking
+  ui/            DOM HUD; Hud.ts composes panels/, Menu.ts is the ⚙ modal over menu/,
+                 TitleScreen.ts the boot screen, TouchControls.ts the touch stick and buttons
+  input.ts       keyboard/pointer/touch -> Commands; world-space picking
   settings.ts    preferences store, separate from saves
   pause.ts       pause kind -> banner + continuous-audio policy
   session.ts     which slot is running; load/new/import/delete/autosave
+  reloadGuard.ts caps reloads after repeated WebGL context loss
   main.ts        bootstrap + 60 Hz fixed-step loop
 tests/           see testing.md
 scripts/         headless harness: bot.ts, harness.ts, bench.ts, balance.ts
