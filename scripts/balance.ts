@@ -6,11 +6,14 @@
 // checked against the ≥40% target from #46.
 //
 //   npm run balance
-//   npm run balance -- --seeds 10 --warps 10 --out docs/balance.md
+//   npm run balance -- --seeds 30 --warps 10 --out docs/balance.md
 //   npm run balance -- --hazards off --out /tmp/calm.md   (hazards default to 'normal', the game's default)
 //
-// The per-warp table counts seeds whose time more than doubles (> 2× prev), and
-// a modifiers table compares each modifier's time to its system median.
+// The per-warp table counts seeds whose time more than doubles (> 2× prev),
+// tracks the build-up milestones (first drone, first tier-2, peak drones) inside
+// each system, since a warp starts a fresh run, and a modifiers table compares
+// each modifier's time to its system median. The opening checks system 1's
+// milestones against targets the player should reach before the first warp (#197).
 //
 // Seeds run in parallel worker threads (each has its own sim module state),
 // so results are identical to a sequential run.
@@ -36,6 +39,8 @@ const MID_GAME_START = 3;
 const MID_GAME_END = 6;
 /** Acceptance target for active play's share of income through the mid-game (#46). */
 const ACTIVE_SHARE_TARGET = 0.4;
+/** Share of seeds that must reach the opening target before the first warp (#197). */
+const OPENING_TARGET_SHARE = 0.8;
 /** Hazard level the report plays at unless --hazards says otherwise; matches the game's settings default. */
 const DEFAULT_HAZARDS: HazardLevel = 'normal';
 
@@ -59,15 +64,22 @@ interface WarpStats {
   fuel: number;
   /** The system's modifier ids joined with '+'; empty when it has none. */
   mods: string;
+  /** Seconds into this system the first drone flew, or null if none did. */
+  firstDrone: number | null;
+  /** Seconds into this system any ship first fitted a tier-2+ component, or null. */
+  firstT2: number | null;
+  /** Seconds into this system the flagship's laser first reached tier 2, or null. */
+  firstLaserT2: number | null;
+  /** Most drones in the fleet at once during this system. */
+  peakDrones: number;
+  /** Fleet cap when the system ended (it grows with the bay perk). */
+  fleetCap: number;
 }
 
 interface SeedResult {
   seed: number;
   /** Sim seconds from game start, or null if never reached. */
   firstPurchase: number | null;
-  firstT2: number | null;
-  firstDrone: number | null;
-  fleetFull: number | null;
   warps: WarpStats[];
   /** Index of the warp that hit WARP_CAP_SEC, if any. */
   wall: number | null;
@@ -81,18 +93,18 @@ const arg = (name: string, fallback: string): string => {
 const tierSum = (s: GameState): number =>
   s.run.ships.filter(isFlagship).reduce((n, sh) => n + sh.slots.reduce((m, f) => m + (f?.tier ?? 0), 0), 0);
 
+/** Tier of the flagship's laser, 0 without one. */
+const laserTier = (s: GameState): number =>
+  s.run.ships.find(isFlagship)?.slots.find((f) => f?.type === 'laser')?.tier ?? 0;
+
 export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'off'): SeedResult {
   const state = newGame(seed);
   const res: SeedResult = {
     seed,
     firstPurchase: null,
-    firstT2: null,
-    firstDrone: null,
-    fleetFull: null,
     warps: [],
     wall: null,
   };
-  let clock = 0;
   const startTiers = tierSum(state);
   const cargoBefore = new Map<number, number>();
 
@@ -112,6 +124,11 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
       alloy: 0,
       fuel: 0,
       mods: state.run.system.modifiers.join('+'),
+      firstDrone: null,
+      firstT2: null,
+      firstLaserT2: null,
+      peakDrones: 0,
+      fleetCap: fleetCap(state.profile),
     };
     const ran = runBot(state, {
       seconds: WARP_CAP_SEC,
@@ -122,14 +139,14 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
       },
       after: (s) => {
         if (s.profile.warps !== startWarps) return true;
-        const t = clock + s.run.time;
-        if (w === 0) {
-          if (res.firstPurchase == null && (tierSum(s) > startTiers || droneCount(s.run) > 0)) res.firstPurchase = t;
-          if (res.firstT2 == null && s.run.ships.some((sh) => sh.slots.some((f) => (f?.tier ?? 0) >= 2)))
-            res.firstT2 = t;
-          if (res.firstDrone == null && droneCount(s.run) > 0) res.firstDrone = t;
-          if (res.fleetFull == null && droneCount(s.run) >= fleetCap(s.profile)) res.fleetFull = t;
-        }
+        const t = s.run.time;
+        const drones = droneCount(s.run);
+        if (w === 0 && res.firstPurchase == null && (tierSum(s) > startTiers || drones > 0)) res.firstPurchase = t;
+        if (cur.firstT2 == null && s.run.ships.some((sh) => sh.slots.some((f) => (f?.tier ?? 0) >= 2))) cur.firstT2 = t;
+        if (cur.firstDrone == null && drones > 0) cur.firstDrone = t;
+        if (cur.firstLaserT2 == null && laserTier(s) >= 2) cur.firstLaserT2 = t;
+        cur.peakDrones = Math.max(cur.peakDrones, drones);
+        cur.fleetCap = fleetCap(s.profile);
         // Credit each unload to whoever made it.
         for (const sh of s.run.ships) {
           const before = cargoBefore.get(sh.id) ?? 0;
@@ -148,7 +165,6 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
       },
     });
     cur.sec = ran;
-    clock += ran;
     if (state.profile.warps === startWarps) {
       res.wall = w;
       res.warps.push(cur);
@@ -172,6 +188,16 @@ function mmss(sec: number | null): string {
 }
 const stat = (xs: number[], f: (n: number) => string): string =>
   xs.length ? `${f(median(xs))} (${f(Math.min(...xs))}–${f(Math.max(...xs))})` : '—';
+
+/** Median (min–max) time of the reached entries, plus how many never got there. */
+const reached = (ts: (number | null)[]): string => {
+  const xs = ts.filter((x): x is number => x != null);
+  const missing = ts.length - xs.length;
+  return stat(xs, mmss) + (missing ? ` · not reached in ${missing}` : '');
+};
+
+/** How many of `ts` were reached, as `hit/total`. */
+const count = (ts: (number | null)[]): string => `${ts.filter((x) => x != null).length}/${ts.length}`;
 
 const pct = (n: number): string => `${Math.round(n * 100)}%`;
 /** All income in a warp: what the flagship, drones and haulers unloaded plus contract rewards. */
@@ -204,24 +230,47 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     '',
     '## Opening (system 1)',
     '',
-    '| Milestone | Time |',
-    '| --- | --- |',
+    `Every warp starts a fresh run (new fleet, new loadout), so the opening asks what the player should have built before leaving system 1, not what a long stay would reach. The target is the first drone and the flagship's tier-2 laser, both before the first warp, in at least ${pct(OPENING_TARGET_SHARE)} of seeds; the other rows are for context. The bot warps as soon as the bank holds the fuel, so it is the impatient player.`,
+    '',
+    '| Milestone | Time | Target | Seeds | Result |',
+    '| --- | --- | --- | --- | --- |',
   ];
-  const ms = (k: 'firstPurchase' | 'firstT2' | 'firstDrone' | 'fleetFull'): string => {
-    const xs = results.map((r) => r[k]).filter((x): x is number => x != null);
-    const missing = results.length - xs.length;
-    return stat(xs, mmss) + (missing ? ` · not reached in ${missing}` : '');
-  };
+  const opening = results.map((r) => r.warps[0]).filter((x): x is WarpStats => !!x);
+  const info = (label: string, ts: (number | null)[]): string => `| ${label} | ${reached(ts)} | — | ${count(ts)} | — |`;
+  // Both milestones reached: the later of the two.
+  const kit = opening.map((x) =>
+    x.firstDrone != null && x.firstLaserT2 != null ? Math.max(x.firstDrone, x.firstLaserT2) : null,
+  );
+  const kitHit = kit.filter((x) => x != null).length;
   lines.push(
-    `| First purchase | ${ms('firstPurchase')} |`,
-    `| First tier-2 upgrade | ${ms('firstT2')} |`,
-    `| First drone | ${ms('firstDrone')} |`,
-    `| Fleet full | ${ms('fleetFull')} |`,
+    `| First purchase | ${reached(results.map((r) => r.firstPurchase))} | — | — | — |`,
+    info(
+      'First drone',
+      opening.map((x) => x.firstDrone),
+    ),
+    info(
+      'First tier-2 upgrade (any ship)',
+      opening.map((x) => x.firstT2),
+    ),
+    info(
+      'Flagship tier-2 laser',
+      opening.map((x) => x.firstLaserT2),
+    ),
+    `| First drone + flagship tier-2 laser | ${reached(kit)} | both before the first warp | ${count(kit)} | **${kitHit >= OPENING_TARGET_SHARE * opening.length ? 'PASS' : 'FAIL'}** |`,
+    `| Peak drones | ${stat(
+      opening.map((x) => x.peakDrones),
+      (n) => `${Math.round(n)}`,
+    )} of ${stat(
+      opening.map((x) => x.fleetCap),
+      (n) => `${Math.round(n)}`,
+    )} | — | — | — |`,
     '',
     '## Per warp',
     '',
-    '| System | Time in system | vs previous | > 2× prev | Value delivered | Value / min | HD earned | Active-play share | Flagship share | Drone share | Hauler share | Contract share | Contracts done | Refined ▣ / ◉ | Outpost units | Walls |',
-    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
+    'First drone and first tier-2 are seconds into that system; peak drones is the most fielded at once, out of the fleet cap.',
+    '',
+    '| System | Time in system | vs previous | > 2× prev | Value delivered | Value / min | HD earned | Active-play share | Flagship share | Drone share | Hauler share | Contract share | Contracts done | Refined ▣ / ◉ | Outpost units | First drone | First tier-2 | Peak drones / cap | Walls |',
+    '| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |',
   );
   for (let w = 0; w < warps; w++) {
     const rows = results.map((r) => r.warps[w]).filter((x): x is WarpStats => !!x);
@@ -268,6 +317,12 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
         (n) => `${Math.round(n)}`,
       )} | ${stat(
         rows.map((x) => x.outpostUnits),
+        (n) => `${Math.round(n)}`,
+      )} | ${reached(rows.map((x) => x.firstDrone))} | ${reached(rows.map((x) => x.firstT2))} | ${stat(
+        rows.map((x) => x.peakDrones),
+        (n) => `${Math.round(n)}`,
+      )} / ${stat(
+        rows.map((x) => x.fleetCap),
         (n) => `${Math.round(n)}`,
       )} | ${walls ? `${walls} (cap ${WARP_CAP_SEC / 60} min)` : '—'} |`,
     );
@@ -333,11 +388,11 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     '## Raw data',
     '',
     '```csv',
-    'seed,system,sec,value,hd,flagship_value,drone_value,contract_value,contracts,alloy,fuel,wall,mods,hauler_value,outpost_units',
+    'seed,system,sec,value,hd,flagship_value,drone_value,contract_value,contracts,alloy,fuel,wall,mods,hauler_value,outpost_units,first_drone,first_t2,peak_drones,fleet_cap,first_laser_t2',
     ...results.flatMap((r) =>
       r.warps.map(
         (x, w) =>
-          `${r.seed},${w + 1},${x.sec.toFixed(1)},${Math.round(x.value)},${x.hd},${Math.round(x.flagshipValue)},${Math.round(x.droneValue)},${Math.round(x.contractValue)},${x.contracts},${x.alloy},${x.fuel},${r.wall === w ? 1 : 0},${x.mods},${Math.round(x.haulerValue)},${Math.round(x.outpostUnits)}`,
+          `${r.seed},${w + 1},${x.sec.toFixed(1)},${Math.round(x.value)},${x.hd},${Math.round(x.flagshipValue)},${Math.round(x.droneValue)},${Math.round(x.contractValue)},${x.contracts},${x.alloy},${x.fuel},${r.wall === w ? 1 : 0},${x.mods},${Math.round(x.haulerValue)},${Math.round(x.outpostUnits)},${x.firstDrone?.toFixed(1) ?? ''},${x.firstT2?.toFixed(1) ?? ''},${x.peakDrones},${x.fleetCap},${x.firstLaserT2?.toFixed(1) ?? ''}`,
       ),
     ),
     '```',
@@ -379,7 +434,7 @@ async function playAll(seedList: number[], warps: number, hazards: HazardLevel):
 }
 
 if (isMainThread) {
-  const seeds = Number(arg('seeds', '10'));
+  const seeds = Number(arg('seeds', '30'));
   const warps = Number(arg('warps', '10'));
   const seedStart = Number(arg('seed-start', '1000'));
   const out = arg('out', 'docs/balance.md');

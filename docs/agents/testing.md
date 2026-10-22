@@ -62,7 +62,7 @@ tests; `tests/__snapshots__/` holds snapshots.
 - `scripts/harness.ts` — `runBot(state, opts)` steps the sim at a fixed 60 Hz, lets the bot decide every 15
   ticks, and drains `out.fx`/`out.log` so long runs don't grow memory.
 - `npm run bench` — times the `tick()` call with a full fleet; over budget warns, never fails.
-- `npm run balance` — plays 10 seeds × 10 warps at hazards `normal` (the game's default; `--hazards off` for
+- `npm run balance` — plays 30 seeds × 10 warps at hazards `normal` (the game's default; `--hazards off` for
   calm play) and writes `docs/balance.md`. CI regenerates it and warns
   (does not fail) when the committed report differs; the header line is ignored.
 

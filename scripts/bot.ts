@@ -4,7 +4,8 @@
 // Each call looks at the state and returns the commands for the next tick:
 //   buy affordable perks → warp once the bank has the fuel → accept a
 //   serviceable contract → dock when the hold is full → while docked,
-//   repair / buy one thing → deploy an outpost on a large rock alongside (once
+//   repair / buy one thing (after the first drone, the flagship's tier-2
+//   laser before any more hulls) → deploy an outpost on a large rock alongside (once
 //   a hauler can service it) → chase nearby debris → mine the nearest rock of
 //   whichever resource the bank (or the active delivery contract) needs.
 //   Hazard reflexes come first in the flagship's order: step out of a comet
@@ -291,15 +292,22 @@ function nextPurchase(state: GameState, wc: number): Command | null {
   if (rc > 0 && fs.hull < shipStats(fs, profile).maxHull * 0.7 && run.bank.ore >= rc)
     return { t: 'repair', shipId: fs.id };
 
-  // Once two drones mine, the next fleet slot is kept for one hauler rather than another drone.
+  // After the first drone, the flagship's tier-2 laser comes before any more hulls, as a player would buy it (#197).
   const miners = run.ships.filter((x) => !isFlagship(x) && !isHauler(x)).length;
+  const laser = fs.slots.findIndex((f) => f?.type === 'laser');
+  const laserCost = miners >= 1 && laser >= 0 && fs.slots[laser]!.tier < 2 ? upgradeCost(fs, laser) : null;
+  if (laserCost && ok(laserCost)) return { t: 'upgrade', shipId: fs.id, slot: laser };
+  const hulls = !laserCost;
+
+  // Once two drones mine, the next fleet slot is kept for one hauler rather than another drone.
   const wantHauler = miners >= HAULER_AFTER && !run.ships.some(isHauler);
-  if (wantHauler && !hullBlock(state, 'hauler')) {
+  if (hulls && wantHauler && !hullBlock(state, 'hauler')) {
     if (ok(HULLS.hauler.cost)) return { t: 'buyHull', hullId: 'hauler' };
     const refine = needsAlloy(HULLS.hauler.cost) ? smeltFor(HULLS.hauler.cost) : null;
     if (refine) return refine;
   }
-  if (!wantHauler && !hullBlock(state, 'drone') && ok(HULLS.drone.cost)) return { t: 'buyHull', hullId: 'drone' };
+  if (hulls && !wantHauler && !hullBlock(state, 'drone') && ok(HULLS.drone.cost))
+    return { t: 'buyHull', hullId: 'drone' };
 
   const docked = run.ships.filter((s) => !refitBlock(state, s));
   for (const { comp, variant } of INSTALL_ORDER) {
@@ -321,7 +329,7 @@ function nextPurchase(state: GameState, wc: number): Command | null {
       }
     }
   }
-  if (!hullBlock(state, 'excavator')) {
+  if (hulls && !hullBlock(state, 'excavator')) {
     if (ok(HULLS.excavator.cost)) return { t: 'buyHull', hullId: 'excavator' };
     if (needsAlloy(HULLS.excavator.cost)) {
       const refine = smeltFor(HULLS.excavator.cost);
