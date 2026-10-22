@@ -166,5 +166,17 @@ export function renderInterface(settings: SettingsStore): Node[] {
     ),
     rangeRow(settings, 'zoomSpeed', 'Zoom speed', 0.4, 2.5, 0.1, (v) => `${v.toFixed(1)}×`),
     toggleRow(settings, 'edgePan', 'Edge panning', 'Pan by resting the cursor at the screen edge'),
+    section('Touch'),
+    selectRow(
+      settings,
+      'touchControls',
+      'On-screen controls',
+      [
+        ['auto', 'On touch screens'],
+        ['on', 'Always'],
+        ['off', 'Hidden'],
+      ],
+      'A thrust stick and buttons for the keyboard-only actions. Pinch zooms; a long press gives the right-click order.',
+    ),
   ];
 }

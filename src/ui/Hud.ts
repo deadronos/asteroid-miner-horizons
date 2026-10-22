@@ -1,8 +1,8 @@
 // DOM HUD composer: places the panels (top bar, fleet, contracts, selected
 // ship, refinery, research, warp routes, first-steps goals) and owns the small overlays — event log, help, hover
-// tooltip, warp flash, pause banner, toasts (achievements, offline summary) and FPS counter. All actions go out as sim
-// Commands via `send`. The side panels sit in two flex columns that share the window height, and each can be
-// collapsed (#161).
+// tooltip, warp flash, pause banner, toasts (achievements, offline summary), FPS counter and the touch controls. All
+// actions go out as sim Commands via `send`. The side panels sit in two flex columns that share the window height,
+// and each can be collapsed (#161); on a narrow (phone) screen they start folded and open one at a time (#194).
 
 import { ACHIEVEMENTS } from '../data/achievements';
 import type { SaveActions } from '../session';
@@ -11,7 +11,7 @@ import { type HudPanelId, type SettingsStore, keyLabel } from '../settings';
 import type { GameState, LogEntry, Outpost, Rock } from '../sim/types';
 import { type Panel, h, setText } from './dom';
 import { hazardBanner } from './hazardBanner';
-import { helpVisible, isCollapsed, toggledCollapse } from './hudLayout';
+import { helpVisible, isCollapsed, toggledCollapse, touchControlsShown } from './hudLayout';
 import { Menu } from './Menu';
 import type { PanelCtx } from './panels/context';
 import { createContractsPanel } from './panels/ContractsPanel';
@@ -24,10 +24,22 @@ import { createTopBar } from './panels/TopBar';
 import { WarpPanel } from './panels/WarpPanel';
 import { rockTooltip } from './rockTooltip';
 import { placeTooltip } from './tooltipPlacement';
+import { TouchControls } from './TouchControls';
 
 const MAX_LOG = 60;
 /** How long a toast stays up, in ms. */
 const TOAST_MS = 6000;
+/** A phone-sized screen, in either orientation; style.css uses the same query for the phone layout. */
+const NARROW_QUERY = '(max-width: 640px), (max-height: 500px)';
+
+/** A live media query, or null where `matchMedia` is missing; `onChange` runs on every change. */
+function watchMedia(query: string, onChange: () => void): MediaQueryList | null {
+  if (typeof window.matchMedia !== 'function') return null;
+  const mq = window.matchMedia(query);
+  if (typeof mq.addEventListener === 'function') mq.addEventListener('change', onChange);
+  else mq.addListener(onChange);
+  return mq;
+}
 
 export interface HudActions {
   send: (cmd: Command) => void;
@@ -64,6 +76,9 @@ export class Hud {
   /** Set by showNotice; while true, setPaused no longer changes the banner. */
   private noticeShown = false;
   readonly menu: Menu;
+  readonly touch: TouchControls;
+  private narrowMq: MediaQueryList | null;
+  private coarseMq: MediaQueryList | null;
 
   constructor(
     root: HTMLElement,
@@ -87,7 +102,7 @@ export class Hud {
       const btn = h('button', {
         class: 'collapse',
         onclick: () => {
-          const prefs = toggledCollapse(id, settings.value.hudCollapsed, getState());
+          const prefs = toggledCollapse(id, settings.value.hudCollapsed, getState(), this.narrow);
           settings.set({ hudCollapsed: prefs });
           this.applyCollapse();
         },
@@ -121,20 +136,45 @@ export class Hud {
 
     this.help = mk('help');
 
+    this.touch = new TouchControls(root);
     this.menu = new Menu(root, actions.saves, settings, getState);
     root.append(this.tooltip, this.flash, this.paused, this.hazard, this.fps, this.toasts);
+    // The side columns start below the top bar, which wraps onto more lines on a phone.
+    if (typeof ResizeObserver === 'function')
+      new ResizeObserver(() =>
+        root.style.setProperty('--topbar-bottom', `${Math.ceil(topbar.getBoundingClientRect().bottom)}px`),
+      ).observe(topbar);
+    this.narrowMq = watchMedia(NARROW_QUERY, () => this.applySettings());
+    this.coarseMq = watchMedia('(pointer: coarse)', () => this.applySettings());
     settings.onChange(() => this.applySettings());
     this.applySettings();
+  }
+
+  /** Whether the screen is phone-sized, so the side panels start folded and open one at a time. */
+  get narrow(): boolean {
+    return !!this.narrowMq?.matches;
   }
 
   private applySettings(): void {
     const s = this.settings.value;
     this.root.style.setProperty('--hud-scale', String(s.hudScale));
     this.root.classList.toggle('compact', s.hudCompact);
+    const touch = touchControlsShown(s.touchControls, !!this.coarseMq?.matches);
+    this.touch.setShown(touch);
+    this.root.classList.toggle('touch', touch);
     this.applyHelp();
-    // Help text follows the current key bindings.
+    this.applyCollapse();
+    // Help text follows the current key bindings, or describes the touch controls while they show.
     const k = (a: keyof typeof s.keys): string => s.keys[a].filter(Boolean).map(keyLabel).join('/') || 'unbound';
-    this.help.innerHTML = `
+    this.help.innerHTML = touch
+      ? `
+      <b>Flight</b> thrust stick · tap space to move<br>
+      <b>Mine</b> tap an asteroid · <b>Unload</b> tap the station<br>
+      <b>Fleet</b> tap a ship or Ship ▸ to select · long-press orders without selecting<br>
+      <b>Automation</b> Outpost, then tap a large asteroid<br>
+      <b>View</b> pinch zoom · drag to pan · Follow · Map<br>
+      <b>Menus</b> Research · Pause · ? hides help · ⚙ saves & settings`
+      : `
       <b>Flight</b> ${k('up')} ${k('left')} ${k('down')} ${k('right')} · click space to move<br>
       <b>Mine</b> click an asteroid (laser auto-chains fragments)<br>
       <b>Collect</b> fly near debris · <b>Unload</b> click the station<br>
@@ -156,7 +196,7 @@ export class Hud {
   private applyCollapse(): void {
     const state = this.getState();
     for (const { id, el, btn } of this.collapsibles) {
-      const folded = isCollapsed(id, this.settings.value.hudCollapsed, state);
+      const folded = isCollapsed(id, this.settings.value.hudCollapsed, state, this.narrow);
       if (el.classList.contains('collapsed') === folded && btn.textContent) continue;
       el.classList.toggle('collapsed', folded);
       btn.textContent = folded ? '+' : '−';
@@ -235,7 +275,7 @@ export class Hud {
   blockerRects(): { x: number; y: number; w: number; h: number }[] {
     const out: { x: number; y: number; w: number; h: number }[] = [];
     for (const e of this.root.querySelectorAll(
-      ':scope > .hud, :scope > .hud-col > .hud, :scope > .paused, :scope > .hazard',
+      ':scope > .hud, :scope > .hud-col > .hud, :scope > .paused, :scope > .hazard, :scope > .touch-ctl > *',
     )) {
       const r = e.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) out.push({ x: r.left, y: r.top, w: r.width, h: r.height });

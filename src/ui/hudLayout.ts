@@ -1,7 +1,7 @@
-// HUD density rules (#161): when the help box shows and which side panels are collapsed. Pure, so tests can
-// check them without a DOM; Hud applies the results as classes.
+// HUD density rules (#161): when the help box shows, which side panels are collapsed and whether the touch
+// controls show (#194). Pure, so tests can check them without a DOM; Hud applies the results as classes.
 
-import type { HelpMode, HudCollapse, HudPanelId } from '../settings';
+import { HUD_PANEL_IDS, type HelpMode, type HudCollapse, type HudPanelId, type TouchMode } from '../settings';
 import type { GameState } from '../sim/types';
 
 /** Lifetime play time, in seconds, after which `auto` help hides itself. */
@@ -13,24 +13,34 @@ export function helpVisible(mode: HelpMode, playSec: number): boolean {
   return mode === 'on';
 }
 
-/** A panel's state with no explicit choice: the refinery folds away while its queue is empty. */
-export function autoCollapsed(id: HudPanelId, state: GameState): boolean {
-  return id === 'refinery' && state.run.refinery.queue.length === 0;
+/** Whether the touch controls show for `mode` on a device whose primary pointer is (or is not) coarse. */
+export function touchControlsShown(mode: TouchMode, coarse: boolean): boolean {
+  return mode === 'on' || (mode === 'auto' && coarse);
+}
+
+/**
+ * A panel's state with no explicit choice. On a narrow (phone) screen every panel starts folded; otherwise the
+ * refinery folds away while its queue is empty.
+ */
+export function autoCollapsed(id: HudPanelId, state: GameState, narrow = false): boolean {
+  return narrow || (id === 'refinery' && state.run.refinery.queue.length === 0);
 }
 
 /** Whether `id` is collapsed: the player's explicit choice, else its automatic state. */
-export function isCollapsed(id: HudPanelId, prefs: HudCollapse, state: GameState): boolean {
-  return prefs[id] ?? autoCollapsed(id, state);
+export function isCollapsed(id: HudPanelId, prefs: HudCollapse, state: GameState, narrow = false): boolean {
+  return prefs[id] ?? autoCollapsed(id, state, narrow);
 }
 
 /**
  * The collapse choices after toggling `id`. A new state equal to the automatic one drops the stored choice, so
- * the panel follows its automatic state again.
+ * the panel follows its automatic state again. On a narrow screen the panels are an accordion: opening one drops
+ * the other panels' explicit open choices, so only one covers the playfield at a time.
  */
-export function toggledCollapse(id: HudPanelId, prefs: HudCollapse, state: GameState): HudCollapse {
-  const next = !isCollapsed(id, prefs, state);
+export function toggledCollapse(id: HudPanelId, prefs: HudCollapse, state: GameState, narrow = false): HudCollapse {
+  const next = !isCollapsed(id, prefs, state, narrow);
   const out = { ...prefs };
-  if (next === autoCollapsed(id, state)) delete out[id];
+  if (narrow && !next) for (const other of HUD_PANEL_IDS) if (other !== id && out[other] === false) delete out[other];
+  if (next === autoCollapsed(id, state, narrow)) delete out[id];
   else out[id] = next;
   return out;
 }

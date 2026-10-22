@@ -9,6 +9,7 @@ import {
   SHAKE_IDS,
   SHAKE_SCALE,
   SettingsStore,
+  TOUCH_MODES,
   actionFor,
 } from '../src/settings';
 import { newGame } from '../src/sim/create';
@@ -59,6 +60,14 @@ describe('settings store', () => {
     expect(SettingsStore.merge({ showHelp: false }).help).toBe('off');
     for (const help of HELP_MODES) expect(SettingsStore.merge({ help, showHelp: false }).help).toBe(help);
     expect(SettingsStore.merge({ help: 'sometimes' }).help).toBe('auto');
+  });
+
+  it('loads the touch-controls mode, defaulting to auto', () => {
+    expect(SettingsStore.merge(null).touchControls).toBe('auto');
+    for (const touchControls of TOUCH_MODES)
+      expect(SettingsStore.merge({ touchControls }).touchControls).toBe(touchControls);
+    expect(SettingsStore.merge({ touchControls: true }).touchControls).toBe('auto');
+    expect(SettingsStore.merge({ touchControls: 'always' }).touchControls).toBe('auto');
   });
 
   it('keeps only known panels with boolean collapse choices', () => {

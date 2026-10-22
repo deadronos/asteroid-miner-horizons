@@ -11,6 +11,8 @@ export type Shake = 'off' | 'low' | 'full';
 export type LogVerbosity = 'all' | 'important';
 /** Help box: `auto` shows it only for a new profile's first minutes of play. */
 export type HelpMode = 'auto' | 'on' | 'off';
+/** On-screen stick and action strip: `auto` shows them when the primary pointer is coarse (a touch screen). */
+export type TouchMode = 'auto' | 'on' | 'off';
 
 /** HUD panels with a collapse button. */
 export const HUD_PANEL_IDS = ['fleet', 'contracts', 'ship', 'refinery'] as const;
@@ -68,6 +70,8 @@ export interface Settings {
   followByDefault: boolean;
   zoomSpeed: number;
   edgePan: boolean;
+  /** Virtual stick and action strip for touch screens (#194). */
+  touchControls: TouchMode;
   // Audio
   volMaster: number;
   volSfx: number;
@@ -145,6 +149,7 @@ export const DEFAULTS: Settings = {
   followByDefault: true,
   zoomSpeed: 1,
   edgePan: false,
+  touchControls: 'auto',
   volMaster: 0.8,
   volSfx: 0.8,
   volMusic: 0.5,
@@ -171,6 +176,8 @@ export const SHAKE_IDS = Object.keys(SHAKE_SCALE) as Shake[];
 export const LOG_VERBOSITY_IDS = ['all', 'important'] as const;
 
 export const HELP_MODES: HelpMode[] = ['auto', 'on', 'off'];
+
+export const TOUCH_MODES: TouchMode[] = ['auto', 'on', 'off'];
 
 /** Human-readable name for a KeyboardEvent.code. */
 export function keyLabel(code: string | null): string {
@@ -260,6 +267,9 @@ export class SettingsStore {
           continue;
         case 'help':
           if (HELP_MODES.includes(d[k] as HelpMode)) out.help = d[k] as HelpMode;
+          continue;
+        case 'touchControls':
+          if (TOUCH_MODES.includes(d[k] as TouchMode)) out.touchControls = d[k] as TouchMode;
           continue;
         case 'hudCollapsed': {
           const c = d[k];

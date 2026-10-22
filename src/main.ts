@@ -201,6 +201,7 @@ function step(now: number): void {
     hudAcc = 0;
     audio.consumeLog(state.out.log);
     hud.refresh();
+    hud.touch.sync(renderer.follow, manualPause);
   }
 }
 // A lost WebGL context leaves a black canvas: save, then reload into the same game. A GPU that keeps
@@ -224,5 +225,15 @@ requestAnimationFrame(frame);
 
 // Debug hook for automated checks in the browser console.
 Object.assign(window, {
-  __amh: { state: () => session.state, send, settings, renderer, audio, autoQuality, info: () => renderer.info, title },
+  __amh: {
+    state: () => session.state,
+    send,
+    settings,
+    renderer,
+    input,
+    audio,
+    autoQuality,
+    info: () => renderer.info,
+    title,
+  },
 });
