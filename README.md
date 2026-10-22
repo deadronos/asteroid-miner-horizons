@@ -160,7 +160,8 @@ It goes away after the first warp; × hides it for that save.
     stars, neutral at G, cold and sparse at B, with each system taking its own key, chord
     order and arpeggio timbre from the run seed. It darkens and adds a low pulse while a
     flare or comet is coming, busies up while the fleet is mining, crossfades on every warp
-    and plays on through pauses. Beam hums go quiet while the game is paused. The low-hull / overheat
+    and plays on through pauses. It dips briefly under the danger alarm, explosions, ship
+    losses and warps, then eases back, so those always cut through. Beam hums go quiet while the game is paused. The low-hull / overheat
     alarm also goes quiet whenever you pause (`P`, or while a menu is open), but keeps
     sounding while the window stays visible and loses focus (a hidden tab suspends all
     audio).

@@ -1,5 +1,5 @@
-// Web Audio mixer: master ← (sfx, music) gain buses bound to the volume
-// settings, then through a master limiter into the destination. The
+// Web Audio mixer: master ← (sfx, music → musicDuck) gain buses bound to the
+// volume settings, then through a master limiter into the destination. The
 // AudioContext is created on the first user gesture (so the browser never
 // blocks autoplay) and suspended while the tab is hidden. One-shots are ZzFX
 // buffers rendered once per preset and replayed at any pitch; each runs
@@ -8,13 +8,15 @@
 // danger alarm) come from `updateContinuous`, which is called every frame with
 // a `ContinuousPolicy` selecting which layers may sound that frame (see
 // `pauseAudio`). Generative ambient music (`MusicPlayer`) plays into the music
-// bus via `updateMusic`. Every ~0.1 s `consumeLog` collapses the new log lines
-// and fires one rate-limited cue per event identity in the batch, after the deny
-// buzz for rejected-command warn lines.
+// bus via `updateMusic`; the alarm, explosions, ship losses and warp briefly
+// duck it (see `Ducker`) so they read over the music. Every ~0.1 s
+// `consumeLog` collapses the new log lines and fires one rate-limited cue per
+// event identity in the batch, after the deny buzz for rejected-command warn
+// lines.
 
 import type { SettingsStore } from '../settings';
 import type { Fx, GameState, LogEntry } from '../sim/types';
-import { LIMITER, REVERB_RETURN, REVERB_SEND, reverbImpulse } from './mix';
+import { Ducker, LIMITER, REVERB_RETURN, REVERB_SEND, reverbImpulse } from './mix';
 import { musicIntensity } from './music';
 import { MusicPlayer } from './MusicPlayer';
 import {
@@ -44,6 +46,8 @@ const HUM_ATTACK = 0.04;
 const HUM_RELEASE = 0.12;
 /** Seconds between repeats of the danger alarm (far above MIN_GAP.alarm). */
 const ALARM_INTERVAL = 1.1;
+/** Smoothing time constant for the per-frame music-duck target: removes zipper noise without lag. */
+const DUCK_SMOOTH = 0.015;
 
 /** One persistent oscillator chain per active beam, faded in and out over its life. */
 interface HumVoice {
@@ -61,6 +65,7 @@ export class AudioEngine {
   private master: GainNode | null = null;
   private sfx: GainNode | null = null;
   private music: GainNode | null = null;
+  private musicDuck: GainNode | null = null;
   private masterLimiter: DynamicsCompressorNode | null = null;
   private reverb: ConvolverNode | null = null;
   private player: MusicPlayer | null = null;
@@ -69,6 +74,7 @@ export class AudioEngine {
   private streak = new Streak();
   private hums = new Map<number, HumVoice>();
   private nextAlarm = 0;
+  private ducker = new Ducker();
 
   constructor(private readonly settings: SettingsStore) {
     const unlock = (): void => {
@@ -102,6 +108,7 @@ export class AudioEngine {
       this.master = this.ctx.createGain();
       this.sfx = this.ctx.createGain();
       this.music = this.ctx.createGain();
+      this.musicDuck = this.ctx.createGain();
 
       const limiter = this.ctx.createDynamicsCompressor();
       limiter.threshold.value = LIMITER.threshold;
@@ -119,7 +126,7 @@ export class AudioEngine {
       this.reverb = reverb;
 
       this.sfx.connect(this.master);
-      this.music.connect(this.master);
+      this.music.connect(this.musicDuck).connect(this.master);
       this.master.connect(limiter).connect(this.ctx.destination);
       this.player = new MusicPlayer(this.ctx, this.music);
       this.applyVolumes(true);
@@ -164,6 +171,7 @@ export class AudioEngine {
     const { ctx, sfx } = this;
     if (!ctx || !sfx || ctx.state !== 'running' || v.gain <= 0) return;
     if (!this.limiter.allow(v.id, ctx.currentTime)) return;
+    this.ducker.trigger(v.id, v.gain, ctx.currentTime);
     const src = ctx.createBufferSource();
     src.buffer = this.buffer(v.id);
     src.playbackRate.value = v.rate;
@@ -316,12 +324,13 @@ export class AudioEngine {
 
   /**
    * Ambient music in the current system's variant of its star-class mood, crossfading on warp and
-   * following the flare/comet danger and fleet mining activity. Keeps playing through pauses; silent
+   * following the flare/comet danger and fleet mining activity, ducked under the loud cues. Keeps playing through pauses; silent
    * until the context runs. Read-only on `state`.
    */
   updateMusic(state: GameState): void {
-    const { ctx, player } = this;
-    if (!ctx || !player || ctx.state !== 'running') return;
+    const { ctx, player, musicDuck } = this;
+    if (!ctx || !player || !musicDuck || ctx.state !== 'running') return;
+    musicDuck.gain.setTargetAtTime(this.ducker.level(ctx.currentTime), ctx.currentTime, DUCK_SMOOTH);
     const s = this.settings.value;
     const { system } = state.run;
     const audible = s.volMaster > 0 && s.volMusic > 0;
