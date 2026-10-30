@@ -1,9 +1,16 @@
 // Keyboard + pointer input. Translates raw events into sim Commands and view
 // changes. Picking is done in world space against sim data (no raycasting).
+// Gamepad (#209): a standard-mapping pad is polled once per frame and runs the same actions and commands as the
+// keys; while a menu or the title screen is open it moves focus instead.
 // Touch (#194): a tap is the left click, a long-press the right click, and two
 // fingers pinch-zoom and pan; mouse and pen keep the desktop behaviour.
 
+import { interactTarget, padThrust, padZoom } from './core/gamepad';
 import { type Point, pinchStep } from './core/gesture';
+import { nextFocusIndex, FOCUSABLE } from './ui/focus';
+import { GamepadHint } from './ui/GamepadHint';
+import { PAD, PadReader } from './gamepad';
+import { TUNING } from './data/tuning';
 import { dist, type Vec2 } from './core/vec';
 import { HULLS } from './data/hulls';
 import type { Command } from './sim/commands';
@@ -37,6 +44,10 @@ export class Input {
   private longPress: ReturnType<typeof setTimeout> | undefined;
   /** While a tap's tooltip shows: when it hides, from `performance.now()`. 0 otherwise. */
   private tipUntil = 0;
+  private readonly pad = new PadReader();
+  private readonly padHint = new GamepadHint(document.body);
+  /** Thrust from the pad this frame; zero while a menu is open. */
+  private padVec: Vec2 = { x: 0, z: 0 };
   /** Last click-to-move destination, shown as a marker until reached. */
   moveMark: Vec2 | null = null;
 
@@ -50,7 +61,12 @@ export class Input {
     private readonly blocked: () => boolean = () => false,
   ) {
     const canvas = renderer.canvas;
-    window.addEventListener('keydown', (e) => this.onKey(e));
+    window.addEventListener('keydown', (e) => {
+      delete document.body.dataset.pad;
+      this.onKey(e);
+    });
+    window.addEventListener('gamepadconnected', () => this.padHint.setShown(true));
+    window.addEventListener('gamepaddisconnected', () => this.padHint.setShown(!!this.pad.read()));
     window.addEventListener('keyup', (e) => this.held.delete(e.code));
     window.addEventListener('blur', () => this.held.clear());
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -213,12 +229,94 @@ export class Input {
     const x = (down('right') ? 1 : 0) - (down('left') ? 1 : 0);
     const z = (down('down') ? 1 : 0) - (down('up') ? 1 : 0);
     const l = Math.hypot(x, z);
-    const out = l ? { x: x / l, z: z / l } : this.hud.touch.thrust;
+    const touch = this.hud.touch.thrust;
+    const out = l ? { x: x / l, z: z / l } : touch.x || touch.z ? touch : this.padVec;
     if (out.x || out.z) {
       this.moveMark = null;
       this.autoFollow();
     }
     return out;
+  }
+
+  /**
+   * Polls the gamepad once per frame (also while paused, so menus work). In the game it runs the same actions as
+   * the keys; with a menu, panel or the title screen open it moves focus, A presses and B/Start close.
+   */
+  pollGamepad(dt: number): void {
+    const f = this.pad.read();
+    this.padHint.setShown(!!f);
+    this.padVec = { x: 0, z: 0 };
+    if (!f) return;
+    const overlay = [...document.querySelectorAll<HTMLElement>('.modal:not(.hidden), #boot:not([hidden])')].pop();
+    if (overlay || this.blocked()) {
+      if (overlay) this.padNavigate(overlay, f.edges);
+      return;
+    }
+    const up = f.held[PAD.UP];
+    const down = f.held[PAD.DOWN];
+    const left = f.held[PAD.LEFT];
+    const right = f.held[PAD.RIGHT];
+    const stick = padThrust(f.lx, f.ly);
+    const dx = (right ? 1 : 0) - (left ? 1 : 0);
+    const dz = (down ? 1 : 0) - (up ? 1 : 0);
+    this.padVec = dx || dz ? { x: dx / Math.hypot(dx, dz), z: dz / Math.hypot(dx, dz) } : stick;
+    const zoom = padZoom(f.ry, dt) * padZoom((f.held[PAD.LB] ? 1 : 0) - (f.held[PAD.RB] ? 1 : 0), dt);
+    if (zoom !== 1) {
+      const r = this.renderer.canvas.getBoundingClientRect();
+      this.renderer.zoomAt(zoom, r.left + r.width / 2, r.top + r.height / 2);
+    }
+    for (const b of f.edges) {
+      switch (b) {
+        case PAD.A:
+          this.padInteract();
+          break;
+        case PAD.B: {
+          const sel = this.selected();
+          if (sel) this.send({ t: 'stop', shipId: sel.id });
+          this.moveMark = null;
+          break;
+        }
+        case PAD.X:
+          this.runAction('cycleShip');
+          break;
+        case PAD.Y:
+          this.hud.toggleWarp();
+          break;
+        case PAD.SELECT:
+          this.runAction('map');
+          break;
+        case PAD.START:
+          this.hud.menu.toggle();
+          break;
+      }
+    }
+  }
+
+  /** A: unload when at the station, else mine the nearest asteroid in reach, else fly home. */
+  private padInteract(): void {
+    const s = this.getState();
+    const ship = selectedShip(s.run);
+    if (!ship || !isAlive(ship)) return;
+    const target = interactTarget(ship.pos, s.run.system.station.pos, TUNING.dockRadius, s.run.rocks, 600);
+    if (target?.kind === 'rock') this.send({ t: 'mine', shipId: ship.id, rockId: target.id });
+    else this.send({ t: 'dock', shipId: ship.id });
+    this.moveMark = null;
+  }
+
+  /** Pad control of an open overlay: D-pad steps focus (wrapping), A presses, B and Start close it. */
+  private padNavigate(overlay: HTMLElement, edges: number[]): void {
+    const items = [...overlay.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => e.getClientRects().length > 0);
+    for (const b of edges) {
+      document.body.dataset.pad = '1';
+      const cur = items.indexOf(document.activeElement as HTMLElement);
+      if (b === PAD.UP || b === PAD.DOWN || b === PAD.LEFT || b === PAD.RIGHT) {
+        const prev = b === PAD.UP || b === PAD.LEFT;
+        items[nextFocusIndex(items.length, cur, prev)]?.focus();
+      } else if (b === PAD.A) {
+        if (cur < 0) items[0]?.focus();
+        else items[cur].click();
+      } else if ((b === PAD.B || b === PAD.START) && !this.blocked()) this.hud.escape();
+    }
   }
 
   /** Pans when the cursor rests near a screen edge (if enabled). Returns whether it panned. */

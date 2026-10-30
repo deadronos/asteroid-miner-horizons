@@ -148,6 +148,7 @@ function step(now: number): void {
   const dt = Math.min(0.25, rawDt);
   last = now;
   const s = settings.value;
+  input.pollGamepad(dt);
   const paused = title.open
     ? 'manual'
     : pauseKind({

@@ -1327,3 +1327,22 @@ button {
     width: min(300px, 100vw - 360px);
   }
 }
+
+/* Controller hint (#209): only while a pad is connected. */
+.pad-hint {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  z-index: 5;
+  padding: 6px 10px;
+  font-size: 12px;
+  line-height: 1.5;
+  background: rgb(8 14 24 / 0.7);
+  border: 1px solid rgb(120 180 255 / 0.3);
+  border-radius: 6px;
+  pointer-events: none;
+}
+body[data-pad] :focus {
+  outline: 2px solid #6cf;
+  outline-offset: 2px;
+}
