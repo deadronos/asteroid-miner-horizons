@@ -3,6 +3,7 @@
 
 import type { HazardLevel } from '../data/hazards';
 import { damp, dist, distSq, len, type Vec2, hypot2 } from '../core/vec';
+import type { RawResource, Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { Assists, FleetAuto } from './assists';
 import { isDocked } from './economy';
@@ -267,6 +268,38 @@ function nearestRock(ctx: TickCtx, from: Vec2, radius: number, filter: (r: Rock)
   return best;
 }
 
+/**
+ * How much the bank wants `kind`: 1 for the most plentiful raw resource, up to 1 + `scarcityWeight` for an empty
+ * one. An empty bank wants everything equally (1).
+ */
+export function need(bank: Wallet, kind: RawResource): number {
+  const top = Math.max(bank.ore, bank.ice, bank.crystal);
+  const share = top > 0 ? bank[kind] / top : 1;
+  return 1 + TUNING.scarcityWeight * (1 - share);
+}
+
+/**
+ * Like `nearestRock`, but ranks by distance divided by `need`, so a scarcer resource wins from further away.
+ * Lowest score wins; ties go to the lower rock id.
+ */
+function scoredRock(ctx: TickCtx, from: Vec2, radius: number, filter: (r: Rock) => boolean, bank: Wallet): Rock | null {
+  let best: Rock | null = null;
+  let bestScore = Infinity;
+  const limit = radius * radius;
+  ctx.index.rockHash.query(from, radius, (r) => {
+    if (!ctx.index.rockById.has(r.id) || !filter(r)) return;
+    const d2 = distSq(from, r.pos);
+    if (d2 >= limit) return;
+    const n = need(bank, r.kind);
+    const score = d2 / (n * n);
+    if (score < bestScore || (score === bestScore && best !== null && r.id < best.id)) {
+      bestScore = score;
+      best = r;
+    }
+  });
+  return best;
+}
+
 /** After a manual mining target breaks, chain onto the closest fragment. */
 export function chainTarget(ctx: TickCtx, ship: Ship, st: ShipStats, frags: Rock[]): number | null {
   let best: Rock | null = null;
@@ -423,7 +456,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     }
     if (!rock) {
       rock =
-        nearestRock(
+        scoredRock(
           ctx,
           ship.pos,
           500,
@@ -432,12 +465,14 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
             dist(r.pos, anchor) < TUNING.droneLeash &&
             !unsafe(ctx, r.pos) &&
             !nearBlast(ctx, r.pos, r.id),
+          run.bank,
         ) ??
-        nearestRock(
+        scoredRock(
           ctx,
           anchor,
           TUNING.droneLeash,
           (r) => minable(ctx, st, r) && !unsafe(ctx, r.pos) && !nearBlast(ctx, r.pos, r.id),
+          run.bank,
         ) ??
         undefined;
     }

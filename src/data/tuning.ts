@@ -37,6 +37,8 @@ export const TUNING = {
   fullHoldMin: 2,
   fullHoldShare: 0.04,
   droneLeash: 700,
+  /** How strongly drones favour the resource the bank holds least of: a rock's distance is divided by 1 + weight * (1 - share). */
+  scarcityWeight: 1,
 
   // Prestige.
   /** Bank fuel the first warp costs: long enough in system 1 for a drone and a tier-2 laser (#197). */

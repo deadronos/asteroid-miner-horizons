@@ -8,7 +8,17 @@ import { isDocked } from '../src/sim/economy';
 import { cometPathEscape } from '../src/sim/hazards';
 import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
-import { arrive, chainTarget, dodgeHazards, droneThink, formationSlot, workRock, type TickCtx } from '../src/sim/pilot';
+import {
+  arrive,
+  chainTarget,
+  dodgeHazards,
+  droneThink,
+  formationSlot,
+  need,
+  workRock,
+  type TickCtx,
+} from '../src/sim/pilot';
+import { emptyWallet } from '../src/data/resources';
 import { volatileBlastRadius, volatileSafeDistance } from '../src/sim/traits';
 import { serialize } from '../src/sim/save';
 import { flagship, isHoldFull, makeShip, shipStats } from '../src/sim/ships';
@@ -190,6 +200,44 @@ describe('droneThink dense targets', () => {
     const ctx = ctxFor(state);
     droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
     expect(drone.aiTargetId).toBe(plain.id);
+  });
+});
+
+describe('resource-aware target choice', () => {
+  it('need is 1 for the most plentiful resource and 1 + weight for an empty one', () => {
+    const bank = { ...emptyWallet(), ore: 500 };
+    expect(need(bank, 'ore')).toBe(1);
+    expect(need(bank, 'ice')).toBe(1 + TUNING.scarcityWeight);
+    expect(need({ ...bank, ice: 250 }, 'ice')).toBeCloseTo(1 + TUNING.scarcityWeight * 0.5);
+  });
+
+  it('empty bank gives need 1 for all', () => {
+    const bank = emptyWallet();
+    for (const k of ['ore', 'ice', 'crystal'] as const) expect(need(bank, k)).toBe(1);
+  });
+
+  it('with ice at 0 and ore at 500 a drone picks an ice rock 1.8x as far over a near ore rock', () => {
+    const { state, drone } = droneGame();
+    state.run.bank.ore = 500;
+    state.run.bank.ice = 0;
+    const ore = makeRock(state.run, 'ore', 0, { x: 100, z: 0 }, 30, 0);
+    const ice = makeRock(state.run, 'ice', 0, { x: 180, z: 0 }, 30, 0);
+    state.run.rocks.push(ore, ice);
+    const ctx = ctxFor(state);
+    droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
+    expect(drone.aiTargetId).toBe(ice.id);
+  });
+
+  it('with ice at 0 a drone still picks the near ore rock when the ice rock is 2.5x as far', () => {
+    const { state, drone } = droneGame();
+    state.run.bank.ore = 500;
+    state.run.bank.ice = 0;
+    const ore = makeRock(state.run, 'ore', 0, { x: 100, z: 0 }, 30, 0);
+    const ice = makeRock(state.run, 'ice', 0, { x: 250, z: 0 }, 30, 0);
+    state.run.rocks.push(ore, ice);
+    const ctx = ctxFor(state);
+    droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
+    expect(drone.aiTargetId).toBe(ore.id);
   });
 });
 
