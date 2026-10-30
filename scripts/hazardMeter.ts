@@ -46,6 +46,9 @@ interface Snap {
   shield: number;
   maxHull: number;
   dmgMul: number;
+  size: number;
+  x: number;
+  z: number;
   collisionCd: number;
 }
 
@@ -77,6 +80,9 @@ export function createHazardMeter(state: GameState, level: HazardLevel): HazardM
           shield: sh.shield,
           maxHull: st.maxHull,
           dmgMul: st.dmgMul,
+          size: st.size,
+          x: sh.pos.x,
+          z: sh.pos.z,
           collisionCd: sh.collisionCd,
         });
       }
@@ -113,9 +119,9 @@ export function createHazardMeter(state: GameState, level: HazardLevel): HazardM
         tally.shield += shieldLoss;
 
         // Split the hull loss by source. Heat and flare are recomputed; the rest is a hit or a blast.
-        const pos = ship?.pos;
+        const pos = ship?.pos ?? { x: prev.x, z: prev.z };
         let left = hullLoss;
-        if (pos && Math.hypot(pos.x, pos.z) < sys.heatRadius) {
+        if (Math.hypot(pos.x, pos.z) < sys.heatRadius) {
           const d = Math.hypot(pos.x, pos.z);
           const k = 1 - (d - sys.starRadius) / (sys.heatRadius - sys.starRadius);
           const heat = Math.min(left, TUNING.starHeatDps * Math.max(0.2, k) * dt * mul);
@@ -129,14 +135,15 @@ export function createHazardMeter(state: GameState, level: HazardLevel): HazardM
           left -= fl;
         }
         if (left > 0) {
-          let src: DamageSource = 'other';
-          if (ship && ship.collisionCd > prev.collisionCd) {
-            src = 'collision';
-            for (const r of run.rocks)
-              if (r.comet && Math.hypot(ship.pos.x - r.pos.x, ship.pos.z - r.pos.z) < r.radius + st!.size + 5) {
-                src = 'comet';
-                break;
-              }
+          const hit = ship ? ship.collisionCd > prev.collisionCd : false;
+          let src: DamageSource = hit ? 'collision' : 'other';
+          // A ship removed this tick has no cooldown to read; a rock touching its last position will do.
+          const pad = ship ? 5 : 20;
+          const size = st?.size ?? prev.size;
+          for (const r of run.rocks) {
+            if (Math.hypot(pos.x - r.pos.x, pos.z - r.pos.z) >= r.radius + size + pad) continue;
+            if (!ship || hit) src = r.comet ? 'comet' : 'collision';
+            if (r.comet) break;
           }
           tally.hull[src] += left;
         }
