@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { runBot } from '../scripts/harness';
-import { createHazardMeter, hullTotal, newTally } from '../scripts/hazardMeter';
+import { createHazardMeter, hullTotal, newTally, type HazardTally } from '../scripts/hazardMeter';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
 import { SimIndex } from '../src/sim/index';
@@ -122,17 +122,18 @@ describe('hazard meter', () => {
   });
 
   it('is deterministic for a seeded bot run', () => {
-    const play = () => {
-      const s = newGame(1000);
-      const meter = createHazardMeter(s, 'normal');
-      runBot(s, { seconds: 600, hazards: 'normal', before: meter.before, after: meter.after });
-      return meter.tally;
-    };
-    const a = play();
-    expect(a).toEqual(play());
+    const a = playBot();
+    expect(a).toEqual(playBot());
     expect(a.raw).toBeGreaterThanOrEqual(hullTotal(a));
   });
 });
+
+const playBot = (): HazardTally => {
+  const s = newGame(1000);
+  const meter = createHazardMeter(s, 'normal');
+  runBot(s, { seconds: 600, hazards: 'normal', before: meter.before, after: meter.after });
+  return meter.tally;
+};
 
 /** A spot well clear of the star and of flares. */
 function s0X(): number {

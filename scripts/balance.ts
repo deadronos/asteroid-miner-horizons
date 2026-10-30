@@ -218,6 +218,9 @@ const share = (part: number, whole: number): number => part / Math.max(1, whole)
  */
 const activeShare = (x: WarpStats): number => share(x.flagshipValue + x.contractValue, warpIncome(x));
 
+const dmg = (n: number): string => n.toFixed(n < 10 ? 1 : 0);
+const whole = (n: number): string => `${Math.round(n)}`;
+
 function report(results: SeedResult[], seeds: number, warps: number, seedStart: number, hazards: HazardLevel): string {
   let commit = process.env.BALANCE_COMMIT ?? 'unknown';
   try {
@@ -402,8 +405,6 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     `| System | Hull damage | ${DAMAGE_SOURCES.join(' | ')} | Ships lost | Seed-warps with a loss | Repair ore |`,
     `| --- | --- | ${DAMAGE_SOURCES.map(() => '---').join(' | ')} | --- | --- | --- |`,
   );
-  const dmg = (n: number): string => n.toFixed(n < 10 ? 1 : 0);
-  const whole = (n: number): string => `${Math.round(n)}`;
   for (let w = 0; w < warps; w++) {
     const hz = results.flatMap((r) => (r.warps[w] ? [r.warps[w]!.hazard] : []));
     if (!hz.length) break;
