@@ -13,8 +13,8 @@ import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
 import { goalDone, type GoalId } from '../src/ui/goals';
-// Real saves frozen at versions 2 to 12 (belt trimmed to a few rocks), committed
-// so future bumps stay loadable.
+// Real saves frozen from a mid-game state at each schema version. The registry
+// below also guards against bumping SAVE_VERSION without adding its fixture.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
 import V4_FIXTURE from './fixtures/save-v4.json?raw';
@@ -27,9 +27,35 @@ import V10_FIXTURE from './fixtures/save-v10.json?raw';
 import V11_FIXTURE from './fixtures/save-v11.json?raw';
 import V12_FIXTURE from './fixtures/save-v12.json?raw';
 
+const frozenFixtures = import.meta.glob<string>('./fixtures/save-v*.json', {
+  eager: true,
+  query: '?raw',
+  import: 'default',
+});
+
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
 const v3FixtureState = (): SaveData => JSON.parse(V3_FIXTURE).state as SaveData;
+
+
+describe('frozen saves', () => {
+  it('has a fixture for every supported save version', () => {
+    for (let version = 2; version <= SAVE_VERSION; version++) {
+      const path = `./fixtures/save-v${version}.json`;
+      expect(typeof frozenFixtures[path], `missing frozen save fixture for v${version}`).toBe('string');
+    }
+  });
+
+  it('loads the current-version fixture through migration and validation', () => {
+    const path = `./fixtures/save-v${SAVE_VERSION}.json`;
+    const raw = frozenFixtures[path];
+    expect(typeof raw).toBe('string');
+
+    const data = JSON.parse(raw!).state as SaveData;
+    expect(data.version).toBe(SAVE_VERSION);
+    expect(deserialize(JSON.stringify(data))?.version).toBe(SAVE_VERSION);
+  });
+});
 
 /** A minimal save-shaped object at the given version; contents are arbitrary. */
 function saveAt(version: number): SaveData {
