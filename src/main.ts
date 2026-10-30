@@ -50,7 +50,15 @@ app.addEventListener('click', (e) => {
 // The session owns the running game and its save slot. Switching games drops
 // any queued command, re-centres the camera on the new flagship and lifts a
 // loop-error stop (the new game has not failed).
+const readOnlyBanner = document.createElement('div');
+readOnlyBanner.className = 'paused gfx-reset';
+readOnlyBanner.textContent = 'This save is open in another tab — read-only here';
+readOnlyBanner.hidden = true;
+document.body.append(readOnlyBanner);
 const session = new GameSession(settings, {
+  onAccess: (readOnly) => {
+    readOnlyBanner.hidden = !readOnly;
+  },
   onSwitch: () => {
     commands.length = 0;
     renderer.follow = true;

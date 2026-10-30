@@ -11,6 +11,9 @@ import type { GameState } from '../src/sim/types';
 import { SettingsStore } from '../src/settings';
 import { memStorage } from './memStorage';
 
+/** Always grants the slot lock: these tests fake `window`, which would send the real locker down the browser path. */
+const granted = { acquire: () => ({ release() {} }) };
+
 const HOUR = 3600;
 
 /** A fresh game with `n` basic drones parked at the station. */
@@ -210,7 +213,7 @@ describe('GameSession offline progress', () => {
   /** A session on a saved drone game, loaded at the current (fake) time so nothing is credited yet. */
   function running(offlineProgress = true): GameSession {
     writeSlot(0, withDrones(2));
-    return new GameSession(settings(offlineProgress));
+    return new GameSession(settings(offlineProgress), {}, granted);
   }
 
   describe('in a hidden tab', () => {
@@ -246,7 +249,7 @@ describe('GameSession offline progress', () => {
       const bank1 = walletTotal(s.state.run.bank);
       setHidden(false);
       expect(walletTotal(s.state.run.bank)).toBe(bank1);
-      const again = new GameSession(settings());
+      const again = new GameSession(settings(), {}, granted);
       expect(walletTotal(again.state.run.bank)).toBeCloseTo(bank1, 6);
       s.stop();
     });
@@ -257,7 +260,7 @@ describe('GameSession offline progress', () => {
       setHidden(true); // saves at T0
       s.stop(); // the page goes away
       vi.setSystemTime(T0 + HOUR * 1000);
-      const reloaded = new GameSession(settings()); // credits the hour from savedAt
+      const reloaded = new GameSession(settings(), {}, granted); // credits the hour from savedAt
       reloaded.start();
       setHidden(false);
       expect(aways(reloaded)).toHaveLength(1);

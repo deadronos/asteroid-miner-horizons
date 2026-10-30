@@ -397,6 +397,9 @@ describe('GameSession autosave', () => {
 });
 
 /** How many save-slot writes a `setItem` spy has seen. */
+/** A locker that always grants, for tests that fake `window` (the real one would pick the browser path). */
+const granted = { acquire: () => ({ release() {} }) };
+
 const slotWrites = (spy: { mock: { calls: unknown[][] } }): number =>
   spy.mock.calls.filter(([k]) => String(k).includes('/slot/')).length;
 
@@ -416,7 +419,7 @@ describe('GameSession page lifecycle', () => {
   });
 
   it('saves when the tab is hidden or closed, not when it becomes visible', () => {
-    const s = new GameSession(settings(0));
+    const s = new GameSession(settings(0), {}, granted);
     s.start();
     atTime(s.state, 3);
 
@@ -433,7 +436,7 @@ describe('GameSession page lifecycle', () => {
   });
 
   it('registers its listeners once, however often it is started, and drops them on stop()', () => {
-    const s = new GameSession(settings(0));
+    const s = new GameSession(settings(0), {}, granted);
     const write = vi.spyOn(store, 'setItem');
 
     s.start();
