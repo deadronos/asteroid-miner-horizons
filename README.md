@@ -42,7 +42,7 @@ Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 | Input                      | Action                                                                                           |
 | -------------------------- | ------------------------------------------------------------------------------------------------ |
 | `WASD` / arrows            | Fly the selected ship directly (cancels its order)                                               |
-| Click empty space          | Move order (autopilot steers around rocks)                                                       |
+| Click empty space          | Move order (autopilot steers around rocks and brakes for them)                                   |
 | Click asteroid             | Mine: the ship closes to laser range and burns it; it automatically moves on to the fragments    |
 | Click station              | Dock and unload cargo into the station bank                                                      |
 | Click ship / `Tab` / `1–9` | Select a ship                                                                                    |
@@ -98,7 +98,8 @@ It goes away after the first warp; × hides it for that save.
   half its value. A docked ship can buy extra slots, up to 6 on every hull (8 on the
   Excavator); each slot costs 1.7× the one before, starting at 120 ore · 60 ice for a
   3rd slot. Bought slots carry over when the flagship changes hull, up to the new cap.
-- **Fleet**: buy Mining Drones (2 slots) or Harvesters (3 slots), both expandable to 6. Drones auto-mine, sweep
+- **Fleet**: buy Mining Drones (2 slots) or Harvesters (3 slots), both expandable to 6. Drones auto-mine,
+  preferring the resource the bank is shortest of (a needed rock may be up to about twice as far), sweep
   up debris and return to unload when full. In **Assist** mode they work near the
   flagship; in **Auto** mode they work near the station. Select one to give it manual
   orders. The flagship can be refitted onto the 6-slot **Excavator** hull (expandable to 8).
@@ -159,7 +160,7 @@ It goes away after the first warp; × hides it for that save.
   - _Gameplay_: pause while menus are open or the window is unfocused (P pauses
     manually; menus keep working while paused), autosave interval, confirmations, offline
     progress, the hazard level (Off / Normal / Harsh), and the autopilot assists (rock
-    avoidance, drone auto-unload, fragment chaining).
+    avoidance and braking, drone auto-unload, fragment chaining).
   - _Graphics_: Low/Medium/High quality (resolution cap, star and particle density),
     nebula, anti-aliasing (applies on reload), screen shake, FPS counter, and automatic
     reduced-motion support from your OS preference (disables shake and softens the beam pulse and warp dive).

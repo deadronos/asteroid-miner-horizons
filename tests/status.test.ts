@@ -8,6 +8,7 @@ import { droneThink, type TickCtx } from '../src/sim/pilot';
 import { flagship, makeShip } from '../src/sim/ships';
 import { setStatus } from '../src/sim/status';
 import type { GameState, Ship } from '../src/sim/types';
+import { tick } from '../src/sim/update';
 import { formatStatus } from '../src/ui/panels/FleetPanel';
 import { DT, runTicks } from './helpers';
 
@@ -95,6 +96,15 @@ describe('ship status', () => {
     expect(state.out.status.get(drone.id)).toMatchObject({ kind: 'idle', reason: 'noRocks' });
   });
 
+  it('a hand-flown ship reports manual flight instead of its last AI status', () => {
+    const { state, drone } = setup();
+    state.run.selectedId = drone.id;
+    setStatus(state.out, drone.id, 'idle', 'noRocks');
+    tick(state, DT, { thrust: { x: 1, z: 0 }, commands: [] }, new SimIndex());
+    expect(state.out.status.get(drone.id)?.kind).toBe('manual');
+    expect(formatStatus(state.out.status.get(drone.id)!, 0.2)).toBe('Flying manually');
+  });
+
   it('is stable across consecutive ticks and keeps one record per ship', () => {
     const state = newGame(1);
     const index = new SimIndex();
@@ -132,6 +142,7 @@ describe('formatStatus', () => {
   it('words each kind with its reason', () => {
     expect(formatStatus({ ...base, kind: 'mining', rockKind: 'ice' }, 0.62)).toBe('Mining ice rock · hold 62%');
     expect(formatStatus({ ...base, kind: 'idle', reason: 'noRocks' }, 0)).toBe('Idle · no safe rocks in range');
+    expect(formatStatus({ ...base, kind: 'idle', reason: 'buildWaiting' }, 0)).toBe('Idle · waiting to build');
     expect(formatStatus({ ...base, kind: 'returning' }, 1)).toBe('Returning to dock · hold full');
     expect(formatStatus({ ...base, kind: 'haulOutpost', reason: 'outpostLimit' }, 0)).toBe(
       'Hauling · outpost limit reached',

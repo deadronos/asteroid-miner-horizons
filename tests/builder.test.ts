@@ -290,6 +290,31 @@ describe('builder brain', () => {
     expect(builder.order).toBeNull();
   });
 
+  it('reports a build order held for an unsafe rock as waiting to build', () => {
+    const { s, rocks, builder } = world([300]);
+    builder.autoBuild = false;
+    const st = s.run.system.station.pos;
+    // Put the builder clear of the comet path, so the held order — not a hazard escape — sets its status.
+    builder.pos = { x: st.x, z: st.z + 600 };
+    const comet = { ...rocks[0]!, id: 9999, size: 2 as const, radius: 20, comet: true as const };
+    comet.pos = { x: st.x - 3000, z: st.z };
+    comet.vel = { x: 60, z: 0 };
+    s.run.rocks.push(comet);
+    send(s, { t: 'mine', shipId: builder.id, rockId: rocks[0]!.id });
+    runTicks(s, 2);
+    expect(builder.order).toEqual({ kind: 'build', rockId: rocks[0]!.id });
+    expect(s.out.status.get(builder.id)).toMatchObject({ kind: 'idle', reason: 'buildWaiting' });
+  });
+
+  it('reports a build order blocked by the outpost limit as waiting to build', () => {
+    const { s, rocks, builder } = world([300, 400, 500, 600]);
+    for (const r of rocks.slice(0, 3)) s.run.automation.outposts.push(makeOutpost(r));
+    builder.autoBuild = false;
+    builder.order = { kind: 'build', rockId: rocks[3]!.id };
+    runTicks(s, 2);
+    expect(s.out.status.get(builder.id)).toMatchObject({ kind: 'idle', reason: 'buildWaiting' });
+  });
+
   it('a build order with autoBuild on overrides the builder own pick once', () => {
     const { s, rocks, builder } = world([300, 450]);
     send(s, { t: 'mine', shipId: builder.id, rockId: rocks[1]!.id });

@@ -18,6 +18,7 @@ export type StatusKind =
   | 'avoidComet'
   | 'flare'
   | 'escorting'
+  | 'manual'
   | 'idle';
 
 /** Why a ship is idle (or, for a hauling builder, why it is not building). */
@@ -25,6 +26,7 @@ export type IdleReason =
   | 'noRocks'
   | 'outpostLimit'
   | 'noBuildSite'
+  | 'buildWaiting'
   | 'belowReserve'
   | 'repairMoney'
   | 'nothingToHaul'

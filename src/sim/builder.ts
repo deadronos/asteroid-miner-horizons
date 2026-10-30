@@ -120,6 +120,8 @@ export function builderThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
         ? 'belowReserve'
         : null;
   let why: IdleReason | null = blocker;
+  // A build order that cannot go ahead says so, rather than looking like ordinary hauling.
+  if (order && (orderHeld || blocker)) why = 'buildWaiting';
   if (!blocker && !rock && !orderHeld && ship.autoBuild) {
     const held = ship.aiTargetId != null ? index.rockById.get(ship.aiTargetId) : undefined;
     rock =

@@ -16,6 +16,7 @@ const REASONS: Record<IdleReason, string> = {
   noRocks: 'no safe rocks in range',
   outpostLimit: 'outpost limit reached',
   noBuildSite: 'no build site',
+  buildWaiting: 'waiting to build',
   belowReserve: 'bank below reserve',
   repairMoney: 'waiting for repair money',
   nothingToHaul: 'nothing to haul',
@@ -56,6 +57,8 @@ export function formatStatus(st: ShipStatus, holdShare: number): string {
       return 'Sheltering from flare';
     case 'escorting':
       return 'Escorting';
+    case 'manual':
+      return 'Flying manually';
     case 'idle':
       return `Idle${why || (holdShare >= 1 ? ' · hold full' : '')}`;
   }
