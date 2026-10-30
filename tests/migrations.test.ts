@@ -14,7 +14,7 @@ import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
 import { validateState } from '../src/sim/validate';
 import { goalDone, type GoalId } from '../src/ui/goals';
-// Real saves frozen at versions 2 to 13 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 14 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
@@ -28,6 +28,7 @@ import V10_FIXTURE from './fixtures/save-v10.json?raw';
 import V11_FIXTURE from './fixtures/save-v11.json?raw';
 import V12_FIXTURE from './fixtures/save-v12.json?raw';
 import V13_FIXTURE from './fixtures/save-v13.json?raw';
+import V14_FIXTURE from './fixtures/save-v14.json?raw';
 
 // The root tsconfig has `types: []`; referencing @types/node here would leak Node globals into src/.
 interface Fs {
@@ -69,6 +70,7 @@ const currentRun = () => {
     slots: s.slots.map((f) => (f ? { ...f, variant: defaultVariant(f.type) } : null)),
     autoRepair: false,
     autoUpgrade: false,
+    autoBuild: false,
   }));
   const system = { ...run.system, modifiers: [] };
   const hazards = newHazards(fixture.profile.seed, run.system.number);
@@ -86,7 +88,13 @@ const currentRun = () => {
 /** `run` with the v12 per-ship automation flags cleared; toEqual treats an undefined field as absent. */
 const sansShipAuto = <R extends { ships: object[] }>(run: R): R => ({
   ...run,
-  ships: run.ships.map((s) => ({ ...s, autoRepair: undefined, autoUpgrade: undefined })),
+  ships: run.ships.map((s) => ({ ...s, autoRepair: undefined, autoUpgrade: undefined, autoBuild: undefined })),
+});
+
+/** `run` with the v14 `autoBuild` flag cleared. */
+const sansAutoBuild = <R extends { ships: object[] }>(run: R): R => ({
+  ...run,
+  ships: run.ships.map((s) => ({ ...s, autoBuild: undefined })),
 });
 
 /** `profile` without the v13 fields: the `installs`, `unloads` and `miningDrones` stats and the first-steps flag. */
@@ -1022,7 +1030,7 @@ describe('first-steps migration to v13', () => {
     const before = JSON.parse(V12_FIXTURE).state;
     const loaded = loadFrozen(V12_FIXTURE);
     expect(sansGoals(loaded.profile)).toEqual(before.profile);
-    expect(loaded.run).toEqual(before.run);
+    expect(sansAutoBuild(loaded.run)).toEqual(before.run);
   });
 
   it('rejects a current save whose first-steps flag is missing or not a boolean', () => {
@@ -1066,11 +1074,64 @@ describe('frozen save fixtures', () => {
     const validated = validateState(migrated);
     if (!validated) throw new Error('validate rejected the v13 fixture');
     expect(validated.profile).toEqual(frozen.profile);
-    expect(validated.run).toEqual(frozen.run);
+    expect(sansAutoBuild(validated.run)).toEqual(frozen.run);
 
     const state = loadFrozen(V13_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
     expect(state.profile).toEqual(frozen.profile);
+    expect(sansAutoBuild(state.run)).toEqual(frozen.run);
+  });
+
+  // Seed 4242, hazards on, stopped at the first tick after a warp with a second ship (622 sim seconds, system 2). Belt trimmed to eight rocks.
+  it('save-v14 fixture loads through fromData', () => {
+    const frozen = JSON.parse(V14_FIXTURE).state as SaveData;
+    expect(frozen.version).toBe(14);
+    expect(frozen.run.ships.length).toBeGreaterThan(1);
+    const state = loadFrozen(V14_FIXTURE);
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.profile).toEqual(frozen.profile);
     expect(state.run).toEqual(frozen.run);
+  });
+});
+
+describe('construction drone migration to v14', () => {
+  it('v13 fixture migrates to v14 with autoBuild false on every ship', () => {
+    const before = JSON.parse(V13_FIXTURE).state as SaveData;
+    const state = loadFrozen(V13_FIXTURE);
+    expect(state.run.ships.length).toBe(before.run.ships.length);
+    for (const ship of state.run.ships) expect(ship.autoBuild).toBe(false);
+  });
+
+  it('v13 mine orders survive unchanged', () => {
+    const raw = JSON.parse(V13_FIXTURE) as { state: SaveData };
+    const ship = raw.state.run.ships[1]!;
+    const rockId = raw.state.run.rocks[0]!.id;
+    ship.order = { kind: 'mine', rockId };
+    const state = loadFrozen(JSON.stringify(raw));
+    expect(state.run.ships[1]!.order).toEqual({ kind: 'mine', rockId });
+    expect(state.run.ships[1]!.autoBuild).toBe(false);
+  });
+
+  it('a build order round-trips through save', () => {
+    const state = loadFrozen(V14_FIXTURE);
+    const rockId = state.run.rocks[0]!.id;
+    state.run.ships[1]!.order = { kind: 'build', rockId };
+    state.run.ships[1]!.autoBuild = true;
+    const back = loadFrozen(JSON.stringify({ format: 'amh-save', savedAt: 0, state }));
+    expect(back.run.ships[1]!.order).toEqual({ kind: 'build', rockId });
+    expect(back.run.ships[1]!.autoBuild).toBe(true);
+  });
+
+  it('rejects a current save whose autoBuild is not a boolean', () => {
+    const loaded = loadFrozen(V14_FIXTURE);
+    loaded.run.ships[1]!.autoBuild = 'yes' as unknown as boolean;
+    expect(parseImport(JSON.stringify({ format: 'amh-save', savedAt: 0, state: loaded })).ok).toBe(false);
+  });
+
+  it('does not count a construction drone as a mining drone when backfilling the v13 stat', () => {
+    const raw = JSON.parse(V12_FIXTURE) as { state: SaveData };
+    const base = loadFrozen(JSON.stringify(raw)).profile.stats.miningDrones;
+    raw.state.run.ships.push({ ...raw.state.run.ships[1]!, id: 9999, hullId: 'constructionDrone' });
+    expect(loadFrozen(JSON.stringify(raw)).profile.stats.miningDrones).toBe(base);
   });
 });

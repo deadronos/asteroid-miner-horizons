@@ -37,11 +37,11 @@ export interface HazardTally {
   repairOre: number;
 }
 
-export type ShipRole = 'flagship' | 'drone' | 'hauler';
+export type ShipRole = 'flagship' | 'drone' | 'hauler' | 'builder';
 
 export const newTally = (): HazardTally => ({
   hull: { collision: 0, heat: 0, flare: 0, comet: 0, other: 0 },
-  collisionRole: { flagship: 0, drone: 0, hauler: 0 },
+  collisionRole: { flagship: 0, drone: 0, hauler: 0, builder: 0 },
   collisionStatus: {},
   hits: 0,
   hitSpeed: 0,

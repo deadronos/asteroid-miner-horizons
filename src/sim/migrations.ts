@@ -121,6 +121,12 @@ export const migrations: Record<number, Migration> = {
     profile.goalsDismissed = false;
     return d;
   },
+  // v14 added the construction drone and its autoBuild toggle (#174). No existing
+  // ship builds, and a mine order stays a mine order.
+  13: (d) => {
+    for (const ship of d.run.ships) ship.autoBuild = false;
+    return d;
+  },
 };
 
 export interface MigrateOptions {

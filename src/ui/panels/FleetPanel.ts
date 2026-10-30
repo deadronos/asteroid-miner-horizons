@@ -193,7 +193,9 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             ? ' — replaces your flagship hull, keeps fitted parts'
             : def.role === 'hauler'
               ? ' — ferries cargo from drones and outposts to the station; does not mine'
-              : '';
+              : def.role === 'builder'
+                ? ' — builds outposts on large asteroids; does not mine'
+                : '';
         btn.dataset.title = `${def.name}: ${def.slots} slots (up to ${def.maxSlots}), ${def.hull} hull, ${def.cargo} cargo${note}`;
         btn.append(
           h('span', { text: `${def.role === 'flagship' ? 'Refit flagship → ' : '+ '}${def.name}` }),

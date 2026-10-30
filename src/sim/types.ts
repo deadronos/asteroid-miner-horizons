@@ -50,7 +50,11 @@ export interface Fitted {
   tier: Tier;
 }
 
-export type Order = { kind: 'move'; to: Vec2 } | { kind: 'mine'; rockId: number } | { kind: 'dock' };
+export type Order =
+  | { kind: 'move'; to: Vec2 }
+  | { kind: 'mine'; rockId: number }
+  | { kind: 'dock' }
+  | { kind: 'build'; rockId: number };
 
 /** Drone behaviour when it has no manual order. */
 export type AiMode = 'assist' | 'auto';
@@ -72,6 +76,8 @@ export interface Ship {
   autoRepair: boolean;
   /** Drones and haulers: spend spare bank on slots and tiers while docked (#140). */
   autoUpgrade: boolean;
+  /** A construction drone picks its own rocks to build outposts on (true for new ones, false for every other ship). */
+  autoBuild: boolean;
   /** True while a mining beam is hitting its target this tick. */
   beamOn: boolean;
   beamTargetId: number | null;

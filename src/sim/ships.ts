@@ -73,6 +73,7 @@ export function shipStats(ship: Ship, profile: Profile): ShipStats {
 export const isFlagship = (ship: Ship): boolean => HULLS[ship.hullId].role === 'flagship';
 export const isDrone = (ship: Ship): boolean => HULLS[ship.hullId].role === 'drone';
 export const isHauler = (ship: Ship): boolean => HULLS[ship.hullId].role === 'hauler';
+export const isBuilder = (ship: Ship): boolean => HULLS[ship.hullId].role === 'builder';
 export const isAlive = (ship: Ship): boolean => ship.respawn <= 0;
 export const cargoFree = (ship: Ship, st: ShipStats): number => Math.max(0, st.cargoCap - walletTotal(ship.cargo));
 
@@ -101,6 +102,7 @@ export function makeShip(run: Run, profile: Profile, hullId: HullId, name: strin
     aiMode: 'assist',
     autoRepair: false,
     autoUpgrade: false,
+    autoBuild: h.role === 'builder',
     beamOn: false,
     beamTargetId: null,
     aiTargetId: null,

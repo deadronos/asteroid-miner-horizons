@@ -2,17 +2,18 @@
 // with, and how many it can be expanded to at the station (#141).
 // Flagship hulls replace your command ship (keeping fitted parts); drone hulls
 // are bought as extra autonomous fleet members, and hauler hulls are fleet
-// members that ferry cargo from miners and outposts instead of mining.
+// members that ferry cargo from miners and outposts instead of mining, and
+// builder hulls are fleet members that build outposts instead of mining.
 
 import type { ComponentId, Tier, VariantId } from './components';
 import type { Cost } from './resources';
 
-export type HullId = 'prospector' | 'excavator' | 'drone' | 'harvester' | 'hauler';
+export type HullId = 'prospector' | 'excavator' | 'drone' | 'harvester' | 'hauler' | 'constructionDrone';
 
 export interface HullDef {
   id: HullId;
   name: string;
-  role: 'flagship' | 'drone' | 'hauler';
+  role: 'flagship' | 'drone' | 'hauler' | 'builder';
   /** Slots a new ship of this hull starts with. */
   slots: number;
   /** Slots it can be expanded to by buying more at the station. */
@@ -109,6 +110,22 @@ export const HULLS: Record<HullId, HullDef> = {
     cost: { ore: 160, ice: 25, alloy: 20 },
     loadout: [{ type: 'engine', variant: 'ion', tier: 1 }, null],
     color: 0xc9a2ff,
+  },
+  constructionDrone: {
+    id: 'constructionDrone',
+    name: 'Construction Drone',
+    role: 'builder',
+    slots: 2,
+    maxSlots: 6,
+    hull: 60,
+    speed: 95,
+    accel: 300,
+    cargo: 70,
+    magnet: 50,
+    size: 9,
+    cost: { ore: 110, ice: 15, alloy: 15 },
+    loadout: [],
+    color: 0xffa86b,
   },
 };
 

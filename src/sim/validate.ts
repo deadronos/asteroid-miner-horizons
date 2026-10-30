@@ -72,12 +72,13 @@ function isShipSlots(s: unknown): boolean {
   return isObj(s) && Array.isArray(s.slots) && s.slots.every(isFitted);
 }
 
-/** True when `o` is no order, or one `runOrder` can follow: a move with a target, a mine with a rock id, or dock. */
+/** True when `o` is no order, or one `runOrder` can follow: a move with a target, a mine or build with a rock id, or dock. */
 function isOrder(o: unknown): boolean {
   if (o === null) return true;
   if (!isObj(o)) return false;
   if (o.kind === 'move') return isVec(o.to);
   if (o.kind === 'mine') return finite(o.rockId);
+  if (o.kind === 'build') return finite(o.rockId);
   return o.kind === 'dock';
 }
 
@@ -107,6 +108,7 @@ function isShip(s: unknown): boolean {
     isWallet(s.cargo) &&
     typeof s.autoRepair === 'boolean' &&
     typeof s.autoUpgrade === 'boolean' &&
+    typeof s.autoBuild === 'boolean' &&
     isShipSlots(s)
   );
 }

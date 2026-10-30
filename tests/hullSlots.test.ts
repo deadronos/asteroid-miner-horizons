@@ -5,7 +5,7 @@ import { credit, emptyWallet, RESOURCES } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
 import { scrapValue, slotCost } from '../src/sim/economy';
-import { flagship, makeShip, shipStats } from '../src/sim/ships';
+import { droneCount, flagship, isBuilder, makeShip, shipStats } from '../src/sim/ships';
 import type { Fitted } from '../src/sim/types';
 import { bankDelta, send } from './helpers';
 
@@ -36,6 +36,24 @@ describe('slot expansion (#141)', () => {
       expect(HULLS[id].maxSlots).toBeGreaterThanOrEqual(HULLS[id].slots);
     }
     expect(HULLS.excavator.maxSlots).toBe(8);
+  });
+
+  it('HULLS.constructionDrone has role builder and fits each module type at least once', () => {
+    const h = HULLS.constructionDrone;
+    expect(h.role).toBe('builder');
+    expect(h.maxSlots).toBeGreaterThanOrEqual(COMPONENT_IDS.length);
+    expect(h.loadout.some((f) => f?.type === 'laser')).toBe(false);
+    expect(HULL_IDS.at(-1)).toBe('constructionDrone');
+  });
+
+  it('droneCount counts construction drones, and they start with autoBuild on', () => {
+    const s = newGame(1);
+    const before = droneCount(s.run);
+    const b = makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', { x: 0, z: 0 });
+    s.run.ships.push(b);
+    expect(droneCount(s.run)).toBe(before + 1);
+    expect([isBuilder(b), b.autoBuild]).toEqual([true, true]);
+    expect(flagship(s.run).autoBuild).toBe(false);
   });
 
   it('prices a slot by its number, so the 3rd costs the base and each later one grows', () => {

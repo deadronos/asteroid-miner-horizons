@@ -14,7 +14,7 @@ import { newRefinery } from './refining';
 import { makeShip } from './ships';
 import type { GameState, Profile, Run } from './types';
 
-export const SAVE_VERSION = 13;
+export const SAVE_VERSION = 14;
 
 export function newProfile(seed: number): Profile {
   return {

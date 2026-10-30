@@ -62,6 +62,26 @@ const corruptions: Corrupt[] = [
   ['ship cargo alloy NaN', (s) => ((s.run.ships[0]!.cargo.alloy as unknown) = NaN)],
 ];
 
+describe('validateState – build orders', () => {
+  it('validate rejects a build order without a rockId', () => {
+    const payload = validPayload();
+    (payload.run.ships[0]!.order as unknown) = { kind: 'build' };
+    expect(validateState(payload)).toBeNull();
+  });
+
+  it('accepts a build order with a rockId', () => {
+    const payload = validPayload();
+    payload.run.ships[0]!.order = { kind: 'build', rockId: 3 };
+    expect(validateState(payload)).not.toBeNull();
+  });
+
+  it('rejects a ship whose autoBuild is missing', () => {
+    const payload = validPayload();
+    delete (payload.run.ships[0] as Partial<(typeof payload.run.ships)[0]>).autoBuild;
+    expect(validateState(payload)).toBeNull();
+  });
+});
+
 describe('validateState – corruptions return null', () => {
   for (const [label, corrupt] of corruptions) {
     it(`validateState: ${label}`, () => {

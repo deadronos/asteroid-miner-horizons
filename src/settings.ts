@@ -53,6 +53,8 @@ export interface Settings {
   autoRepairAt: 0.25 | 0.5 | 0.75;
   /** Units of each resource fleet automation never spends (#140). */
   autoReserve: 0 | 50 | 100 | 250 | 500 | 1000;
+  /** Units of each resource a construction drone keeps back when it builds (#174). */
+  builderReserve: 0 | 10 | 25 | 50 | 100 | 250;
   // Graphics
   quality: Quality;
   renderScale: RenderScale;
@@ -137,6 +139,7 @@ export const DEFAULTS: Settings = {
   offlineProgress: true,
   autoRepairAt: 0.5,
   autoReserve: 100,
+  builderReserve: 25,
   quality: 'high',
   renderScale: 1,
   nebula: true,
@@ -221,6 +224,7 @@ const KEY = 'asteroid-miner-horizons/settings';
 const AUTOSAVE_SEC_VALUES = [0, 10, 30, 60] as const;
 export const AUTO_REPAIR_AT_VALUES = [0.25, 0.5, 0.75] as const;
 export const AUTO_RESERVE_VALUES = [0, 50, 100, 250, 500, 1000] as const;
+export const BUILDER_RESERVE_VALUES = [0, 10, 25, 50, 100, 250] as const;
 const HUD_SCALE_RANGE = [0.5, 2] as const;
 const ZOOM_SPEED_RANGE = [0.25, 4] as const;
 const VOLUME_RANGE = [0, 1] as const;
@@ -301,6 +305,10 @@ export class SettingsStore {
         case 'autoReserve':
           if (AUTO_RESERVE_VALUES.includes(d[k] as Settings['autoReserve']))
             out.autoReserve = d[k] as Settings['autoReserve'];
+          continue;
+        case 'builderReserve':
+          if (BUILDER_RESERVE_VALUES.includes(d[k] as Settings['builderReserve']))
+            out.builderReserve = d[k] as Settings['builderReserve'];
           continue;
         case 'hudScale':
           if (inRange(d[k], HUD_SCALE_RANGE)) out.hudScale = d[k];
