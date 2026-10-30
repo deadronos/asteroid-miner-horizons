@@ -2,6 +2,7 @@ import { SpatialHash } from '../core/spatialHash';
 import { TUNING } from '../data/tuning';
 import { applyEffects, systemEffects } from './modifiers';
 import { emptyStats, writeShipStats, type ShipStats } from './ships';
+import type { ShipStatus } from './status';
 import type { GameState, Rock } from './types';
 
 /**
@@ -34,6 +35,8 @@ export class SimIndex {
   readonly upgradeReadyAt = new Map<number, number>();
   /** Ids seen in the last `rebuild`, so the next one can prune the departed. */
   private readonly liveShipIds = new Set<number>();
+  /** The state's status map during `rebuild`, so the bound prune callback can reach it. */
+  private statusMap: Map<number, ShipStatus> | null = null;
 
   // Bound once: `forEach` with a stored callback allocates neither an iterator nor a closure per tick.
   private readonly pruneUpgrade = (_t: number, id: number): void => {
@@ -41,6 +44,9 @@ export class SimIndex {
   };
   private readonly pruneStats = (_s: ShipStats, id: number): void => {
     if (!this.liveShipIds.has(id)) this.stats.delete(id);
+  };
+  private readonly pruneStatus = (_s: ShipStatus, id: number): void => {
+    if (!this.liveShipIds.has(id)) this.statusMap?.delete(id);
   };
   private readonly pruneWait = (id: number): void => {
     if (!this.liveShipIds.has(id)) this.repairWait.delete(id);
@@ -78,6 +84,11 @@ export class SimIndex {
     // A scrapped or destroyed ship's entry must not linger for the whole run.
     // Iterating a Map or Set allocates an iterator, so skip it when nothing can be stale.
     if (this.stats.size !== run.ships.length) this.stats.forEach(this.pruneStats);
+    if (state.out.status.size > 0) {
+      this.statusMap = state.out.status;
+      this.statusMap.forEach(this.pruneStatus);
+      this.statusMap = null;
+    }
     if (this.upgradeReadyAt.size > 0) this.upgradeReadyAt.forEach(this.pruneUpgrade);
     if (this.repairWait.size > 0) this.repairWait.forEach(this.pruneWait);
   }

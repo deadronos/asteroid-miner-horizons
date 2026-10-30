@@ -13,6 +13,7 @@ import type { PerkId } from '../data/perks';
 import type { RecipeId } from '../data/refining';
 import type { Cost, RawResource, Wallet } from '../data/resources';
 import type { RockTrait } from '../data/traits';
+import type { ShipStatus } from './status';
 
 export type RockSize = 0 | 1 | 2; // large, medium, small
 
@@ -282,6 +283,8 @@ export interface LogEntry {
 export interface Outbox {
   fx: Fx[];
   log: LogEntry[];
+  /** What each AI ship is doing, written by its brain (see `sim/status`). Transient and never drained per tick. */
+  status: Map<number, ShipStatus>;
 }
 
 export interface GameState {

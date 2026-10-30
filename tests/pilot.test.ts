@@ -63,7 +63,12 @@ describe('chainTarget', () => {
 /** A game in system 2 (hazards scheduled) with no rocks, the flagship parked far away and one auto drone at `pos`. */
 function hazardGame(starClass: StarClass, pos: { x: number; z: number }): { state: GameState; drone: Ship } {
   const profile = { ...newProfile(1), warps: 1 };
-  const state: GameState = { version: SAVE_VERSION, profile, run: newRun(profile), out: { fx: [], log: [] } };
+  const state: GameState = {
+    version: SAVE_VERSION,
+    profile,
+    run: newRun(profile),
+    out: { fx: [], log: [], status: new Map() },
+  };
   state.run.system.starClass = starClass;
   state.run.rocks = [];
   flagship(state.run).pos = { x: 1e5, z: 1e5 };

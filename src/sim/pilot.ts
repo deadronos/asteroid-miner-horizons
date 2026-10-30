@@ -11,6 +11,7 @@ import type { SimIndex } from './index';
 import { needsRepair } from './fleetAuto';
 import { laserRock } from './mining';
 import { flagship, isAlive, isHoldFull, type ShipStats } from './ships';
+import { setStatus } from './status';
 import { canMine, volatileSafeDistance } from './traits';
 import type { GameState, Rock, Ship } from './types';
 
@@ -319,10 +320,12 @@ export function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: bool
   const { run } = ctx.state;
   const esc = { x: 0, z: 0 };
   if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, esc)) {
+    setStatus(ctx.state.out, ship.id, 'avoidComet');
     steer(ctx, ship, st, esc.x, esc.z, ctx.assists.avoid);
     return true;
   }
   if (!inFlareZone(run, ship.pos)) return false;
+  setStatus(ctx.state.out, ship.id, 'flare');
   const shelter = { x: 0, z: 0 };
   if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, shelter) === 'dock')
     arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.5);
@@ -360,19 +363,31 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     return;
   }
 
-  if (dodgeBlast(ctx, ship, st)) return;
+  const out = ctx.state.out;
+  if (dodgeBlast(ctx, ship, st)) {
+    setStatus(out, ship.id, 'heading');
+    return;
+  }
 
   if (needsRepair(ship, st, ctx.auto)) {
     ship.aiTargetId = null;
-    if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
+    if (!isDocked(run, ship)) {
+      setStatus(out, ship.id, 'returning');
+      arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
+    } else setStatus(out, ship.id, 'repairing');
     return;
   }
 
   if (full) {
     ship.aiTargetId = null;
     // Without auto-dock a full drone waits by its anchor for a manual dock order.
-    if (!ctx.assists.autoDock) arrive(ctx, ship, st, home, 20);
-    else if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
+    if (!ctx.assists.autoDock) {
+      setStatus(out, ship.id, 'idle');
+      arrive(ctx, ship, st, home, 20);
+    } else if (!isDocked(run, ship)) {
+      setStatus(out, ship.id, 'returning');
+      arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
+    } else setStatus(out, ship.id, 'unloading');
     return;
   }
 
@@ -387,6 +402,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     }
   }
   if (pickup && best > st.magnet * st.magnet * 0.3) {
+    setStatus(out, ship.id, 'collecting');
     arrive(ctx, ship, st, pickup, 6);
     return;
   }
@@ -427,12 +443,16 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     }
     if (rock) {
       ship.aiTargetId = rock.id;
-      if (workRock(ctx, ship, st, rock)) ship.aiTargetId = null;
+      const broke = workRock(ctx, ship, st, rock) !== null;
+      setStatus(out, ship.id, ship.beamOn ? 'mining' : 'heading', null, rock);
+      if (broke) ship.aiTargetId = null;
       return;
     }
   }
 
   ship.aiTargetId = null;
+  if (ship.aiMode === 'assist' && st.dps <= 0) setStatus(out, ship.id, 'escorting');
+  else setStatus(out, ship.id, 'idle', 'noRocks');
   if (unsafe(ctx, home) || nearBlast(ctx, home)) steer(ctx, ship, st, 0, 0);
   else arrive(ctx, ship, st, home, 20);
 }

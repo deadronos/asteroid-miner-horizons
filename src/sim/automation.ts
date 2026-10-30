@@ -11,6 +11,7 @@ import { needsRepair } from './fleetAuto';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
 import { arrive, dodgeBlast, dodgeHazards, formationSlot, unsafe, type TickCtx } from './pilot';
+import { setStatus } from './status';
 import { cargoFree, findShip, flagship, isAlive, isDrone, isHauler, isHoldFull, type ShipStats } from './ships';
 import type { Automation, GameState, Outpost, Rock, Ship } from './types';
 
@@ -165,10 +166,17 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     ship.aiTargetId = null;
     return;
   }
-  if (dodgeBlast(ctx, ship, st)) return;
+  const out = ctx.state.out;
+  if (dodgeBlast(ctx, ship, st)) {
+    setStatus(out, ship.id, 'heading');
+    return;
+  }
   if (needsRepair(ship, st, ctx.auto)) {
     ship.aiTargetId = null;
-    if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+    if (!isDocked(run, ship)) {
+      setStatus(out, ship.id, 'returning');
+      arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+    } else setStatus(out, ship.id, 'repairing');
     return;
   }
 
@@ -179,6 +187,7 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   }
   if (src) {
     ship.aiTargetId = src.id;
+    setStatus(out, ship.id, ctx.index.outpostRocks.has(src.avoidId ?? -1) ? 'haulOutpost' : 'haulMiner');
     const reach = st.size + src.radius + TUNING.haulTransferGap;
     if (dist(ship.pos, src.pos) > reach) {
       arrive(ctx, ship, st, src.pos, reach * 0.7, src.avoidId);
@@ -193,9 +202,13 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   ship.aiTargetId = null;
   if (carrying && ctx.assists.autoDock) {
-    if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+    if (!isDocked(run, ship)) {
+      setStatus(out, ship.id, 'returning');
+      arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+    } else setStatus(out, ship.id, 'unloading');
     return;
   }
+  setStatus(out, ship.id, 'idle', 'nothingToHaul');
   // Idle, or loaded without auto-dock: wait just off the station for work or a manual dock order.
   arrive(ctx, ship, st, formationSlot(station, ship.id, 110), 20, null);
 }

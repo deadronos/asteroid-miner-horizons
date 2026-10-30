@@ -5,27 +5,71 @@ import { formatCost, walletTotal } from '../../data/resources';
 import { TUNING } from '../../data/tuning';
 import { outpostAt } from '../../sim/automation';
 import { hullBlock, isDocked } from '../../sim/economy';
-import { droneCount, findShip, fleetCap, isAlive, isFlagship, isHauler, isHoldFull, shipStats } from '../../sim/ships';
+import { droneCount, findShip, fleetCap, isAlive, isFlagship, isHauler, shipStats } from '../../sim/ships';
+import type { IdleReason, ShipStatus } from '../../sim/status';
 import type { GameState, Ship } from '../../sim/types';
 import { Panel, bar, h, setBlocked, setText } from '../dom';
 import type { PanelCtx } from './context';
 
+const REASONS: Record<IdleReason, string> = {
+  noRocks: 'no safe rocks in range',
+  outpostLimit: 'outpost limit reached',
+  noBuildSite: 'no build site',
+  belowReserve: 'bank below reserve',
+  repairMoney: 'waiting for repair money',
+  nothingToHaul: 'nothing to haul',
+};
+
+/** The line a brain's status shows in the fleet list; `holdShare` is cargo over capacity (0..1). */
+export function formatStatus(st: ShipStatus, holdShare: number): string {
+  const rock = st.rockKind ? `${st.large ? 'large ' : ''}${st.rockKind} rock` : '';
+  const why = st.reason ? ` · ${REASONS[st.reason]}` : '';
+  const hold = ` · hold ${Math.round(holdShare * 100)}%`;
+  switch (st.kind) {
+    case 'mining':
+      return `Mining ${rock || 'rock'}${hold}`;
+    case 'heading':
+      return rock ? `Heading to ${rock}` : 'Repositioning';
+    case 'collecting':
+      return 'Collecting pickups';
+    case 'returning':
+      return `Returning to dock${holdShare >= 1 ? ' · hold full' : ''}`;
+    case 'docked':
+      return 'Docked';
+    case 'repairing':
+      return 'Docked · repairing';
+    case 'unloading':
+      return 'Docked · unloading';
+    case 'haulOutpost':
+      return st.reason ? `Hauling${why}` : 'Collecting from outpost';
+    case 'haulMiner':
+      return st.reason ? `Hauling${why}` : 'Collecting from drone';
+    case 'buildHeading':
+      return 'Heading to build an outpost';
+    case 'building':
+      return `Building outpost${rock ? ` on ${rock}` : ''}`;
+    case 'avoidComet':
+      return 'Avoiding comet';
+    case 'flare':
+      return 'Sheltering from flare';
+    case 'escorting':
+      return 'Escorting';
+    case 'idle':
+      return `Idle${why || (holdShare >= 1 ? ' · hold full' : '')}`;
+  }
+}
+
 function status(state: GameState, s: Ship): string {
   if (!isAlive(s)) return `Rebuilding ${Math.ceil(s.respawn)}s`;
-  if (isDocked(state.run, s) && !s.order) return 'Docked';
+  if (isDocked(state.run, s) && !s.order && isFlagship(s)) return 'Docked';
   if (s.order?.kind === 'mine') return s.beamOn ? 'Mining' : 'Approaching';
   if (s.order?.kind === 'dock') return 'Returning';
   if (s.order?.kind === 'move') return 'Moving';
   if (isFlagship(s)) return s.beamOn ? 'Mining' : 'Idle';
-  const st = shipStats(s, state.profile);
-  if (isHauler(s)) {
-    if (s.aiTargetId != null) return walletTotal(s.cargo) > 0 ? 'Loading' : 'Collecting';
-    return walletTotal(s.cargo) > 0 ? 'Unloading' : 'Standby';
-  }
-  if (isHoldFull(s, st)) return 'Hauling';
-  if (s.beamOn) return 'Mining';
-  if (s.aiTargetId != null) return 'Prospecting';
-  return s.aiMode === 'assist' ? 'Escorting' : 'Idle';
+  const st = state.out.status.get(s.id);
+  if (!st) return 'Standby';
+  const cap = shipStats(s, state.profile).cargoCap;
+  return formatStatus(st, cap > 0 ? walletTotal(s.cargo) / cap : 0);
 }
 
 export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {

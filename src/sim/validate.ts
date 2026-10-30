@@ -323,5 +323,5 @@ export function validateState(data: SaveData): GameState | null {
   if (!isRefinery(run.refinery)) return null;
   if (!isHazards(run.hazards)) return null;
   if (!isAutomation(run.automation, run.rocks)) return null;
-  return { version: data.version, profile, run, out: { fx: [], log: [] } };
+  return { version: data.version, profile, run, out: { fx: [], log: [], status: new Map() } };
 }

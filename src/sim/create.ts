@@ -71,7 +71,12 @@ export function newRun(profile: Profile, route = 0): Run {
 
 export function newGame(seed = (Math.random() * 2 ** 32) >>> 0): GameState {
   const profile = newProfile(seed);
-  const state: GameState = { version: SAVE_VERSION, profile, run: newRun(profile), out: { fx: [], log: [] } };
+  const state: GameState = {
+    version: SAVE_VERSION,
+    profile,
+    run: newRun(profile),
+    out: { fx: [], log: [], status: new Map() },
+  };
   state.out.log.push({
     level: 'major',
     text: `Welcome to ${state.run.system.name}. Click a rock to mine it, fly over debris to collect it, then dock at the station (click it) to unload.`,
