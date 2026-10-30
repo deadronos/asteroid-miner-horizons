@@ -26,7 +26,7 @@ src/data  ──┼─▶ src/sim ──┬─▶ src/render  (three.js)
   `menu/` holds its tabs, `panels/` holds the HUD panels. `TitleScreen.ts` is the boot screen and
   `TouchControls.ts` the on-screen controls for touch devices.
 - The top-level `src/*.ts` files are the wiring: `main.ts` (bootstrap and the frame loop), `input.ts`,
-  `settings.ts`, `pause.ts`, `session.ts`, `reloadGuard.ts`.
+  `settings.ts`, `pause.ts`, `session.ts`, `reloadGuard.ts`, `debugHook.ts` (whether `window.__amh` is attached).
 
 `src/audio` sits beside the presentation layers: `sfx.ts` holds pure rules for turning sim state into sound,
 `music.ts` the pure per-star-class music rules, `AudioEngine.ts` owns the `AudioContext`, and `MusicPlayer.ts`
@@ -71,5 +71,12 @@ refits in an open menu apply immediately.
 ## Debug hook
 
 `window.__amh` exposes `{ state(), send(cmd), settings, renderer, input, audio, autoQuality, info(), title }` for
-console poking and automated browser checks; `main.ts` defines it. `npm run dev`, then use it from the devtools
-console.
+console poking and automated browser checks. `main.ts` attaches that same object through `installDebugHook`
+(`src/debugHook.ts`) when the gate is open. A plain production load leaves `window.__amh` unset.
+
+It is on in a dev build (`npm run dev`). A production build (`npm run preview`, the GitHub Pages deploy) opts in
+when the `debug` query parameter is present (`/?debug` or `?debug=1`; any present value counts) or when the
+`localStorage` key `asteroid-miner-horizons/debug` is `'1'`. Browser tests (#129) should open the built page
+with `?debug` — that needs no setup script and survives `location.reload()` — or set the storage key before
+navigation (`localStorage.setItem('asteroid-miner-horizons/debug', '1')`) when the URL cannot change. Either
+way the full hook is attached. A missing or blocked store leaves it off.

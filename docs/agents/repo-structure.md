@@ -29,6 +29,7 @@ src/
   pause.ts       pause kind -> banner + continuous-audio policy
   session.ts     which slot is running; load/new/import/delete/autosave
   reloadGuard.ts caps reloads after repeated WebGL context loss
+  debugHook.ts   when `window.__amh` is attached (dev, or `?debug` / localStorage opt-in)
   main.ts        bootstrap + 60 Hz fixed-step loop
 tests/           see testing.md
 scripts/         headless harness: bot.ts, harness.ts, bench.ts, balance.ts

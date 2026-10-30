@@ -4,6 +4,7 @@
 import './style.css';
 import { AudioEngine } from './audio/AudioEngine';
 import { TUNING } from './data/tuning';
+import { installDebugHook } from './debugHook';
 import { Input } from './input';
 import { pauseAudio, pauseBanner, pauseKind, renderDue } from './pause';
 import { recordLoss } from './reloadGuard';
@@ -223,9 +224,11 @@ renderer.onContextLost = () => {
 hud.refresh();
 requestAnimationFrame(frame);
 
-// Debug hook for automated checks in the browser console.
-Object.assign(window, {
-  __amh: {
+// Debug hook for console poking and browser tests. Off on a plain production load; see debugHook.ts.
+installDebugHook(
+  window,
+  { dev: import.meta.env.DEV, search: location.search, storage: safeStorage('localStorage') },
+  {
     state: () => session.state,
     send,
     settings,
@@ -236,4 +239,4 @@ Object.assign(window, {
     info: () => renderer.info,
     title,
   },
-});
+);

@@ -193,7 +193,9 @@ anyone; [`docs/agents/architecture.md`](docs/agents/architecture.md) covers the 
 rules; [`docs/agents/repo-structure.md`](docs/agents/repo-structure.md) covers what lives where.
 
 `window.__amh` exposes `{ state(), send(cmd), settings, renderer, audio }` for console poking and automated
-checks.
+checks. Dev builds always attach it; a production build does so only with `?debug` or
+`localStorage['asteroid-miner-horizons/debug'] = '1'`. See
+[`docs/agents/architecture.md`](docs/agents/architecture.md#debug-hook).
 
 ## Ideas for later
 
