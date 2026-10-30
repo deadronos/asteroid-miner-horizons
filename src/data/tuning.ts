@@ -140,7 +140,7 @@ export const TUNING = {
   /** Outposts that can be deployed at once. */
   outpostMax: 3,
   /** Bank cost of one outpost. */
-  outpostCost: { ore: 120, ice: 30, alloy: 15 },
+  outpostCost: { ore: 80, ice: 10, alloy: 10 },
   /** Gap between the flagship's hull and the rock's surface it must be inside to deploy. */
   outpostDeployGap: 120,
   /** An outpost taps a deep reserve this many times its host rock's units; the rock itself is left intact. */
