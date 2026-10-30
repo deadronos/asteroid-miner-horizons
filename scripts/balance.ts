@@ -31,6 +31,7 @@ import { isDocked } from '../src/sim/economy';
 import { droneCount, fleetCap, isFlagship, isHauler } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
 import { runBot } from './harness';
+import { createHazardMeter, DAMAGE_SOURCES, hullTotal, newTally, type HazardTally } from './hazardMeter';
 
 /** A warp that takes longer than this is reported as a wall and ends the seed. */
 const WARP_CAP_SEC = 3600;
@@ -70,6 +71,8 @@ interface WarpStats {
   firstT2: number | null;
   /** Seconds into this system the flagship's laser first reached tier 2, or null. */
   firstLaserT2: number | null;
+  /** Hazard damage, losses and repair spend this warp (#208). */
+  hazard: HazardTally;
   /** Most drones in the fleet at once during this system. */
   peakDrones: number;
   /** Fleet cap when the system ended (it grows with the bay perk). */
@@ -124,20 +127,25 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
       alloy: 0,
       fuel: 0,
       mods: state.run.system.modifiers.join('+'),
+      hazard: newTally(),
       firstDrone: null,
       firstT2: null,
       firstLaserT2: null,
       peakDrones: 0,
       fleetCap: fleetCap(state.profile),
     };
+    const meter = createHazardMeter(state, hazards);
+    cur.hazard = meter.tally;
     const ran = runBot(state, {
       seconds: WARP_CAP_SEC,
       hazards,
       before: (s) => {
+        meter.before(s);
         cargoBefore.clear();
         for (const sh of s.run.ships) cargoBefore.set(sh.id, walletValue(sh.cargo));
       },
       after: (s) => {
+        meter.after(s);
         if (s.profile.warps !== startWarps) return true;
         const t = s.run.time;
         const drones = droneCount(s.run);
@@ -209,6 +217,9 @@ const share = (part: number, whole: number): number => part / Math.max(1, whole)
  * flagship's own unloads (#46). Drones and haulers only earn by unloading.
  */
 const activeShare = (x: WarpStats): number => share(x.flagshipValue + x.contractValue, warpIncome(x));
+
+const dmg = (n: number): string => n.toFixed(n < 10 ? 1 : 0);
+const whole = (n: number): string => `${Math.round(n)}`;
 
 function report(results: SeedResult[], seeds: number, warps: number, seedStart: number, hazards: HazardLevel): string {
   let commit = process.env.BALANCE_COMMIT ?? 'unknown';
@@ -384,6 +395,42 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     return `| ${label} | ${n} | ${stat(rel, (v) => `${v.toFixed(2)}×`)} |`;
   };
   for (const id of MODIFIER_IDS) lines.push(modRow(MODIFIERS[id].name, (x) => x.mods.split('+').includes(id)));
+  lines.push(
+    '',
+    '## Hazards (#208)',
+    '',
+    'Hull damage taken by every ship in the fleet, after armor and shields, per system (hazards: ' +
+      `${hazards}). Collision is rocks and debris; comet is a hit from a comet; other is a volatile blast. Losses are ships destroyed (the flagship rebuilds at the station). Repair is paid in ore, not credits. The sim records no damage sources, so \`scripts/hazardMeter.ts\` attributes each tick's hull and shield loss from outside; heat and flare are recomputed from the tick's own formulas.`,
+    '',
+    `| System | Hull damage | ${DAMAGE_SOURCES.join(' | ')} | Ships lost | Seed-warps with a loss | Repair ore |`,
+    `| --- | --- | ${DAMAGE_SOURCES.map(() => '---').join(' | ')} | --- | --- | --- |`,
+  );
+  for (let w = 0; w < warps; w++) {
+    const hz = results.flatMap((r) => (r.warps[w] ? [r.warps[w]!.hazard] : []));
+    if (!hz.length) break;
+    lines.push(
+      `| ${w + 1} | ${stat(hz.map(hullTotal), dmg)} | ${DAMAGE_SOURCES.map((src) =>
+        stat(
+          hz.map((h) => h.hull[src]),
+          dmg,
+        ),
+      ).join(' | ')} | ${stat(
+        hz.map((h) => h.shipsLost),
+        whole,
+      )} | ${hz.filter((h) => h.shipsLost > 0).length}/${hz.length} | ${stat(
+        hz.map((h) => h.repairOre),
+        whole,
+      )} |`,
+    );
+  }
+  const all = results.flatMap((r) => r.warps.map((x) => x.hazard));
+  const raw = all.reduce((n, h) => n + h.raw, 0);
+  const sum = (f: (h: HazardTally) => number): number => all.reduce((n, h) => n + f(h), 0);
+  lines.push(
+    '',
+    `- Defensive share, pooled over ${all.length} seed-warps (${dmg(raw)} raw damage): armor turned away **${pct(sum((h) => h.armor) / Math.max(1e-9, raw))}**, shields absorbed **${pct(sum((h) => h.shield) / Math.max(1e-9, raw))}**, the hull took **${pct(sum(hullTotal) / Math.max(1e-9, raw))}**.`,
+    `- Ships lost: ${sum((h) => h.shipsLost)} in total; repair spend ${whole(sum((h) => h.repairOre))} ore in total.`,
+  );
   lines.push(
     '',
     '## Raw data',
