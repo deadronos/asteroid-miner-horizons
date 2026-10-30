@@ -55,7 +55,7 @@ After every task, before committing:
 3. If the change could move balance numbers, run `npm run balance` and inspect the report. If the sim's
    behaviour is meant to be unchanged (bot ignores the feature), assert that explicitly and check
    `run.rng.s` is untouched.
-4. Regenerate generated files (`docs/balance.md`) rather than hand-editing them.
+4. Regenerate generated files rather than hand-editing them; `docs/balance.md` comes from `npm run balance:ci`.
 
 ## Branches, commits, PRs
 
