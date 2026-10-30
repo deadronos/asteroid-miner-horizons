@@ -44,6 +44,10 @@ const ACTIVE_SHARE_TARGET = 0.4;
 const AUTOMATION_BY = 4;
 /** Share of seeds that must have refined alloy and deployed an outpost by `AUTOMATION_BY` (#206). */
 const AUTOMATION_TARGET_SHARE = 0.5;
+/** From this system on the fleet should be nearly full when the player warps (#207). */
+const FLEET_FROM = 4;
+/** Median drones in the fleet at warp time required in each system from `FLEET_FROM` to the end of the mid-game. */
+const FLEET_AT_WARP_TARGET = 4;
 /** Share of seeds that must reach the opening target before the first warp (#197). */
 const OPENING_TARGET_SHARE = 0.8;
 /** Hazard level the report plays at unless --hazards says otherwise; matches the game's settings default. */
@@ -79,6 +83,8 @@ interface WarpStats {
   hazard: HazardTally;
   /** Most drones in the fleet at once during this system. */
   peakDrones: number;
+  /** Drones in the fleet on the last tick before the warp (what the player takes into the fuel stop). */
+  fleetAtWarp: number;
   /** Fleet cap when the system ended (it grows with the bay perk). */
   fleetCap: number;
 }
@@ -136,6 +142,7 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
       firstT2: null,
       firstLaserT2: null,
       peakDrones: 0,
+      fleetAtWarp: 0,
       fleetCap: fleetCap(state.profile),
     };
     const meter = createHazardMeter(state, hazards);
@@ -158,6 +165,7 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
         if (cur.firstDrone == null && drones > 0) cur.firstDrone = t;
         if (cur.firstLaserT2 == null && laserTier(s) >= 2) cur.firstLaserT2 = t;
         cur.peakDrones = Math.max(cur.peakDrones, drones);
+        cur.fleetAtWarp = drones;
         cur.fleetCap = fleetCap(s.profile);
         // Credit each unload to whoever made it.
         for (const sh of s.run.ships) {
@@ -396,6 +404,29 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     `| Outpost output by system ${AUTOMATION_BY} | ${outpostSeeds}/${results.length} seeds | — | — |`,
     `| Both by system ${AUTOMATION_BY} | ${bothSeeds}/${results.length} seeds (${pct(share(bothSeeds, results.length))}) | ≥ ${pct(AUTOMATION_TARGET_SHARE)} of seeds | **${bothSeeds >= AUTOMATION_TARGET_SHARE * results.length ? 'PASS' : 'FAIL'}** |`,
     `| Median hauler share, systems ${AUTOMATION_BY}–${MID_GAME_END} | ${haulerMid.map((h) => `${h.w + 1}: ${pct(h.median)}`).join(' · ')} | > 0% in each | **${haulerHit ? 'PASS' : 'FAIL'}** |`,
+  );
+  // Acceptance check for #207: the fleet cap must not sit unused for most of a run.
+  const fleetRows = Array.from({ length: warps }, (_, w) => {
+    const ws = results.flatMap((r) => (r.warps[w] && r.wall !== w ? [r.warps[w]!] : []));
+    return { w, n: ws.length, atWarp: ws.map((x) => x.fleetAtWarp), cap: ws.map((x) => x.fleetCap) };
+  }).filter((f) => f.n);
+  const fleetHit = Array.from({ length: MID_GAME_END - FLEET_FROM + 1 }, (_, i) => fleetRows[FLEET_FROM - 1 + i]).every(
+    (f) => !!f && median(f.atWarp) >= FLEET_AT_WARP_TARGET,
+  );
+  lines.push(
+    '',
+    '## Fleet utilisation (#207)',
+    '',
+    `The fleet cap (drones and haulers together) is a headline progression stat, so it should be in use well before the late game. Fleet at warp is the number of ships in the fleet on the last tick before the warp. The cap is not meant to be aspirational: target a median of **≥ ${FLEET_AT_WARP_TARGET} ships at warp in every system from ${FLEET_FROM} to ${MID_GAME_END}**. More automation lowers active play, so the active-play target above must still hold.`,
+    '',
+    '| System | Fleet at warp | Cap | Verdict |',
+    '| --- | --- | --- | --- |',
+    ...fleetRows.map(
+      (f) =>
+        `| ${f.w + 1} | ${stat(f.atWarp, whole)} | ${stat(f.cap, whole)} | ${f.w + 1 >= FLEET_FROM && f.w + 1 <= MID_GAME_END ? (median(f.atWarp) >= FLEET_AT_WARP_TARGET ? '**PASS**' : '**FAIL**') : '—'} |`,
+    ),
+    '',
+    `- Overall (systems ${FLEET_FROM}–${MID_GAME_END}): **${fleetHit ? 'PASS' : 'FAIL'}**`,
   );
   lines.push(
     '',

@@ -74,7 +74,7 @@ export const HULLS: Record<HullId, HullDef> = {
     cargo: 40,
     magnet: 55,
     size: 8,
-    cost: { ore: 90, ice: 12 },
+    cost: { ore: 70, ice: 8 },
     loadout: [{ type: 'laser', variant: 'focused', tier: 1 }, null],
     color: 0x59c2ff,
   },

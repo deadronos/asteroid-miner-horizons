@@ -470,7 +470,7 @@ describe('cost table', () => {
       expect(variantDef(id, defaultVariant(id)).cost(1)).toEqual(T1[id]);
       expect(variantDef(id, defaultVariant(id)).cost(2)).toEqual(T2[id]);
     }
-    expect(HULLS.drone.cost).toEqual({ ore: 90, ice: 12 });
+    expect(HULLS.drone.cost).toEqual({ ore: 70, ice: 8 });
   });
 
   it('prices every tier-3 component variant and the big hulls in alloy', () => {
