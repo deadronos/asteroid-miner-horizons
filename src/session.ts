@@ -24,6 +24,7 @@ import {
   writeSlot,
 } from './sim/save';
 import type { GameState } from './sim/types';
+import { defaultLocker, type SlotLock, type SlotLocker } from './slotLock';
 import type { SettingsStore } from './settings';
 
 /** Save-slot actions the gear menu drives. */
@@ -45,6 +46,8 @@ const IDLE_TIMEOUT_MS = 2000;
 export interface GameSessionHooks {
   /** The running game was swapped for a different one (load, new game, restart). */
   onSwitch?(): void;
+  /** Whether the running slot is now read-only because another tab holds it; fires once the lock is decided. */
+  onAccess?(readOnly: boolean): void;
 }
 
 export class GameSession implements SaveActions {
@@ -66,12 +69,20 @@ export class GameSession implements SaveActions {
   private suspended = false;
   /** Wall time (ms) the tab was hidden at, or null while it is visible; the absence is credited on return. */
   private hiddenAt: number | null = null;
+  /** `pending` until the slot lock is decided; only an `owned` slot is ever written or credited offline time. */
+  private access: 'pending' | 'owned' | 'readonly' = 'pending';
+  private lock: SlotLock | null = null;
+  /** The slot `lock` is for. */
+  private lockSlot = -1;
+  /** Bumped per claim so a lock answer for a slot the tab already left is released unused. */
+  private claimId = 0;
   /** Per-session derived state for the running game; never serialized. */
   readonly sim = new SimIndex();
 
   constructor(
     private readonly settings: SettingsStore,
     private readonly hooks: GameSessionHooks = {},
+    private readonly locker: SlotLocker = defaultLocker(),
   ) {
     migrateLegacy();
     this.slot = activeSlot();
@@ -80,7 +91,7 @@ export class GameSession implements SaveActions {
     this.running = rec?.state ?? newGame();
     if (st.kind === 'unreadable') this.avoidUnreadable(st.reason);
     if (this.running.run.time > 0) this.logLoaded(this.slot);
-    if (rec) this.creditOffline(rec.savedAt);
+    this.claim(rec?.savedAt, false);
     // Only a change to the interval restarts the timer, so unrelated settings
     // (a volume drag, say) don't keep pushing the next autosave back.
     settings.onChange((v) => {
@@ -99,6 +110,11 @@ export class GameSession implements SaveActions {
 
   current(): GameState {
     return this.state;
+  }
+
+  /** True while another tab holds this slot: the game can be watched, but nothing is saved or credited. */
+  get readOnly(): boolean {
+    return this.access === 'readonly';
   }
 
   /** True while saves of the running game are suspended (see `suspendAutosave`). */
@@ -127,6 +143,10 @@ export class GameSession implements SaveActions {
       this.state.out.log.push({ level: 'warn', text: 'Saving is off after an error; export the save instead.' });
       return;
     }
+    if (this.readOnly) {
+      this.warnReadOnly();
+      return;
+    }
     if (this.unsaved) {
       this.warnUnsaved();
       return;
@@ -138,24 +158,25 @@ export class GameSession implements SaveActions {
   load(i: number): void {
     const rec = readSlot(i);
     if (!rec) return;
-    this.switchTo(i, rec.state);
+    this.switchTo(i, rec.state, rec.savedAt);
     this.logLoaded(i);
-    this.creditOffline(rec.savedAt);
   }
 
   /** Start a brand-new game in slot `i`. */
   newGame(i: number): void {
     // Save the old game unless this restarts its own slot, which the new game
     // overwrites anyway.
-    if (i === this.slot) clearSlot(i);
-    else this.persist(); // a no-op while unsaved, so an unreadable slot is kept
+    if (i === this.slot) {
+      if (this.readOnly) return this.warnReadOnly();
+      clearSlot(i);
+    } else this.persist(); // a no-op while unsaved, so an unreadable slot is kept
     this.adopt(i);
   }
 
   /** Copy an imported record into slot `i`; the running game is untouched. */
   importTo(i: number, rec: SaveRecord): void {
     // The unsaved running game sits on slot `i`; replacing that save would leave it with nowhere to go.
-    if (this.unsaved && i === this.slot) return;
+    if (i === this.slot && (this.unsaved || this.readOnly)) return;
     if (writeSlot(i, rec.state))
       this.state.out.log.push({ level: 'info', text: `Imported a save into slot ${i + 1}.` });
     else this.warnWriteFailed(i);
@@ -167,7 +188,7 @@ export class GameSession implements SaveActions {
    */
   remove(i: number): void {
     if (i !== this.slot) clearSlot(i);
-    else if (this.unsaved) {
+    else if (this.unsaved && !this.readOnly) {
       clearSlot(i);
       this.unsaved = false;
       this.persist();
@@ -182,6 +203,10 @@ export class GameSession implements SaveActions {
     const persist = (): void => {
       this.persist();
     };
+    const leave = (): void => {
+      this.persist();
+      this.releaseLock();
+    };
     const onVisibility = (): void => {
       if (document.hidden) {
         this.hiddenAt = Date.now();
@@ -194,10 +219,10 @@ export class GameSession implements SaveActions {
     };
     // Opened in a background tab: the absence starts now.
     if (document.hidden) this.hiddenAt = Date.now();
-    window.addEventListener('beforeunload', persist);
+    window.addEventListener('beforeunload', leave);
     document.addEventListener('visibilitychange', onVisibility);
     this.detach = () => {
-      window.removeEventListener('beforeunload', persist);
+      window.removeEventListener('beforeunload', leave);
       document.removeEventListener('visibilitychange', onVisibility);
     };
   }
@@ -212,16 +237,17 @@ export class GameSession implements SaveActions {
     this.detach?.();
     this.detach = null;
     this.hiddenAt = null;
+    this.releaseLock();
   }
 
   /** Swap the running game, saving the old one to its slot and the new one to its. */
-  private switchTo(next: number, nextState: GameState): void {
+  private switchTo(next: number, nextState: GameState, creditSince?: number): void {
     this.persist();
-    this.adopt(next, nextState);
+    this.adopt(next, nextState, creditSince);
   }
 
-  /** Swap in `state` (a fresh game by default) as slot `i`, and persist it. */
-  private adopt(i: number, state: GameState = newGame()): void {
+  /** Swap in `state` (a fresh game by default) as slot `i`, claim its lock and persist it. */
+  private adopt(i: number, state: GameState = newGame(), creditSince?: number): void {
     this.slot = i;
     this.unsaved = false;
     setActiveSlot(i);
@@ -231,7 +257,57 @@ export class GameSession implements SaveActions {
     if (this.hiddenAt !== null) this.hiddenAt = Date.now();
     this.clearIndex();
     this.hooks.onSwitch?.();
-    this.persist();
+    this.claim(creditSince, true);
+  }
+
+  private releaseLock(): void {
+    this.lock?.release();
+    this.lock = null;
+    this.lockSlot = -1;
+    if (this.access === 'owned') this.access = 'pending';
+  }
+
+  /**
+   * Take the lock on the running slot (keeping one already held for it). Once owned, credits the absence since
+   * `creditSince` and, for a game just swapped in, saves it. Without the lock the tab is read-only.
+   */
+  private claim(creditSince: number | undefined, saveNew: boolean): void {
+    const id = ++this.claimId;
+    if (this.lock && this.lockSlot === this.slot) return this.owned(creditSince, saveNew);
+    this.releaseLock();
+    this.access = 'pending';
+    const slot = this.slot;
+    const settle = (lock: SlotLock | null): void => {
+      if (id !== this.claimId) {
+        lock?.release();
+        return;
+      }
+      if (!lock) {
+        this.access = 'readonly';
+        this.warnReadOnly();
+        this.hooks.onAccess?.(true);
+        return;
+      }
+      this.lock = lock;
+      this.lockSlot = slot;
+      this.owned(creditSince, saveNew);
+    };
+    const got = this.locker.acquire(slot, () => {
+      if (id !== this.claimId) return;
+      this.releaseLock();
+      this.access = 'readonly';
+      this.warnReadOnly();
+      this.hooks.onAccess?.(true);
+    });
+    if (got instanceof Promise) void got.then(settle, () => settle(null));
+    else settle(got);
+  }
+
+  private owned(creditSince: number | undefined, saveNew: boolean): void {
+    this.access = 'owned';
+    this.hooks.onAccess?.(false);
+    if (saveNew) this.persist();
+    if (creditSince !== undefined) this.creditOffline(creditSince);
   }
 
   /** Drop the previous run's derived structures so its rocks/ships can be collected. */
@@ -272,7 +348,7 @@ export class GameSession implements SaveActions {
   private persist(): boolean {
     this.cancelIdle?.();
     this.cancelIdle = null;
-    if (this.unsaved || this.suspended) return false;
+    if (this.unsaved || this.suspended || this.access !== 'owned') return false;
     if (!loadsBack(this.state)) {
       if (!this.brokenWarned) this.warnWouldNotLoad();
       this.brokenWarned = true;
@@ -308,6 +384,13 @@ export class GameSession implements SaveActions {
     }
   }
 
+  private warnReadOnly(): void {
+    this.state.out.log.push({
+      level: 'warn',
+      text: `This save is open in another tab — read-only here. Nothing from this tab is saved to slot ${this.slot + 1}.`,
+    });
+  }
+
   private warnUnsaved(reason?: string): void {
     this.state.out.log.push({
       level: 'warn',
@@ -334,7 +417,7 @@ export class GameSession implements SaveActions {
    * saves, so it is credited once. Skipped while suspended: the game may be broken and could not be saved anyway.
    */
   private creditOffline(since: number): void {
-    if (!this.settings.value.offlineProgress || this.suspended) return;
+    if (!this.settings.value.offlineProgress || this.suspended || this.access !== 'owned') return;
     if (applyOffline(this.state, (Date.now() - since) / 1000)) this.persist();
   }
 
