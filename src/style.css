@@ -12,6 +12,8 @@
   --fuel: #ff7a4d;
   --warn: #ffc04d;
   --bad: #ff5d5d;
+  --flagship: #59ffa0;
+  --hazard: #ff7a4d;
   --btn: rgba(40, 80, 120, 0.55);
   --btn-hover: rgba(60, 120, 170, 0.75);
 }
@@ -113,7 +115,7 @@ body {
     0 1px 2px #000;
 }
 .map-blip[data-kind='selected'] {
-  color: #59ffa0;
+  color: var(--flagship);
   font-size: calc(18px * var(--hud-scale, 1));
 }
 .map-blip[data-kind='outpost'] {
@@ -121,7 +123,7 @@ body {
 }
 .map-blip[data-kind='comet'],
 .map-blip[data-kind='flare'] {
-  color: #ff7a4d;
+  color: var(--hazard);
 }
 @keyframes map-blip-pulse {
   50% {
@@ -439,16 +441,16 @@ button.buy small {
   grid-column: 1 / -1;
 }
 .bar.hull .fill {
-  background: linear-gradient(90deg, #2fbf71, #59ffa0);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 70%, #000), var(--accent));
 }
 .bar.shield .fill {
   background: linear-gradient(90deg, #2a7ad1, #4db8ff);
 }
 .bar.cargo .fill {
-  background: linear-gradient(90deg, #c46f1f, #ffa040);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--ore) 70%, #000), var(--ore));
 }
 .bar.refine .fill {
-  background: linear-gradient(90deg, #8a96a8, #c9d3e0);
+  background: linear-gradient(90deg, color-mix(in srgb, var(--alloy) 70%, #000), var(--alloy));
 }
 
 /* Selected ship (right) */

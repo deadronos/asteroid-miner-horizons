@@ -3,10 +3,11 @@
 // of `outpostMax` markers is built up front and re-posed each frame.
 
 import * as THREE from 'three';
-import { RESOURCE_INFO, walletTotal } from '../data/resources';
+import { walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { Outpost, Rock } from '../sim/types';
 import { additive, flat } from './util';
+import { palette } from './activePalette';
 
 const FILL_SEGMENTS = 48;
 
@@ -43,7 +44,7 @@ export class OutpostView {
       const rock = o ? rockById(o.rockId) : undefined;
       m.root.visible = !!rock;
       if (!o || !rock) continue;
-      const color = RESOURCE_INFO[o.kind].color;
+      const color = palette().resource[o.kind];
       (m.ring.material as THREE.MeshBasicMaterial).color.setHex(color);
       (m.fill.material as THREE.MeshBasicMaterial).color.setHex(color);
       m.root.position.set(rock.pos.x, 20, rock.pos.z);

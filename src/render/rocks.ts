@@ -5,12 +5,14 @@
 
 import * as THREE from 'three';
 import { hash01 } from '../core/rng';
-import { RAW_RESOURCES, RESOURCE_INFO, type RawResource } from '../data/resources';
+import { RAW_RESOURCES, type RawResource } from '../data/resources';
 import type { RockTrait } from '../data/traits';
 import { TUNING } from '../data/tuning';
 import type { Pickup, Rock } from '../sim/types';
 import { inView, type ViewRect } from './cull';
 import { rockGeometry, type RockStyle } from './util';
+import { PALETTES } from '../data/palette';
+import { palette } from './activePalette';
 
 /** Number of shared rock shape pools: two shapes for each of the three kinds. */
 export const ROCK_POOLS = 6;
@@ -29,10 +31,16 @@ export const rockShapeIndex = (kind: RawResource, id: number): number =>
   RAW_RESOURCES.indexOf(kind) * 2 + (((id % 2) + 2) % 2);
 
 export const ROCK_TINT: Record<RawResource, THREE.Color> = {
-  ore: new THREE.Color(0x9c7b5e),
-  ice: new THREE.Color(0xc4ecf8),
-  crystal: new THREE.Color(0xc48cff),
+  ore: new THREE.Color(PALETTES.default.rock.ore),
+  ice: new THREE.Color(PALETTES.default.rock.ice),
+  crystal: new THREE.Color(PALETTES.default.rock.crystal),
 };
+
+/** Re-colours `ROCK_TINT` in place from the active palette. */
+export function syncRockTints(): void {
+  const t = palette().rock;
+  for (const k of RAW_RESOURCES) ROCK_TINT[k].setHex(t[k]);
+}
 const HOT = new THREE.Color(0xff5a2a);
 /**
  * Cull radii. The `rock` style is the largest at 1.22× a rock's radius (see
@@ -323,7 +331,7 @@ export class RockView {
       p.set(pk.pos.x, 4, pk.pos.z);
       s.setScalar(Math.max(0.01, size));
       pp.mesh.setMatrixAt(n, m.compose(p, q, s));
-      pp.mesh.setColorAt(n, c.setHex(RESOURCE_INFO[pk.kind].color).multiplyScalar(this.glowK));
+      pp.mesh.setColorAt(n, c.setHex(palette().resource[pk.kind]).multiplyScalar(this.glowK));
       n++;
     }
     pp.commit(n);

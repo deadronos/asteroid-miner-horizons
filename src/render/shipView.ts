@@ -11,6 +11,7 @@ import { isAlive, shipStats } from '../sim/ships';
 import type { Fitted, GameState, Rock, Ship } from '../sim/types';
 import { buildFittings, fitLayout, type FitLayout, sameFit, snapshotFit } from './fittings';
 import { additive, flat, glowTexture } from './util';
+import { palette } from './activePalette';
 
 const HULL_SHAPES: Record<HullId, [number, number][]> = {
   prospector: [
@@ -301,7 +302,9 @@ export class ShipView {
       v.select.visible = selected;
       const ringR = Math.max(h.size * 1.9 + 4 * wpp, 14 * wpp);
       v.select.scale.setScalar(ringR * (1 + Math.sin(time * 4) * 0.03));
-      (v.select.material as THREE.MeshBasicMaterial).color.setHex(h.role === 'flagship' ? 0x59ffa0 : 0x59c2ff);
+      (v.select.material as THREE.MeshBasicMaterial).color.setHex(
+        h.role === 'flagship' ? palette().flagship : palette().fleet,
+      );
 
       // Status bars: hull on top, cargo below; ~34 px wide regardless of zoom.
       const bw = 34 * wpp;
@@ -314,7 +317,7 @@ export class ShipView {
       v.hpBar.position.set(-bw / 2, 2, -by);
       v.hpBar.scale.set(bw * hullF, 1, bh);
       (v.hpBar.material as THREE.MeshBasicMaterial).color.setHex(
-        hullF > 0.5 ? 0x59ffa0 : hullF > 0.25 ? 0xffc04d : 0xff5d5d,
+        hullF > 0.5 ? palette().ok : hullF > 0.25 ? palette().warn : palette().bad,
       );
       v.cargoBar.position.set(-bw / 2, 2, -by + bh + wpp);
       v.cargoBar.scale.set(Math.max(0.0001, bw * cargoF), 1, bh);

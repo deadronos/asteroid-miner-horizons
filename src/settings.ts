@@ -3,6 +3,7 @@
 // values on old installs. Subscribers are notified on every change.
 
 import { HAZARD_LEVEL_IDS, type HazardLevel } from './data/hazards';
+import { COLOUR_VISION_IDS, type ColourVision } from './data/palette';
 import { safeStorage } from './sim/save';
 
 export type Quality = 'auto' | 'low' | 'medium' | 'high';
@@ -65,6 +66,8 @@ export interface Settings {
   help: HelpMode;
   /** Tighter panels and a shorter event log (#161). */
   hudCompact: boolean;
+  /** Palette for resource, hull and hazard colours (#210). */
+  colourVision: ColourVision;
   hudCollapsed: HudCollapse;
   logVerbosity: LogVerbosity;
   followByDefault: boolean;
@@ -144,6 +147,7 @@ export const DEFAULTS: Settings = {
   alwaysShowBars: false,
   help: 'auto',
   hudCompact: false,
+  colourVision: 'default',
   hudCollapsed: {},
   logVerbosity: 'all',
   followByDefault: true,
@@ -264,6 +268,9 @@ export class SettingsStore {
           continue;
         case 'shake':
           if (SHAKE_IDS.includes(d[k] as Shake)) out.shake = d[k] as Shake;
+          continue;
+        case 'colourVision':
+          if (COLOUR_VISION_IDS.includes(d[k] as ColourVision)) out.colourVision = d[k] as ColourVision;
           continue;
         case 'help':
           if (HELP_MODES.includes(d[k] as HelpMode)) out.help = d[k] as HelpMode;

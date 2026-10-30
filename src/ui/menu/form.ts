@@ -14,6 +14,7 @@ export type SelectKey =
   | 'logVerbosity'
   | 'help'
   | 'touchControls'
+  | 'colourVision'
   | 'hazards'
   | 'autoRepairAt'
   | 'autoReserve';

@@ -5,7 +5,6 @@
 import * as THREE from 'three';
 import type { Vec2 } from '../core/vec';
 import { HULLS } from '../data/hulls';
-import { RESOURCE_INFO } from '../data/resources';
 import { isAlive } from '../sim/ships';
 import type { GameState } from '../sim/types';
 import { Debris } from './debris';
@@ -13,6 +12,7 @@ import { FloatingText } from './floatingText';
 import { Particles } from './particles';
 import { ROCK_TINT } from './rocks';
 import type { ShipView } from './shipView';
+import { palette } from './activePalette';
 
 /** A beam's hit point this frame, from `ShipView.update`. */
 export type BeamHit = { x: number; z: number; ship: { id: number; thrusting: boolean } };
@@ -54,7 +54,7 @@ export class FxView {
     for (const fx of state.out.fx) {
       switch (fx.t) {
         case 'crack': {
-          col.setHex(RESOURCE_INFO[fx.kind].color);
+          col.setHex(palette().resource[fx.kind]);
           P.emit(fx.pos.x, fx.pos.z, col, Math.round(fx.radius * 1.6), fx.radius * 3.5, 1.1);
           P.emit(fx.pos.x, fx.pos.z, col.setHex(0x8a8070), Math.round(fx.radius), fx.radius * 1.5, 1.8, { drag: 0.8 });
           this.debris.burst(fx.pos.x, fx.pos.z, fx.radius, ROCK_TINT[fx.kind]);
@@ -63,7 +63,7 @@ export class FxView {
           break;
         }
         case 'collect':
-          P.emit(fx.pos.x, fx.pos.z, col.setHex(RESOURCE_INFO[fx.kind].color), 4, 60, 0.35);
+          P.emit(fx.pos.x, fx.pos.z, col.setHex(palette().resource[fx.kind]), 4, 60, 0.35);
           this.floaters.add(fx.shipId, fx.kind, fx.amount, fx.pos);
           break;
         case 'dock':
