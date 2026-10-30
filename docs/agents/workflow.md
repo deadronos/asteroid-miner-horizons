@@ -55,7 +55,11 @@ After every task, before committing:
 3. If the change could move balance numbers, run `npm run balance` and inspect the report. If the sim's
    behaviour is meant to be unchanged (bot ignores the feature), assert that explicitly and check
    `run.rng.s` is untouched.
-4. Regenerate generated files (`docs/balance.md`) rather than hand-editing them.
+4. If the change touches dependencies, imports of three.js or other large modules, run `npm run build && npm run
+   bundle-size`. CI fails when the gzipped JS in `dist/assets` totals more than **240 kB** (about 5% over today's
+   ~223 kB). `three` is split into a `vendor` chunk (`vite.config.ts`) so game updates keep it cached; raise the
+   budget in `scripts/bundle-size.mjs` only with a reason in the PR.
+5. Regenerate generated files (`docs/balance.md`) rather than hand-editing them.
 
 ## Branches, commits, PRs
 

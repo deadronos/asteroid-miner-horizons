@@ -32,6 +32,8 @@ jobs:
         run: npm test
       - name: Build
         run: npx vite build
+      - name: Bundle size budget
+        run: npm run bundle-size
       - name: Tick benchmark (warn-only)
         run: |
           npm run bench -- --json bench.json

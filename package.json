@@ -8,6 +8,7 @@
     "build": "tsc --noEmit && vite build",
     "preview": "vite preview --port 4173",
     "test": "vitest run",
+    "bundle-size": "node scripts/bundle-size.mjs",
     "bench": "tsx scripts/bench.ts",
     "balance": "tsx scripts/balance.ts",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
