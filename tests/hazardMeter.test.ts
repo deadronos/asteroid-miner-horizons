@@ -121,12 +121,15 @@ describe('hazard meter', () => {
     expect(t.armor + t.shield + hullTotal(t)).toBeCloseTo(t.raw, 6);
   });
 
-  it('is deterministic for a seeded bot run', () => {
+  it('is deterministic for a seeded bot run', HEAVY, () => {
     const a = playBot();
     expect(a).toEqual(playBot());
     expect(a.raw).toBeGreaterThanOrEqual(hullTotal(a));
   });
 });
+
+/** Two 600 s bot runs; the default 5 s is too tight on a shared CI runner. */
+const HEAVY = { timeout: 30_000 };
 
 const playBot = (): HazardTally => {
   const s = newGame(1000);
