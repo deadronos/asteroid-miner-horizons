@@ -25,6 +25,8 @@ function setup(pos = { x: 300, z: 0 }): { state: GameState; drone: Ship; ctx: Ti
   return { state, drone, ctx };
 }
 
+const state0Station = () => newGame(1).run.system.station.pos;
+
 describe('ship status', () => {
   it('drone mining reports mining with the rock kind', () => {
     const { state, drone } = setup();
@@ -51,6 +53,35 @@ describe('ship status', () => {
     ctx.index.rebuild(state);
     haulerThink(ctx, hauler, ctx.index.stats.get(hauler.id)!);
     expect(state.out.status.get(hauler.id)).toMatchObject({ kind: 'idle', reason: 'nothingToHaul' });
+  });
+
+  it('hauler holding cargo with auto-dock off reports idle/holdLoaded', () => {
+    const { state, ctx } = setup();
+    const hauler = makeShip(state.run, state.profile, 'hauler', 'Hauler-1', { x: 200, z: 0 });
+    hauler.cargo.ore = 5;
+    state.run.ships.push(hauler);
+    ctx.index.rebuild(state);
+    ctx.assists = { ...DEFAULT_ASSISTS, autoDock: false };
+    haulerThink(ctx, hauler, ctx.index.stats.get(hauler.id)!);
+    expect(state.out.status.get(hauler.id)).toMatchObject({ kind: 'idle', reason: 'holdLoaded' });
+    expect(formatStatus(state.out.status.get(hauler.id)!, 0.1)).toContain('hold loaded, waiting for a dock order');
+  });
+
+  it('docked drone that cannot afford repair above the reserve reports idle/repairMoney', () => {
+    const { state, drone } = setup(state0Station());
+    const st = state.run.system.station.pos;
+    drone.pos = { x: st.x, z: st.z };
+    drone.autoRepair = true;
+    drone.hull = 1;
+    state.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    const index = new SimIndex();
+    runTicks(state, 3, { index });
+    expect(index.repairWait.has(drone.id)).toBe(true);
+    expect(state.out.status.get(drone.id)).toMatchObject({ kind: 'idle', reason: 'repairMoney' });
+    // With money, it repairs and flies on.
+    state.run.bank.ore = 1e6;
+    runTicks(state, 3, { index });
+    expect(state.out.status.get(drone.id)?.reason).not.toBe('repairMoney');
   });
 
   it('drone in a comet path reports avoidComet', () => {

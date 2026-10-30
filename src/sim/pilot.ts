@@ -447,7 +447,8 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     if (!isDocked(run, ship)) {
       setStatus(out, ship.id, 'returning');
       arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
-    } else setStatus(out, ship.id, 'repairing');
+    } else if (ctx.index.repairWait.has(ship.id)) setStatus(out, ship.id, 'idle', 'repairMoney');
+    else setStatus(out, ship.id, 'repairing');
     return;
   }
 

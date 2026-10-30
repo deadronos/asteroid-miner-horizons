@@ -19,6 +19,7 @@ const REASONS: Record<IdleReason, string> = {
   belowReserve: 'bank below reserve',
   repairMoney: 'waiting for repair money',
   nothingToHaul: 'nothing to haul',
+  holdLoaded: 'hold loaded, waiting for a dock order',
 };
 
 /** The line a brain's status shows in the fleet list; `holdShare` is cargo over capacity (0..1). */

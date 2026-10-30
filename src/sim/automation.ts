@@ -212,7 +212,8 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     if (!isDocked(run, ship)) {
       setStatus(out, ship.id, 'returning');
       arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
-    } else setStatus(out, ship.id, 'repairing');
+    } else if (ctx.index.repairWait.has(ship.id)) setStatus(out, ship.id, 'idle', 'repairMoney');
+    else setStatus(out, ship.id, 'repairing');
     return;
   }
   haulStep(ctx, ship, st);
@@ -256,7 +257,7 @@ export function haulStep(ctx: TickCtx, ship: Ship, st: ShipStats, why: IdleReaso
     } else setStatus(out, ship.id, 'unloading');
     return;
   }
-  setStatus(out, ship.id, 'idle', why ?? 'nothingToHaul');
+  setStatus(out, ship.id, 'idle', why ?? (carrying ? 'holdLoaded' : 'nothingToHaul'));
   // Idle, or loaded without auto-dock: wait just off the station for work or a manual dock order.
   arrive(ctx, ship, st, formationSlot(station, ship.id, 110), 20, null);
 }

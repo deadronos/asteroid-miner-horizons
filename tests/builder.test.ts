@@ -138,6 +138,22 @@ describe('builder brain', () => {
     expect(rockIds(s)).toEqual(ids(...rocks));
   });
 
+  it('drops its source claim when it switches to unload before building', () => {
+    const { s, rocks, builder } = world([300, 450]);
+    const o = makeOutpost(rocks[1]!);
+    o.stored.ore = 60;
+    s.run.automation.outposts.push(o);
+    builder.cargo.ore = 10;
+    builder.aiTargetId = rocks[1]!.id;
+    const st = s.run.system.station.pos;
+    const hauler = makeShip(s.run, s.profile, 'hauler', 'H', { x: st.x + 30, z: st.z });
+    s.run.ships.push(hauler);
+    runTicks(s, 1);
+    expect(builder.aiTargetId).toBeNull();
+    runTicks(s, 1);
+    expect(hauler.aiTargetId).toBe(rocks[1]!.id);
+  });
+
   it('a builder and a hauler never claim the same outpost', () => {
     const { s, rocks, builder } = world([300, 400, 500]);
     for (const r of rocks) {

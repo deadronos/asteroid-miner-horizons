@@ -10,7 +10,8 @@ import { credit, RAW_RESOURCES, emptyWallet, formatWallet, walletTotal, walletVa
 import type { Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { yieldMul } from './mining';
-import { isDrone, isHauler, shipStats } from './ships';
+import { hauls } from './automation';
+import { isDrone, shipStats } from './ships';
 import type { GameState, LogEntry } from './types';
 
 export interface OfflineGains {
@@ -64,7 +65,7 @@ export function offlineGains(state: GameState, awaySec: number): OfflineGains {
   let dps = 0;
   let haulers = 0;
   for (const s of run.ships) {
-    if (isHauler(s)) haulers++;
+    if (hauls(s)) haulers++;
     if (isDrone(s)) dps += shipStats(s, profile).dps;
   }
   const mined = dps * TUNING.offlineUnitsPerDps * TUNING.offlineEfficiency * mul * seconds;

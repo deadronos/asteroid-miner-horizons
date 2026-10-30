@@ -83,6 +83,17 @@ describe('offlineGains', () => {
     expect(walletTotal(g.bank)).toBe(0);
   });
 
+  it('ferries outpost output offline with only a construction drone in the fleet', () => {
+    const s = newGame(1);
+    const o = makeOutpost(s.run.rocks.find((r) => r.size === 0)!);
+    o.reserve = 50;
+    s.run.automation.outposts.push(o);
+    s.run.ships.push(makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', s.run.system.station.pos));
+    const g = offlineGains(s, 8 * HOUR);
+    expect(g.ferried).toBe(true);
+    expect(g.bank[o.kind]).toBeCloseTo(50, 6);
+  });
+
   it('banks outpost output, up to the reserve, when a hauler is in the fleet', () => {
     const s = newGame(1);
     const rock = s.run.rocks.find((r) => r.size === 0)!;
