@@ -32,8 +32,8 @@ special roles worth knowing before you change the code they guard:
 | `bot.test.ts`        | The balance bot's decisions                                                  |
 
 Helpers: `tests/helpers.ts` drives the sim (`runTicks`, `runFor`, `send`, and the shared `DT`); `tests/memStorage.ts` is an in-memory `Storage` (save slots and settings read
-`globalThis.localStorage`, which tests swap in); `tests/fixtures/save-vN.json` are old saves for the migration
-tests; `tests/__snapshots__/` holds snapshots.
+`globalThis.localStorage`, which tests swap in); `tests/fixtures/save-vN.json` are frozen saves for the migration
+tests; add a fixture for every new `SAVE_VERSION` and keep the guard in `migrations.test.ts` green; `tests/__snapshots__/` holds snapshots.
 
 ## Conventions
 
