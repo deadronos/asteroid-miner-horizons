@@ -3,6 +3,7 @@
 
 import './style.css';
 import { AudioEngine } from './audio/AudioEngine';
+import { newStepper, takeSteps } from './core/stepper';
 import { TUNING } from './data/tuning';
 import { installDebugHook } from './debugHook';
 import { Input } from './input';
@@ -98,7 +99,7 @@ applySettings();
 
 const STEP = 1 / TUNING.simHz;
 let last = performance.now();
-let acc = 0;
+const stepper = newStepper();
 let hudAcc = 0;
 /** Frame time since the last render, handed to the renderer so throttled animations keep their speed. */
 let renderAcc = 0;
@@ -143,7 +144,8 @@ function frame(now: number): void {
 
 function step(now: number): void {
   const state = session.state;
-  const dt = Math.min(0.25, (now - last) / 1000);
+  const rawDt = Math.max(0, (now - last) / 1000);
+  const dt = Math.min(0.25, rawDt);
   last = now;
   const s = settings.value;
   const paused = title.open
@@ -160,23 +162,18 @@ function step(now: number): void {
   hud.setPaused(title.open ? null : pauseBanner(paused));
   if (crashed) {
     // Nothing more may change the broken game; only loading another (via the menu) recovers.
-    acc = 0;
+    stepper.acc = 0;
     commands.length = 0;
   } else if (paused) {
     // Menus still work while paused: purchases and refits apply immediately.
-    acc = 0;
+    stepper.acc = 0;
     if (commands.length) renderNow = true;
     applyCommands(state, commands);
   } else {
-    acc += dt;
     const thrust = input.thrust();
-    let steps = 0;
-    while (acc >= STEP && steps < 8) {
+    // Backlog carries across slow frames; only a stall past MAX_BACKLOG is dropped (and counted in stepper.dropped).
+    for (let n = takeSteps(stepper, rawDt, STEP); n > 0; n--)
       tick(state, STEP, { thrust, commands, assists, automation, hazards }, session.sim);
-      acc -= STEP;
-      steps++;
-    }
-    if (steps === 8) acc = 0; // too far behind (tab was hidden): drop the backlog
   }
   if (input.edgePan(dt)) renderNow = true;
   input.updateHover();
@@ -236,7 +233,7 @@ installDebugHook(
     input,
     audio,
     autoQuality,
-    info: () => renderer.info,
+    info: () => ({ ...renderer.info, droppedSimSeconds: stepper.dropped }),
     title,
   },
 );
