@@ -14,7 +14,12 @@ import { DT, runTicks } from './helpers';
 /** A fresh game in system `number` (default 2, the first that schedules hazards). */
 function game(seed: number, number = 2, starClass?: StarClass): GameState {
   const profile = { ...newProfile(seed), warps: number - 1 };
-  const state: GameState = { version: SAVE_VERSION, profile, run: newRun(profile), out: { fx: [], log: [] } };
+  const state: GameState = {
+    version: SAVE_VERSION,
+    profile,
+    run: newRun(profile),
+    out: { fx: [], log: [], status: new Map() },
+  };
   if (starClass) state.run.system.starClass = starClass;
   return state;
 }

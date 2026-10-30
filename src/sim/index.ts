@@ -2,6 +2,7 @@ import { SpatialHash } from '../core/spatialHash';
 import { TUNING } from '../data/tuning';
 import { applyEffects, systemEffects } from './modifiers';
 import { emptyStats, writeShipStats, type ShipStats } from './ships';
+import type { ShipStatus } from './status';
 import type { GameState, Rock } from './types';
 
 /**
@@ -32,15 +33,30 @@ export class SimIndex {
   readonly repairWait = new Set<number>();
   /** Run time each ship may take its next autoupgrade step (#140). Transient: a reload just allows one at once. */
   readonly upgradeReadyAt = new Map<number, number>();
+  /** Rock id → id of the construction drone heading to build on it (#174). Transient; pruned in `rebuild`. */
+  readonly builderClaims = new Map<number, number>();
+  /** Run time each construction drone may deploy its next outpost. Transient, like `upgradeReadyAt`. */
+  readonly buildReadyAt = new Map<number, number>();
   /** Ids seen in the last `rebuild`, so the next one can prune the departed. */
   private readonly liveShipIds = new Set<number>();
+  /** The state's status map during `rebuild`, so the bound prune callback can reach it. */
+  private statusMap: Map<number, ShipStatus> | null = null;
 
   // Bound once: `forEach` with a stored callback allocates neither an iterator nor a closure per tick.
   private readonly pruneUpgrade = (_t: number, id: number): void => {
     if (!this.liveShipIds.has(id)) this.upgradeReadyAt.delete(id);
   };
+  private readonly pruneBuildReady = (_t: number, id: number): void => {
+    if (!this.liveShipIds.has(id)) this.buildReadyAt.delete(id);
+  };
+  private readonly pruneClaim = (shipId: number, rockId: number): void => {
+    if (!this.liveShipIds.has(shipId) || !this.rockById.has(rockId)) this.builderClaims.delete(rockId);
+  };
   private readonly pruneStats = (_s: ShipStats, id: number): void => {
     if (!this.liveShipIds.has(id)) this.stats.delete(id);
+  };
+  private readonly pruneStatus = (_s: ShipStatus, id: number): void => {
+    if (!this.liveShipIds.has(id)) this.statusMap?.delete(id);
   };
   private readonly pruneWait = (id: number): void => {
     if (!this.liveShipIds.has(id)) this.repairWait.delete(id);
@@ -78,8 +94,15 @@ export class SimIndex {
     // A scrapped or destroyed ship's entry must not linger for the whole run.
     // Iterating a Map or Set allocates an iterator, so skip it when nothing can be stale.
     if (this.stats.size !== run.ships.length) this.stats.forEach(this.pruneStats);
+    if (state.out.status.size > 0) {
+      this.statusMap = state.out.status;
+      this.statusMap.forEach(this.pruneStatus);
+      this.statusMap = null;
+    }
     if (this.upgradeReadyAt.size > 0) this.upgradeReadyAt.forEach(this.pruneUpgrade);
     if (this.repairWait.size > 0) this.repairWait.forEach(this.pruneWait);
+    if (this.buildReadyAt.size > 0) this.buildReadyAt.forEach(this.pruneBuildReady);
+    if (this.builderClaims.size > 0) this.builderClaims.forEach(this.pruneClaim);
   }
 
   /** Drop every reference; used when the running game is swapped. */
@@ -93,5 +116,7 @@ export class SimIndex {
     this.liveShipIds.clear();
     this.upgradeReadyAt.clear();
     this.repairWait.clear();
+    this.buildReadyAt.clear();
+    this.builderClaims.clear();
   }
 }

@@ -20,6 +20,8 @@ export interface RunOptions extends BotOptions {
   /** Called around every tick; return true from `after` to stop early. */
   before?: (state: GameState) => void;
   after?: (state: GameState) => boolean | void;
+  /** Called with each batch of commands the bot issues, just before the tick that applies them. */
+  commands?: (cmds: readonly Command[]) => void;
   /** Hazard level passed to every tick; defaults to 'off' (the sim's own default). */
   hazards?: HazardLevel;
   /** Wraps the tick call itself (the bench times it). */
@@ -34,7 +36,10 @@ export function runBot(state: GameState, opts: RunOptions): number {
   const index = new SimIndex();
   const doTick = (): void => tick(state, DT, input, index);
   for (let i = 0; i < ticks; i++) {
-    if (i % BOT_EVERY === 0) commands.push(...botCommands(state, opts));
+    if (i % BOT_EVERY === 0) {
+      commands.push(...botCommands(state, opts));
+      opts.commands?.(commands);
+    }
     opts.before?.(state);
     if (opts.step) opts.step(doTick);
     else doTick();

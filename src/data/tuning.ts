@@ -21,6 +21,10 @@ export const TUNING = {
   dockRadius: 90,
   collisionCooldown: 0.5,
   collisionMinSpeed: 25,
+  /** Autopilot ships brake so they meet a rock slower than this share of `collisionMinSpeed` (#174). */
+  rockApproachCap: 0.8,
+  /** Share of a ship's acceleration the rock-approach brake plans with, leaving margin for drag and drift. */
+  rockBrakeMargin: 0.7,
   starHeatDps: 30,
   /** Clearance past the star's heat radius that autopilot routes keep (`pilot.arrive`). */
   starRoutePad: 120,
@@ -37,6 +41,8 @@ export const TUNING = {
   fullHoldMin: 2,
   fullHoldShare: 0.04,
   droneLeash: 700,
+  /** How strongly drones favour the resource the bank holds least of: a rock's distance is divided by 1 + weight * (1 - share). */
+  scarcityWeight: 1,
 
   // Prestige.
   /** Bank fuel the first warp costs: long enough in system 1 for a drone and a tier-2 laser (#197). */
@@ -137,6 +143,10 @@ export const TUNING = {
   haulTransferRate: 30,
   /** How far from the station a hauler will go to skim a miner (outposts are served anywhere). */
   haulRange: 1800,
+  /** How far from the station a construction drone looks for a rock to build on. */
+  builderLeash: 1050,
+  /** One construction drone's deploys are at least this many sim seconds apart. */
+  buildInterval: 0.5,
   /** Outposts that can be deployed at once. */
   outpostMax: 3,
   /** Bank cost of one outpost. */

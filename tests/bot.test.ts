@@ -233,6 +233,7 @@ describe('balance bot', () => {
     fs.slots[0] = { type: 'laser', variant: 'focused', tier: 2 };
     for (let i = 0; i < HAULER_AFTER; i++)
       s.run.ships.push(makeShip(s.run, s.profile, 'drone', `Drone-${i}`, { ...s.run.system.station.pos }));
+    s.run.ships.push(makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', { ...s.run.system.station.pos }));
     s.run.contracts.active = null;
     s.run.contracts.offers = [];
     s.run.bank = { ore: 10000, ice: 10000, crystal: 0, alloy: 0, fuel: 1000 };
@@ -387,9 +388,19 @@ function besideLarge(hauler: boolean): { s: GameState; large: Rock } {
   return { s, large };
 }
 
+const HEAVY = { timeout: 30_000 };
+
+/** Fills the fleet to its cap so no construction drone can be bought. */
+const fillFleet = (s: GameState): void => {
+  while (droneCount(s.run) < fleetCap(s.profile))
+    s.run.ships.push(makeShip(s.run, s.profile, 'drone', `Fill-${s.run.ships.length}`, s.run.system.station.pos));
+};
+
 describe('balance bot automation', () => {
-  it('spends the fleet slot after two drones on a hauler', () => {
-    expect(botCommands(docked(2), { warp: false })).toEqual([{ t: 'buyHull', hullId: 'hauler' }]);
+  it('spends the fleet slot after two drones and a builder on a hauler', () => {
+    const s = docked(2);
+    s.run.ships.push(makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', s.run.system.station.pos));
+    expect(botCommands(s, { warp: false })).toEqual([{ t: 'buyHull', hullId: 'hauler' }]);
   });
 
   it('still buys a second drone before any hauler', () => {
@@ -412,13 +423,38 @@ describe('balance bot automation', () => {
     expect(botCommands(s, { warp: false }).some((c) => c.t === 'buyHull')).toBe(false);
   });
 
-  it('deploys an outpost on a large rock beside the flagship once it has a hauler', () => {
+  it('deploys an outpost beside the flagship once it has a hauler, when no construction drone can be bought', () => {
     const { s, large } = besideLarge(true);
+    fillFleet(s);
     expect(botCommands(s, { warp: false })).toContainEqual({ t: 'deployOutpost', rockId: large.id });
+  });
+
+  it('buys one construction drone once it has two mining drones, ahead of the hauler', HEAVY, () => {
+    const s = docked(2);
+    expect(botCommands(s, { warp: false })).toEqual([{ t: 'buyHull', hullId: 'constructionDrone' }]);
+    s.run.ships.push(makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', s.run.system.station.pos));
+    expect(botCommands(s, { warp: false }).some((c) => c.t === 'buyHull' && c.hullId === 'constructionDrone')).toBe(
+      false,
+    );
+  });
+
+  it('stops flagship deploys once a construction drone exists', HEAVY, () => {
+    const { s, large } = besideLarge(true);
+    fillFleet(s);
+    expect(botCommands(s, { warp: false })).toContainEqual({ t: 'deployOutpost', rockId: large.id });
+    s.run.ships.pop();
+    s.run.ships.push(makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', s.run.system.station.pos));
+    expect(botCommands(s, { warp: false }).some((c) => c.t === 'deployOutpost')).toBe(false);
+  });
+
+  it('leaves outposts to the construction drone it is about to buy', () => {
+    const { s } = besideLarge(true);
+    expect(botCommands(s, { warp: false }).some((c) => c.t === 'deployOutpost')).toBe(false);
   });
 
   it('deploys no outpost without a hauler to service it', () => {
     const { s } = besideLarge(false);
+    fillFleet(s);
     expect(botCommands(s, { warp: false }).some((c) => c.t === 'deployOutpost')).toBe(false);
   });
 });

@@ -1,7 +1,7 @@
 // Gameplay, Graphics and Interface tabs: plain settings forms.
 
 import { TUNING } from '../../data/tuning';
-import { AUTO_RESERVE_VALUES, QUALITY_MODES, type SettingsStore } from '../../settings';
+import { AUTO_RESERVE_VALUES, BUILDER_RESERVE_VALUES, QUALITY_MODES, type SettingsStore } from '../../settings';
 import { rangeRow, section, selectRow, toggleRow } from './form';
 
 export function renderGameplay(settings: SettingsStore): Node[] {
@@ -59,12 +59,19 @@ export function renderGameplay(settings: SettingsStore): Node[] {
       AUTO_RESERVE_VALUES.map((n) => [n, n ? `${n} of each resource` : 'Nothing']),
       'REPAIR and UPGRADE only spend what the bank holds above this. Your own purchases ignore it.',
     ),
+    selectRow(
+      settings,
+      'builderReserve',
+      'Builder reserve',
+      BUILDER_RESERVE_VALUES.map((n) => [n, n ? `${n} of each resource` : 'Nothing']),
+      'Construction drones only build with what the bank holds above this.',
+    ),
     section('Autopilot assists'),
     toggleRow(
       settings,
       'assistAvoid',
       'Steer around asteroids',
-      'Move, dock and mining approaches avoid rocks. Off: straight lines; you may crash.',
+      'Move, dock and mining approaches avoid rocks and slow down near them. Off: straight lines; you may crash.',
     ),
     toggleRow(
       settings,

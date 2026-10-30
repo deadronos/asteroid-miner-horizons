@@ -47,7 +47,7 @@ export function createGoalsPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         const v = ctx.settings.value;
         const env: HintEnv = {
           assists: { autoDock: v.assistAutoDock },
-          auto: { repairAt: v.autoRepairAt, reserve: v.autoReserve },
+          auto: { repairAt: v.autoRepairAt, reserve: v.autoReserve, builderReserve: v.builderReserve },
         };
         const text = goalHint(s, env);
         hint.classList.toggle('hidden', !text);

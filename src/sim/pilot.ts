@@ -3,6 +3,7 @@
 
 import type { HazardLevel } from '../data/hazards';
 import { damp, dist, distSq, len, type Vec2, hypot2 } from '../core/vec';
+import type { RawResource, Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { Assists, FleetAuto } from './assists';
 import { isDocked } from './economy';
@@ -11,6 +12,7 @@ import type { SimIndex } from './index';
 import { needsRepair } from './fleetAuto';
 import { laserRock } from './mining';
 import { flagship, isAlive, isHoldFull, type ShipStats } from './ships';
+import { setStatus } from './status';
 import { canMine, volatileSafeDistance } from './traits';
 import type { GameState, Rock, Ship } from './types';
 
@@ -71,9 +73,36 @@ function avoidance(
 }
 
 /**
+ * Rock-approach brake: bleeds off the part of the ship's velocity (relative to each nearby rock) that closes on the
+ * rock faster than `rockApproachCap` of the collision threshold, as late as the ship's acceleration allows. Open
+ * space is untouched; only a rock within stopping distance slows the ship. Comets are left to the dodge reflexes.
+ */
+function brakeForRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
+  const cap = TUNING.collisionMinSpeed * TUNING.rockApproachCap;
+  const decel = st.accel * TUNING.rockBrakeMargin;
+  const maxDv = st.accel * ctx.dt;
+  ctx.index.rockHash.query(ship.pos, st.size + 90, (r) => {
+    if (r.comet || !ctx.index.rockById.has(r.id)) return;
+    const rx = r.pos.x - ship.pos.x;
+    const rz = r.pos.z - ship.pos.z;
+    const d = hypot2(rx, rz) || 0.01;
+    const nx = rx / d;
+    const nz = rz / d;
+    const closing = (ship.vel.x - r.vel.x) * nx + (ship.vel.z - r.vel.z) * nz;
+    if (closing <= cap) return;
+    const gap = d - r.radius - st.size;
+    if (gap > (closing * closing - cap * cap) / (2 * decel) + 2) return;
+    const dv = Math.min(closing - cap, maxDv);
+    ship.vel.x -= nx * dv;
+    ship.vel.z -= nz * dv;
+  });
+}
+
+/**
  * Accelerate along a wish vector (length 0..1), capped at top speed.
  * `avoid` enables autopilot obstacle avoidance (off for manual WASD flight);
- * `ignoreId` exempts the rock being approached for mining.
+ * `ignoreId` exempts the rock being approached for mining. `brake` (with `avoid`) slows the approach to nearby rocks;
+ * hazard reflexes pass false so nothing holds a ship back from leaving danger.
  */
 export function steer(
   ctx: TickCtx,
@@ -83,6 +112,7 @@ export function steer(
   wz: number,
   avoid = false,
   ignoreId: number | null = null,
+  brake = true,
 ): void {
   const { dt } = ctx;
   let want = Math.min(1, hypot2(wx, wz));
@@ -106,6 +136,7 @@ export function steer(
     x += a.x * Math.max(want, 0.5);
     z += a.z * Math.max(want, 0.5);
     want *= 1 - 0.7 * danger; // ease off the throttle while threading a cluster
+    if (brake) brakeForRocks(ctx, ship, st);
   }
   const l = hypot2(x, z);
   if (l > 1e-6) {
@@ -131,7 +162,14 @@ export function steer(
  * round the star in an arc. The safe circle shrinks to the target's own distance from the star, so a point inside
  * it (a player's move order) is still reached, just by the shortest path that does not dip deeper.
  */
-function starDetour(ctx: TickCtx, ship: Ship, st: ShipStats, target: Vec2, avoidId: number | null): boolean {
+function starDetour(
+  ctx: TickCtx,
+  ship: Ship,
+  st: ShipStats,
+  target: Vec2,
+  avoidId: number | null,
+  brake: boolean,
+): boolean {
   const safe = Math.min(ctx.state.run.system.heatRadius + TUNING.starRoutePad + st.size, len(target));
   const dx = target.x - ship.pos.x;
   const dz = target.z - ship.pos.z;
@@ -147,7 +185,7 @@ function starDetour(ctx: TickCtx, ship: Ship, st: ShipStats, target: Vec2, avoid
   const nx = c > 1e-6 ? cx / c : -dz / l;
   const nz = c > 1e-6 ? cz / c : dx / l;
   const wp = { x: nx * (safe + TUNING.starRoutePad), z: nz * (safe + TUNING.starRoutePad) };
-  steer(ctx, ship, st, wp.x - ship.pos.x, wp.z - ship.pos.z, ctx.assists.avoid, avoidId);
+  steer(ctx, ship, st, wp.x - ship.pos.x, wp.z - ship.pos.z, ctx.assists.avoid, avoidId, brake);
   return true;
 }
 
@@ -162,16 +200,17 @@ export function arrive(
   target: Vec2,
   stopDist = 12,
   avoidId: number | null = null,
+  rockBrake = true,
 ): boolean {
   const dx = target.x - ship.pos.x;
   const dz = target.z - ship.pos.z;
   const d = hypot2(dx, dz);
   if (d <= stopDist) return true;
-  if (starDetour(ctx, ship, st, target, avoidId)) return false;
+  if (starDetour(ctx, ship, st, target, avoidId, rockBrake)) return false;
   // Slow down within the braking distance v²/2a.
   const brake = (st.speed * st.speed) / (2 * st.accel) + 20;
   const throttle = Math.min(1, (d - stopDist) / brake + 0.08);
-  steer(ctx, ship, st, (dx / d) * throttle, (dz / d) * throttle, ctx.assists.avoid, avoidId);
+  steer(ctx, ship, st, (dx / d) * throttle, (dz / d) * throttle, ctx.assists.avoid, avoidId, rockBrake);
   return false;
 }
 
@@ -217,8 +256,9 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
 
 /** Full throttle straight away from `from`, which lies `d` away. */
 function backOff(ctx: TickCtx, ship: Ship, st: ShipStats, from: Vec2, d: number): void {
-  if (d > 1e-6) steer(ctx, ship, st, (ship.pos.x - from.x) / d, (ship.pos.z - from.z) / d, ctx.assists.avoid);
-  else steer(ctx, ship, st, 1, 0, ctx.assists.avoid);
+  if (d > 1e-6)
+    steer(ctx, ship, st, (ship.pos.x - from.x) / d, (ship.pos.z - from.z) / d, ctx.assists.avoid, null, false);
+  else steer(ctx, ship, st, 1, 0, ctx.assists.avoid, null, false);
 }
 
 /** True if `pos` lies inside the safe distance of a breaking volatile rock other than `exceptId`. */
@@ -266,6 +306,38 @@ function nearestRock(ctx: TickCtx, from: Vec2, radius: number, filter: (r: Rock)
   return best;
 }
 
+/**
+ * How much the bank wants `kind`: 1 for the most plentiful raw resource, up to 1 + `scarcityWeight` for an empty
+ * one. An empty bank wants everything equally (1).
+ */
+export function need(bank: Wallet, kind: RawResource): number {
+  const top = Math.max(bank.ore, bank.ice, bank.crystal);
+  const share = top > 0 ? bank[kind] / top : 1;
+  return 1 + TUNING.scarcityWeight * (1 - share);
+}
+
+/**
+ * Like `nearestRock`, but ranks by distance divided by `need`, so a scarcer resource wins from further away.
+ * Lowest score wins; ties go to the lower rock id.
+ */
+function scoredRock(ctx: TickCtx, from: Vec2, radius: number, filter: (r: Rock) => boolean, bank: Wallet): Rock | null {
+  let best: Rock | null = null;
+  let bestScore = Infinity;
+  const limit = radius * radius;
+  ctx.index.rockHash.query(from, radius, (r) => {
+    if (!ctx.index.rockById.has(r.id) || !filter(r)) return;
+    const d2 = distSq(from, r.pos);
+    if (d2 >= limit) return;
+    const n = need(bank, r.kind);
+    const score = d2 / (n * n);
+    if (score < bestScore || (score === bestScore && best !== null && r.id < best.id)) {
+      bestScore = score;
+      best = r;
+    }
+  });
+  return best;
+}
+
 /** After a manual mining target breaks, chain onto the closest fragment. */
 export function chainTarget(ctx: TickCtx, ship: Ship, st: ShipStats, frags: Rock[]): number | null {
   let best: Rock | null = null;
@@ -290,6 +362,8 @@ export function runOrder(ctx: TickCtx, ship: Ship, st: ShipStats): boolean {
     if (arrive(ctx, ship, st, o.to)) ship.order = null;
   } else if (o.kind === 'dock') {
     if (arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.4)) ship.order = null;
+  } else if (o.kind === 'build') {
+    return false; // The builder brain runs it, after the reflexes (see builderThink).
   } else {
     const rock = ctx.index.rockById.get(o.rockId);
     if (!rock) {
@@ -319,14 +393,16 @@ export function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: bool
   const { run } = ctx.state;
   const esc = { x: 0, z: 0 };
   if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, esc)) {
-    steer(ctx, ship, st, esc.x, esc.z, ctx.assists.avoid);
+    setStatus(ctx.state.out, ship.id, 'avoidComet');
+    steer(ctx, ship, st, esc.x, esc.z, ctx.assists.avoid, null, false);
     return true;
   }
   if (!inFlareZone(run, ship.pos)) return false;
+  setStatus(ctx.state.out, ship.id, 'flare');
   const shelter = { x: 0, z: 0 };
   if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, shelter) === 'dock')
-    arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.5);
-  else arrive(ctx, ship, st, shelter, 20);
+    arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.5, null, false);
+  else arrive(ctx, ship, st, shelter, 20, null, false);
   return true;
 }
 
@@ -360,19 +436,32 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     return;
   }
 
-  if (dodgeBlast(ctx, ship, st)) return;
+  const out = ctx.state.out;
+  if (dodgeBlast(ctx, ship, st)) {
+    setStatus(out, ship.id, 'heading');
+    return;
+  }
 
   if (needsRepair(ship, st, ctx.auto)) {
     ship.aiTargetId = null;
-    if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
+    if (!isDocked(run, ship)) {
+      setStatus(out, ship.id, 'returning');
+      arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
+    } else if (ctx.index.repairWait.has(ship.id)) setStatus(out, ship.id, 'idle', 'repairMoney');
+    else setStatus(out, ship.id, 'repairing');
     return;
   }
 
   if (full) {
     ship.aiTargetId = null;
     // Without auto-dock a full drone waits by its anchor for a manual dock order.
-    if (!ctx.assists.autoDock) arrive(ctx, ship, st, home, 20);
-    else if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
+    if (!ctx.assists.autoDock) {
+      setStatus(out, ship.id, 'idle');
+      arrive(ctx, ship, st, home, 20);
+    } else if (!isDocked(run, ship)) {
+      setStatus(out, ship.id, 'returning');
+      arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
+    } else setStatus(out, ship.id, 'unloading');
     return;
   }
 
@@ -387,6 +476,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     }
   }
   if (pickup && best > st.magnet * st.magnet * 0.3) {
+    setStatus(out, ship.id, 'collecting');
     arrive(ctx, ship, st, pickup, 6);
     return;
   }
@@ -407,7 +497,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     }
     if (!rock) {
       rock =
-        nearestRock(
+        scoredRock(
           ctx,
           ship.pos,
           500,
@@ -416,23 +506,29 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
             dist(r.pos, anchor) < TUNING.droneLeash &&
             !unsafe(ctx, r.pos) &&
             !nearBlast(ctx, r.pos, r.id),
+          run.bank,
         ) ??
-        nearestRock(
+        scoredRock(
           ctx,
           anchor,
           TUNING.droneLeash,
           (r) => minable(ctx, st, r) && !unsafe(ctx, r.pos) && !nearBlast(ctx, r.pos, r.id),
+          run.bank,
         ) ??
         undefined;
     }
     if (rock) {
       ship.aiTargetId = rock.id;
-      if (workRock(ctx, ship, st, rock)) ship.aiTargetId = null;
+      const broke = workRock(ctx, ship, st, rock) !== null;
+      setStatus(out, ship.id, ship.beamOn ? 'mining' : 'heading', null, rock);
+      if (broke) ship.aiTargetId = null;
       return;
     }
   }
 
   ship.aiTargetId = null;
+  if (ship.aiMode === 'assist' && st.dps <= 0) setStatus(out, ship.id, 'escorting');
+  else setStatus(out, ship.id, 'idle', 'noRocks');
   if (unsafe(ctx, home) || nearBlast(ctx, home)) steer(ctx, ship, st, 0, 0);
   else arrive(ctx, ship, st, home, 20);
 }

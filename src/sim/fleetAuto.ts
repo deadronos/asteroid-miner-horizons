@@ -15,9 +15,10 @@ import type { ShipStats } from './ships';
 import type { GameState, Ship } from './types';
 
 /** What an empty slot gets, in order; a type already fitted counts toward its place in the list. */
-export const BUILD_ORDER: Record<'drone' | 'hauler', readonly ComponentId[]> = {
+export const BUILD_ORDER: Record<'drone' | 'hauler' | 'builder', readonly ComponentId[]> = {
   drone: ['laser', 'cargo', 'engine', 'armor', 'shield', 'sensor'],
   hauler: ['cargo', 'engine', 'armor', 'shield', 'sensor', 'cargo'],
+  builder: ['cargo', 'engine', 'armor', 'shield', 'sensor', 'cargo'],
 };
 
 /** True when a ship with autorepair on should stop work and fly home to repair. */
@@ -39,7 +40,8 @@ function payFrom(bank: Wallet, cost: Cost): void {
 
 /** The component type the ship's next empty slot should get, from its role's build order. */
 export function nextBuildType(ship: Ship): ComponentId {
-  const order = BUILD_ORDER[HULLS[ship.hullId].role === 'hauler' ? 'hauler' : 'drone'];
+  const role = HULLS[ship.hullId].role;
+  const order = BUILD_ORDER[role === 'hauler' || role === 'builder' ? role : 'drone'];
   const fitted = new Map<ComponentId, number>();
   for (const f of ship.slots) if (f) fitted.set(f.type, (fitted.get(f.type) ?? 0) + 1);
   for (const t of order) {

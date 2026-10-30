@@ -9,7 +9,7 @@ import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
 import { credit, emptyWallet, formatCost, formatWallet, pay } from '../data/resources';
 import { TUNING } from '../data/tuning';
-import { makeOutpost, outpostAt, outpostBlock } from './automation';
+import { deployOutpostAt, outpostAt, outpostBlock } from './automation';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
 import { describeContract, fillBoard } from './contracts';
 import { newRun } from './create';
@@ -29,7 +29,7 @@ import { findRock } from './generate';
 import { describeModifiers } from './modifiers';
 import { batchCost, cancelRefine, jobLabel, queueRefine } from './refining';
 import { isRoute } from './routes';
-import { droneCount, findShip, flagship, isAlive, isFlagship, makeShip, shipStats } from './ships';
+import { droneCount, findShip, flagship, isAlive, isBuilder, isFlagship, makeShip, shipStats } from './ships';
 import { canMine } from './traits';
 import type { Fitted, GameState, Ship } from './types';
 
@@ -215,6 +215,14 @@ export const handlers: Handlers = {
 
   mine: withShip((state, ship, cmd) => {
     if (!isAlive(ship)) return;
+    if (isBuilder(ship)) {
+      const rock = findRock(state.run, cmd.rockId);
+      if (!rock) return;
+      if (rock.size !== 0 || rock.comet) return fail(state, 'Construction drones build on large asteroids.');
+      if (outpostAt(state, rock.id)) return fail(state, 'That asteroid already hosts an outpost.');
+      ship.order = { kind: 'build', rockId: rock.id };
+      return;
+    }
     const st = shipStats(ship, state.profile);
     if (st.dps <= 0) return fail(state, `${ship.name} has no mining laser fitted.`);
     const rock = findRock(state.run, cmd.rockId);
@@ -240,7 +248,10 @@ export const handlers: Handlers = {
 
   shipAuto: withShip((state, ship, cmd) => {
     if (isFlagship(ship)) return fail(state, 'The flagship is flown by hand.');
-    if (cmd.kind === 'repair') ship.autoRepair = cmd.on;
+    if (cmd.kind === 'build') {
+      if (!isBuilder(ship)) return fail(state, `${ship.name} cannot build outposts.`);
+      ship.autoBuild = cmd.on;
+    } else if (cmd.kind === 'repair') ship.autoRepair = cmd.on;
     else ship.autoUpgrade = cmd.on;
   }),
 
@@ -338,24 +349,11 @@ export const handlers: Handlers = {
   },
 
   deployOutpost: (state, cmd) => {
-    const { run, out } = state;
+    const { run } = state;
     const rock = findRock(run, cmd.rockId);
-    const block = outpostBlock(state, rock);
+    const block = outpostBlock(state, rock, flagship(run));
     if (block || !rock) return fail(state, block ?? 'That rock is gone.');
-    pay(run.bank, TUNING.outpostCost);
-    const outpost = makeOutpost(rock);
-    run.automation.outposts.push(outpost);
-    state.profile.stats.outposts += 1;
-    // Nobody keeps cutting a rock that now hosts an outpost.
-    for (const s of run.ships) {
-      if (s.order?.kind === 'mine' && s.order.rockId === rock.id) s.order = null;
-      if (s.aiTargetId === rock.id) s.aiTargetId = null;
-    }
-    out.log.push({
-      level: 'info',
-      text: `Outpost deployed on a large ${rock.kind} asteroid (${Math.round(outpost.reserve)} units in reserve).`,
-      event: 'outpost',
-    });
+    deployOutpostAt(state, rock);
   },
 
   dismissGoals: (state) => {

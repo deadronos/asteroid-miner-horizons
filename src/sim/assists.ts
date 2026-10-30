@@ -18,6 +18,8 @@ export interface FleetAuto {
   repairAt: number;
   /** Automation never spends a resource below this many units in the bank. */
   reserve: number;
+  /** Construction drones never spend an outpost's cost below this many units of each resource (#174). */
+  builderReserve: number;
 }
 
-export const DEFAULT_FLEET_AUTO: FleetAuto = { repairAt: 0.5, reserve: 100 };
+export const DEFAULT_FLEET_AUTO: FleetAuto = { repairAt: 0.5, reserve: 100, builderReserve: 25 };

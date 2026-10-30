@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { runBot } from '../scripts/harness';
 import { PERKS } from '../src/data/perks';
 import { newGame } from '../src/sim/create';
-import { droneCount, fleetCap } from '../src/sim/ships';
+import { droneCount, fleetCap, makeShip } from '../src/sim/ships';
 
 /**
  * Mean bytes allocated per tick: ~39 KB measured on Node 24 (8 drones, a hauler and 3 outposts, ~240 rocks;
@@ -28,6 +28,11 @@ describe('per-tick allocation', () => {
     runBot(state, { seconds: 180, warp: false }); // fills the fleet and warms the JIT
     // Drones die and are rebought, so the count drifts; it is 9/9 at this point.
     expect(droneCount(state.run)).toBeGreaterThanOrEqual(fleetCap(state.profile) - 2);
+
+    // One construction drone joins the fleet (the bot doesn't buy them), warmed up so its first-tick records don't count.
+    const st = state.run.system.station.pos;
+    state.run.ships.push(makeShip(state.run, state.profile, 'constructionDrone', 'Builder', { ...st }));
+    runBot(state, { seconds: 5, warp: false });
 
     const deltas: number[] = [];
     runBot(state, {

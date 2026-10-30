@@ -13,6 +13,7 @@ import type { PerkId } from '../data/perks';
 import type { RecipeId } from '../data/refining';
 import type { Cost, RawResource, Wallet } from '../data/resources';
 import type { RockTrait } from '../data/traits';
+import type { ShipStatus } from './status';
 
 export type RockSize = 0 | 1 | 2; // large, medium, small
 
@@ -49,7 +50,11 @@ export interface Fitted {
   tier: Tier;
 }
 
-export type Order = { kind: 'move'; to: Vec2 } | { kind: 'mine'; rockId: number } | { kind: 'dock' };
+export type Order =
+  | { kind: 'move'; to: Vec2 }
+  | { kind: 'mine'; rockId: number }
+  | { kind: 'dock' }
+  | { kind: 'build'; rockId: number };
 
 /** Drone behaviour when it has no manual order. */
 export type AiMode = 'assist' | 'auto';
@@ -71,6 +76,8 @@ export interface Ship {
   autoRepair: boolean;
   /** Drones and haulers: spend spare bank on slots and tiers while docked (#140). */
   autoUpgrade: boolean;
+  /** A construction drone picks its own rocks to build outposts on (true for new ones, false for every other ship). */
+  autoBuild: boolean;
   /** True while a mining beam is hitting its target this tick. */
   beamOn: boolean;
   beamTargetId: number | null;
@@ -282,6 +289,8 @@ export interface LogEntry {
 export interface Outbox {
   fx: Fx[];
   log: LogEntry[];
+  /** What each AI ship is doing, written by its brain (see `sim/status`). Transient and never drained per tick. */
+  status: Map<number, ShipStatus>;
 }
 
 export interface GameState {

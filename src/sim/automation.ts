@@ -4,14 +4,25 @@
 
 import { dist, type Vec2 } from '../core/vec';
 import { HULLS } from '../data/hulls';
-import { RESOURCES, canAfford, emptyWallet, walletTotal, type Wallet } from '../data/resources';
+import { RESOURCES, canAfford, emptyWallet, pay, walletTotal, type Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { isDocked } from './economy';
 import { needsRepair } from './fleetAuto';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
 import { arrive, dodgeBlast, dodgeHazards, formationSlot, unsafe, type TickCtx } from './pilot';
-import { cargoFree, findShip, flagship, isAlive, isDrone, isHauler, isHoldFull, type ShipStats } from './ships';
+import { setStatus, type IdleReason } from './status';
+import {
+  cargoFree,
+  findShip,
+  isAlive,
+  isBuilder,
+  isDrone,
+  isFlagship,
+  isHauler,
+  isHoldFull,
+  type ShipStats,
+} from './ships';
 import type { Automation, GameState, Outpost, Rock, Ship } from './types';
 
 export const newAutomation = (): Automation => ({ outposts: [], extracted: 0 });
@@ -20,17 +31,40 @@ export const outpostAt = (state: GameState, rockId: number): Outpost | undefined
   state.run.automation.outposts.find((o) => o.rockId === rockId);
 
 /** Why an outpost can't be deployed on `rock` right now, or null if it can. */
-export function outpostBlock(state: GameState, rock: Rock | undefined): string | null {
+export function outpostBlock(state: GameState, rock: Rock | undefined, by: Ship): string | null {
   const { run } = state;
   if (!rock) return 'That rock is gone.';
   if (rock.size !== 0 || rock.comet) return 'Outposts need a large asteroid.';
   if (outpostAt(state, rock.id)) return 'That rock already hosts an outpost.';
   if (run.automation.outposts.length >= TUNING.outpostMax) return `Outpost limit reached (${TUNING.outpostMax}).`;
-  const fs = flagship(run);
-  const gap = dist(fs.pos, rock.pos) - rock.radius - HULLS[fs.hullId].size;
-  if (!isAlive(fs) || gap > TUNING.outpostDeployGap) return 'Fly the flagship next to the rock to deploy an outpost.';
+  const gap = dist(by.pos, rock.pos) - rock.radius - HULLS[by.hullId].size;
+  if (!isAlive(by) || gap > TUNING.outpostDeployGap)
+    return `Fly ${isFlagship(by) ? 'the flagship' : by.name} next to the rock to deploy an outpost.`;
   if (!canAfford(run.bank, TUNING.outpostCost)) return 'Not enough resources in the station bank';
   return null;
+}
+
+/**
+ * Pays for and records an outpost on `rock`, counts it, frees every ship that was working the rock and logs it. The
+ * caller has already checked `outpostBlock` (and, for builders, the reserve).
+ */
+export function deployOutpostAt(state: GameState, rock: Rock): Outpost {
+  const { run, out } = state;
+  pay(run.bank, TUNING.outpostCost);
+  const outpost = makeOutpost(rock);
+  run.automation.outposts.push(outpost);
+  state.profile.stats.outposts += 1;
+  // Nobody keeps cutting or building on a rock that now hosts an outpost.
+  for (const s of run.ships) {
+    if ((s.order?.kind === 'mine' || s.order?.kind === 'build') && s.order.rockId === rock.id) s.order = null;
+    if (s.aiTargetId === rock.id) s.aiTargetId = null;
+  }
+  out.log.push({
+    level: 'info',
+    text: `Outpost deployed on a large ${rock.kind} asteroid (${Math.round(outpost.reserve)} units in reserve).`,
+    event: 'outpost',
+  });
+  return outpost;
 }
 
 /** A fresh outpost on `rock`, its reserve sized from the rock's own units. */
@@ -115,6 +149,9 @@ function sourceFor(ctx: TickCtx, id: number): Source | null {
   return { id, pos: s.pos, vel: s.vel, radius: ctx.index.stats.get(s.id)!.size, hold: s.cargo, avoidId: null };
 }
 
+/** Ships that collect from miners and outposts: haulers, and construction drones with nothing to build. */
+export const hauls = (ship: Ship): boolean => isHauler(ship) || isBuilder(ship);
+
 /** A live mining drone out in the field (one docked at the station unloads itself). */
 const isMiner = (ctx: TickCtx, s: Ship): boolean => isDrone(s) && isAlive(s) && !isDocked(ctx.state.run, s);
 
@@ -130,7 +167,7 @@ function pickSource(ctx: TickCtx, ship: Ship): number | null {
   let bestScore = 0;
   const consider = (id: number, pos: Vec2, load: number): void => {
     if (unsafe(ctx, pos)) return;
-    if (run.ships.some((h) => h !== ship && h.aiTargetId === id && isHauler(h))) return;
+    if (run.ships.some((h) => h !== ship && h.aiTargetId === id && hauls(h))) return;
     const score = load / (dist(ship.pos, pos) + 100);
     if (score > bestScore) {
       bestScore = score;
@@ -165,13 +202,33 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     ship.aiTargetId = null;
     return;
   }
-  if (dodgeBlast(ctx, ship, st)) return;
-  if (needsRepair(ship, st, ctx.auto)) {
-    ship.aiTargetId = null;
-    if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+  const out = ctx.state.out;
+  if (dodgeBlast(ctx, ship, st)) {
+    setStatus(out, ship.id, 'heading');
     return;
   }
+  if (needsRepair(ship, st, ctx.auto)) {
+    ship.aiTargetId = null;
+    if (!isDocked(run, ship)) {
+      setStatus(out, ship.id, 'returning');
+      arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+    } else if (ctx.index.repairWait.has(ship.id)) setStatus(out, ship.id, 'idle', 'repairMoney');
+    else setStatus(out, ship.id, 'repairing');
+    return;
+  }
+  haulStep(ctx, ship, st);
+}
 
+/**
+ * The collecting half of the hauler brain, after the reflexes: load from the claimed (or the best) miner or outpost ·
+ * else unload what it carries · else wait by the station. `why` is the reason a construction drone is not building,
+ * which the fleet panel shows beside its hauling or idle status.
+ */
+export function haulStep(ctx: TickCtx, ship: Ship, st: ShipStats, why: IdleReason | null = null): void {
+  const { run, out } = ctx.state;
+  const station = run.system.station.pos;
+  const carrying = walletTotal(ship.cargo) > 1e-6;
+  const full = isHoldFull(ship, st);
   let src = !full && ship.aiTargetId != null ? sourceFor(ctx, ship.aiTargetId) : null;
   if (!full && !src) {
     const id = pickSource(ctx, ship);
@@ -179,6 +236,7 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   }
   if (src) {
     ship.aiTargetId = src.id;
+    setStatus(out, ship.id, ctx.index.outpostRocks.has(src.avoidId ?? -1) ? 'haulOutpost' : 'haulMiner', why);
     const reach = st.size + src.radius + TUNING.haulTransferGap;
     if (dist(ship.pos, src.pos) > reach) {
       arrive(ctx, ship, st, src.pos, reach * 0.7, src.avoidId);
@@ -193,9 +251,13 @@ export function haulerThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   ship.aiTargetId = null;
   if (carrying && ctx.assists.autoDock) {
-    if (!isDocked(run, ship)) arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+    if (!isDocked(run, ship)) {
+      setStatus(out, ship.id, 'returning');
+      arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5, null);
+    } else setStatus(out, ship.id, 'unloading');
     return;
   }
+  setStatus(out, ship.id, 'idle', why ?? (carrying ? 'holdLoaded' : 'nothingToHaul'));
   // Idle, or loaded without auto-dock: wait just off the station for work or a manual dock order.
   arrive(ctx, ship, st, formationSlot(station, ship.id, 110), 20, null);
 }

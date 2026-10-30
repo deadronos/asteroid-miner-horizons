@@ -56,6 +56,14 @@ const HULL_SHAPES: Record<HullId, [number, number][]> = {
     [-12, -7],
     [8, -7],
   ],
+  constructionDrone: [
+    [10, 0],
+    [8, 8],
+    [-8, 8],
+    [-11, 0],
+    [-8, -8],
+    [8, -8],
+  ],
 };
 
 function hullGeometry(id: HullId): THREE.BufferGeometry {

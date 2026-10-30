@@ -8,7 +8,17 @@ import { isDocked } from '../src/sim/economy';
 import { cometPathEscape } from '../src/sim/hazards';
 import { makeRock } from '../src/sim/generate';
 import { SimIndex } from '../src/sim/index';
-import { arrive, chainTarget, dodgeHazards, droneThink, formationSlot, workRock, type TickCtx } from '../src/sim/pilot';
+import {
+  arrive,
+  chainTarget,
+  dodgeHazards,
+  droneThink,
+  formationSlot,
+  need,
+  workRock,
+  type TickCtx,
+} from '../src/sim/pilot';
+import { emptyWallet } from '../src/data/resources';
 import { volatileBlastRadius, volatileSafeDistance } from '../src/sim/traits';
 import { serialize } from '../src/sim/save';
 import { flagship, isHoldFull, makeShip, shipStats } from '../src/sim/ships';
@@ -63,7 +73,12 @@ describe('chainTarget', () => {
 /** A game in system 2 (hazards scheduled) with no rocks, the flagship parked far away and one auto drone at `pos`. */
 function hazardGame(starClass: StarClass, pos: { x: number; z: number }): { state: GameState; drone: Ship } {
   const profile = { ...newProfile(1), warps: 1 };
-  const state: GameState = { version: SAVE_VERSION, profile, run: newRun(profile), out: { fx: [], log: [] } };
+  const state: GameState = {
+    version: SAVE_VERSION,
+    profile,
+    run: newRun(profile),
+    out: { fx: [], log: [], status: new Map() },
+  };
   state.run.system.starClass = starClass;
   state.run.rocks = [];
   flagship(state.run).pos = { x: 1e5, z: 1e5 };
@@ -185,6 +200,44 @@ describe('droneThink dense targets', () => {
     const ctx = ctxFor(state);
     droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
     expect(drone.aiTargetId).toBe(plain.id);
+  });
+});
+
+describe('resource-aware target choice', () => {
+  it('need is 1 for the most plentiful resource and 1 + weight for an empty one', () => {
+    const bank = { ...emptyWallet(), ore: 500 };
+    expect(need(bank, 'ore')).toBe(1);
+    expect(need(bank, 'ice')).toBe(1 + TUNING.scarcityWeight);
+    expect(need({ ...bank, ice: 250 }, 'ice')).toBeCloseTo(1 + TUNING.scarcityWeight * 0.5);
+  });
+
+  it('empty bank gives need 1 for all', () => {
+    const bank = emptyWallet();
+    for (const k of ['ore', 'ice', 'crystal'] as const) expect(need(bank, k)).toBe(1);
+  });
+
+  it('with ice at 0 and ore at 500 a drone picks an ice rock 1.8x as far over a near ore rock', () => {
+    const { state, drone } = droneGame();
+    state.run.bank.ore = 500;
+    state.run.bank.ice = 0;
+    const ore = makeRock(state.run, 'ore', 0, { x: 100, z: 0 }, 30, 0);
+    const ice = makeRock(state.run, 'ice', 0, { x: 180, z: 0 }, 30, 0);
+    state.run.rocks.push(ore, ice);
+    const ctx = ctxFor(state);
+    droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
+    expect(drone.aiTargetId).toBe(ice.id);
+  });
+
+  it('with ice at 0 a drone still picks the near ore rock when the ice rock is 2.5x as far', () => {
+    const { state, drone } = droneGame();
+    state.run.bank.ore = 500;
+    state.run.bank.ice = 0;
+    const ore = makeRock(state.run, 'ore', 0, { x: 100, z: 0 }, 30, 0);
+    const ice = makeRock(state.run, 'ice', 0, { x: 250, z: 0 }, 30, 0);
+    state.run.rocks.push(ore, ice);
+    const ctx = ctxFor(state);
+    droneThink(ctx, drone, ctx.index.stats.get(drone.id)!);
+    expect(drone.aiTargetId).toBe(ore.id);
   });
 });
 
@@ -398,5 +451,85 @@ describe('star detour', () => {
     expect(fs.order).toBeNull();
     expect(closest).toBeGreaterThan(state.run.system.heatRadius);
     expect(fs.hull).toBe(hull);
+  });
+});
+
+/** Hull a drone loses collecting a pickup past a seeded scatter of rocks; deterministic per `k`. */
+function pickupRun(k: number, avoid = true): number {
+  let a = 12345 + k * 777;
+  const rnd = (): number => (a = (a * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const { state, drone } = droneGame();
+  const ox = 600; // well clear of the star
+  flagship(state.run).pos = { x: ox, z: 150 };
+  drone.pos = { x: ox, z: 0 };
+  const spots: [number, number, number][] = [];
+  for (let i = 0; i < 14; i++) spots.push([60 + rnd() * 200, (rnd() - 0.5) * 200, 12 + rnd() * 25]);
+  const pk = { x: 150 + rnd() * 80, z: (rnd() - 0.5) * 100 };
+  for (const [x, z, r] of spots) {
+    if (Math.hypot(x, z) <= r + 30 || Math.hypot(x - pk.x, z - pk.z) <= r + 14) continue;
+    const rock = makeRock(state.run, 'ore', 0, { x: ox + x, z }, r, 0);
+    rock.hp = rock.maxHp = 1e9;
+    state.run.rocks.push(rock);
+  }
+  state.run.pickups.push({
+    id: 9999,
+    kind: 'ore',
+    amount: 1,
+    pos: { x: ox + pk.x, z: pk.z },
+    vel: { x: 0, z: 0 },
+    age: 0,
+  });
+  const hull = drone.hull;
+  runTicks(state, 600, { assists: { ...DEFAULT_ASSISTS, avoid } });
+  return hull - drone.hull;
+}
+
+/** Speed along the escape direction after 8 reflex steps, with or without a rock right ahead. */
+const escape = (withRock: boolean): number => {
+  const { state, drone } = hazardGame('G', { x: 0, z: 610 });
+  drone.aiMode = 'assist';
+  flagship(state.run).pos = { x: 0, z: 600 };
+  state.run.hazards.comet = { from: { x: -3200, z: 600 }, vel: { x: 130, z: 0 }, belt: 0, timeLeft: 8 };
+  const dir = { x: 0, z: 0 };
+  cometPathEscape(state.run, [], drone.pos, TUNING.cometDodgePad + 8, dir);
+  if (withRock) {
+    const at = { x: drone.pos.x + dir.x * 40, z: drone.pos.z + dir.z * 40 };
+    const rock = makeRock(state.run, 'ore', 0, at, 20, 0);
+    rock.hp = rock.maxHp = 1e9;
+    state.run.rocks.push(rock);
+  }
+  drone.vel = { x: dir.x * 70, z: dir.z * 70 };
+  const ctx = ctxFor(state);
+  for (let i = 0; i < 8; i++) expect(dodgeHazards(ctx, drone, ctx.index.stats.get(drone.id)!, false)).toBe(true);
+  return drone.vel.x * dir.x + drone.vel.z * dir.z;
+};
+
+describe('rock-approach brake (#174)', () => {
+  it('a drone sweeping a pickup through a rock scatter does not hit rocks above collisionMinSpeed', () => {
+    for (let k = 0; k < 40; k++) expect(pickupRun(k), `scatter ${k}`).toBe(0);
+  });
+
+  it('does not engage with Steer around asteroids off (the old, unbraked approach)', () => {
+    let total = 0;
+    for (let k = 0; k < 40; k++) total += pickupRun(k, false);
+    expect(total).toBeGreaterThan(0);
+  });
+
+  it('a drone leaving a comet path is not braked by a nearby rock', () => {
+    // Avoidance still eases the throttle round the rock; the brake would pin the closing speed at the cap (20).
+    expect(escape(true)).toBeGreaterThan(TUNING.collisionMinSpeed * TUNING.rockApproachCap + 10);
+  });
+
+  it('does not slow a drone crossing open space', () => {
+    const { state, drone } = droneGame();
+    drone.pos = { x: 600, z: 0 };
+    flagship(state.run).pos = { x: 600, z: 150 };
+    state.run.pickups.push({ id: 9999, kind: 'ore', amount: 1, pos: { x: 840, z: 0 }, vel: { x: 0, z: 0 }, age: 0 });
+    let top = 0;
+    for (let i = 0; i < 120; i++) {
+      runTicks(state, 1);
+      top = Math.max(top, Math.hypot(drone.vel.x, drone.vel.z));
+    }
+    expect(top).toBeGreaterThan(TUNING.collisionMinSpeed * 2);
   });
 });

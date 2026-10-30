@@ -17,6 +17,15 @@ const fs1 = () => {
   return { s, fs: flagship(s.run) };
 };
 
+const builderGame = () => {
+  const s = newGame(1);
+  const b = makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', { ...s.run.system.station.pos });
+  s.run.ships.push(b);
+  const large = s.run.rocks.find((r) => r.size === 0 && !r.comet)!;
+  const small = s.run.rocks.find((r) => r.size === 2 && !r.comet)!;
+  return { s, b, large, small };
+};
+
 describe('command handlers', () => {
   it('select', () => {
     const { s, fs } = fs1();
@@ -43,6 +52,54 @@ describe('command handlers', () => {
     send(s, { t: 'mine', shipId: fs.id, rockId: dense.id });
     expect(s.out.log.some((l) => l.level === 'warn' && l.text.includes('Dense'))).toBe(true);
     expect(fs.order).toEqual({ kind: 'dock' });
+  });
+  describe('construction drone build orders', () => {
+    it('mine on a construction drone with a large rock sets a build order', () => {
+      const { s, b, large } = builderGame();
+      send(s, { t: 'mine', shipId: b.id, rockId: large.id });
+      expect(b.order).toEqual({ kind: 'build', rockId: large.id });
+    });
+    it('mine on a construction drone with a small rock fails with a log line', () => {
+      const { s, b, small } = builderGame();
+      send(s, { t: 'mine', shipId: b.id, rockId: small.id });
+      expect(b.order).toBeNull();
+      expect(s.out.log.some((l) => l.level === 'warn' && l.text.includes('large'))).toBe(true);
+    });
+    it('mine on a construction drone with a rock that hosts an outpost fails', () => {
+      const { s, b, large } = builderGame();
+      s.run.automation.outposts.push(makeOutpost(large));
+      send(s, { t: 'mine', shipId: b.id, rockId: large.id });
+      expect(b.order).toBeNull();
+      expect(s.out.log.some((l) => l.level === 'warn')).toBe(true);
+    });
+    it('mine on a mining drone is unchanged', () => {
+      const { s, large } = builderGame();
+      const d = makeShip(s.run, s.profile, 'drone', 'Drone-1', { ...s.run.system.station.pos });
+      s.run.ships.push(d);
+      send(s, { t: 'mine', shipId: d.id, rockId: large.id });
+      expect(d.order).toEqual({ kind: 'mine', rockId: large.id });
+    });
+    it('shipAuto build toggles autoBuild on a construction drone', () => {
+      const { s, b } = builderGame();
+      send(s, { t: 'shipAuto', shipId: b.id, kind: 'build', on: false });
+      expect(b.autoBuild).toBe(false);
+      send(s, { t: 'shipAuto', shipId: b.id, kind: 'build', on: true });
+      expect(b.autoBuild).toBe(true);
+    });
+    it('shipAuto build on a drone fails with a warn', () => {
+      const { s } = builderGame();
+      const d = makeShip(s.run, s.profile, 'drone', 'Drone-1', { ...s.run.system.station.pos });
+      s.run.ships.push(d);
+      send(s, { t: 'shipAuto', shipId: d.id, kind: 'build', on: true });
+      expect(d.autoBuild).toBe(false);
+      expect(s.out.log.some((l) => l.level === 'warn')).toBe(true);
+    });
+    it('stop clears a build order', () => {
+      const { s, b, large } = builderGame();
+      send(s, { t: 'mine', shipId: b.id, rockId: large.id });
+      send(s, { t: 'stop', shipId: b.id });
+      expect(b.order).toBeNull();
+    });
   });
   it('dock', () => {
     const { s, fs } = fs1();
@@ -213,6 +270,13 @@ describe('command handlers', () => {
     s.run.bank = { ore: 1e4, ice: 1e4, crystal: 1e4, alloy: 1e4, fuel: 0 };
     send(s, { t: 'buyHull', hullId: 'hauler' });
     expect(s.run.ships.some((x) => x.hullId === 'hauler')).toBe(true);
+    expect([s.profile.stats.drones, s.profile.stats.miningDrones]).toEqual([1, 0]);
+  });
+  it('buying a construction drone counts as a launch but not as a mining drone', () => {
+    const s = newGame(1);
+    s.run.bank = { ore: 1e4, ice: 1e4, crystal: 1e4, alloy: 1e4, fuel: 0 };
+    send(s, { t: 'buyHull', hullId: 'constructionDrone' });
+    expect(s.run.ships.some((x) => x.hullId === 'constructionDrone')).toBe(true);
     expect([s.profile.stats.drones, s.profile.stats.miningDrones]).toEqual([1, 0]);
   });
   it('scrap', () => {

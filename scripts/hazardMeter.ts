@@ -7,6 +7,7 @@ import { FLARES, HAZARD_LEVELS, type HazardLevel } from '../src/data/hazards';
 import { TUNING } from '../src/data/tuning';
 import { isDocked } from '../src/sim/economy';
 import { flareExposure } from '../src/sim/hazards';
+import { HULLS } from '../src/data/hulls';
 import { shipStats } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
 
@@ -23,14 +24,27 @@ export interface HazardTally {
   armor: number;
   /** Raw damage shields soaked up (post-armor, shield regeneration within the tick is netted off). */
   shield: number;
+  /** Collision hull loss split by the ship's role (#174 diagnosis). */
+  collisionRole: Record<ShipRole, number>;
+  /** Collision hull loss split by what the ship was doing (its status kind; 'none' for the player-flown flagship). */
+  collisionStatus: Record<string, number>;
+  /** Collisions that did damage, and the sum of the victims' speeds just before the tick. */
+  hits: number;
+  hitSpeed: number;
   /** Ships destroyed (flagship and drones alike). */
   shipsLost: number;
   /** Ore paid to repair hulls (repair costs ore, not credits). */
   repairOre: number;
 }
 
+export type ShipRole = 'flagship' | 'drone' | 'hauler' | 'builder';
+
 export const newTally = (): HazardTally => ({
   hull: { collision: 0, heat: 0, flare: 0, comet: 0, other: 0 },
+  collisionRole: { flagship: 0, drone: 0, hauler: 0, builder: 0 },
+  collisionStatus: {},
+  hits: 0,
+  hitSpeed: 0,
   raw: 0,
   armor: 0,
   shield: 0,
@@ -50,6 +64,8 @@ interface Snap {
   x: number;
   z: number;
   collisionCd: number;
+  role: ShipRole;
+  speed: number;
 }
 
 export interface HazardMeter {
@@ -84,6 +100,8 @@ export function createHazardMeter(state: GameState, level: HazardLevel): HazardM
           x: sh.pos.x,
           z: sh.pos.z,
           collisionCd: sh.collisionCd,
+          role: HULLS[sh.hullId].role as ShipRole,
+          speed: Math.hypot(sh.vel.x, sh.vel.z),
         });
       }
     },
@@ -146,6 +164,13 @@ export function createHazardMeter(state: GameState, level: HazardLevel): HazardM
             if (r.comet) break;
           }
           tally.hull[src] += left;
+          if (src === 'collision') {
+            tally.collisionRole[prev.role] += left;
+            const kind = (ship && s.out.status.get(id)?.kind) || 'none';
+            tally.collisionStatus[kind] = (tally.collisionStatus[kind] ?? 0) + left;
+            tally.hits += 1;
+            tally.hitSpeed += prev.speed;
+          }
         }
       }
     },

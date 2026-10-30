@@ -46,6 +46,13 @@ describe('settings store', () => {
     expect(s.pauseInMenus).toBe(true);
   });
 
+  it('settings: unknown builderReserve falls back to 25', () => {
+    expect(SettingsStore.merge(null).builderReserve).toBe(25);
+    expect(SettingsStore.merge({ builderReserve: 50 }).builderReserve).toBe(50);
+    expect(SettingsStore.merge({ builderReserve: 7 }).builderReserve).toBe(25);
+    expect(SettingsStore.merge({ builderReserve: 'lots' }).builderReserve).toBe(25);
+  });
+
   it('defaults hazards to normal and rejects unknown stored levels', () => {
     expect(SettingsStore.merge(null).hazards).toBe('normal');
     expect(SettingsStore.merge({ hazards: 'harsh' }).hazards).toBe('harsh');

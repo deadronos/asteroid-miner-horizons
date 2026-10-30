@@ -90,7 +90,7 @@ const input = new Input(
 
 let assists: Assists = { avoid: true, autoDock: true, chain: true };
 let hazards: HazardLevel = 'normal';
-let automation: FleetAuto = { repairAt: 0.5, reserve: 100 };
+let automation: FleetAuto = { repairAt: 0.5, reserve: 100, builderReserve: 25 };
 let qualityMode = settings.value.quality;
 function applySettings(): void {
   const s = settings.value;
@@ -99,7 +99,7 @@ function applySettings(): void {
     autoQuality.reset();
   }
   assists = { avoid: s.assistAvoid, autoDock: s.assistAutoDock, chain: s.assistChain };
-  automation = { repairAt: s.autoRepairAt, reserve: s.autoReserve };
+  automation = { repairAt: s.autoRepairAt, reserve: s.autoReserve, builderReserve: s.builderReserve };
   hazards = s.hazards;
   renderer.applySettings(s, autoQuality.level);
 }

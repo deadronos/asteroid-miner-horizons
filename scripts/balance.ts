@@ -28,7 +28,7 @@ import { MODIFIER_IDS, MODIFIERS } from '../src/data/modifiers';
 import { walletValue } from '../src/data/resources';
 import { newGame } from '../src/sim/create';
 import { isDocked } from '../src/sim/economy';
-import { droneCount, fleetCap, isFlagship, isHauler } from '../src/sim/ships';
+import { droneCount, fleetCap, isBuilder, isFlagship, isHauler } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
 import { runBot } from './harness';
 import { createHazardMeter, DAMAGE_SOURCES, hullTotal, newTally, type HazardTally } from './hazardMeter';
@@ -48,6 +48,10 @@ const AUTOMATION_TARGET_SHARE = 0.5;
 const FLEET_FROM = 4;
 /** Median drones in the fleet at warp time required in each system from `FLEET_FROM` to the end of the mid-game. */
 const FLEET_AT_WARP_TARGET = 4;
+/** Systems whose outposts the builder row counts, and the share of them construction drones must place (#174). */
+const BUILDER_FROM = 4;
+const BUILDER_TO = 6;
+const BUILDER_OUTPOST_TARGET = 0.5;
 /** Share of seeds that must reach the opening target before the first warp (#197). */
 const OPENING_TARGET_SHARE = 0.8;
 /** Hazard level the report plays at unless --hazards says otherwise; matches the game's settings default. */
@@ -63,6 +67,10 @@ interface WarpStats {
   haulerValue: number;
   /** Units outposts extracted this warp. */
   outpostUnits: number;
+  /** Outposts placed this warp by a construction drone. */
+  builderOutposts: number;
+  /** Outposts placed this warp by the flagship's own deploy command. */
+  flagshipOutposts: number;
   /** walletValue of contract rewards paid this warp. */
   contractValue: number;
   /** Contracts completed this warp. */
@@ -132,6 +140,8 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
       droneValue: 0,
       haulerValue: 0,
       outpostUnits: 0,
+      builderOutposts: 0,
+      flagshipOutposts: 0,
       contractValue: 0,
       contracts: 0,
       alloy: 0,
@@ -145,11 +155,17 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
       fleetAtWarp: 0,
       fleetCap: fleetCap(state.profile),
     };
+    // Outposts seen last tick, and the flagship deploy commands queued for the tick about to run.
+    let seenOutposts = state.run.automation.outposts.length;
+    let flagshipDeploys = 0;
     const meter = createHazardMeter(state, hazards);
     cur.hazard = meter.tally;
     const ran = runBot(state, {
       seconds: WARP_CAP_SEC,
       hazards,
+      commands: (cmds) => {
+        flagshipDeploys = cmds.filter((c) => c.t === 'deployOutpost').length;
+      },
       before: (s) => {
         meter.before(s);
         cargoBefore.clear();
@@ -172,7 +188,7 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
           const before = cargoBefore.get(sh.id) ?? 0;
           if (before > 0 && walletValue(sh.cargo) === 0 && isDocked(s.run, sh)) {
             if (isFlagship(sh)) cur.flagshipValue += before;
-            else if (isHauler(sh)) cur.haulerValue += before;
+            else if (isHauler(sh) || isBuilder(sh)) cur.haulerValue += before;
             else cur.droneValue += before;
           }
         }
@@ -182,6 +198,13 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
         cur.alloy = s.run.refinery.produced.alloy;
         cur.fuel = s.run.refinery.produced.fuel;
         cur.outpostUnits = s.run.automation.extracted;
+        // A new outpost is the flagship's when it queued a deploy this tick, else a construction drone's.
+        const placed = Math.max(0, s.run.automation.outposts.length - seenOutposts);
+        const byFlagship = Math.min(placed, flagshipDeploys);
+        cur.flagshipOutposts += byFlagship;
+        cur.builderOutposts += placed - byFlagship;
+        seenOutposts = s.run.automation.outposts.length;
+        flagshipDeploys = 0;
       },
     });
     cur.sec = ran;
@@ -230,6 +253,44 @@ const share = (part: number, whole: number): number => part / Math.max(1, whole)
  */
 const activeShare = (x: WarpStats): number => share(x.flagshipValue + x.contractValue, warpIncome(x));
 
+/**
+ * Baselines for the #174 collision row, taken from `npm run balance:ci` at commit 0e525b1 (before pilots braked for
+ * rocks): the collision metric below and the mid-game median value/min, both rounded to whole numbers.
+ */
+const COLLISION_BASELINE = 165;
+const VALUE_PER_MIN_BASELINE = 392;
+/** Collision damage must fall to this share of the baseline... */
+const COLLISION_TARGET_SHARE = 2 / 3;
+/** ...without mid-game value/min dropping below this share of its baseline (no buying safety with slow flight). */
+const VALUE_GUARD_SHARE = 0.95;
+
+/** Systems whose collision damage the #174 row compares against the baseline. */
+const COLLISION_FROM = 3;
+const COLLISION_TO = 10;
+
+/**
+ * Collision damage metric: the mean over systems COLLISION_FROM..COLLISION_TO of that system's median (across seeds)
+ * collision hull loss. Systems nobody reached are skipped.
+ */
+function collisionMetric(results: SeedResult[]): number {
+  const per: number[] = [];
+  for (let w = COLLISION_FROM - 1; w < COLLISION_TO; w++) {
+    const xs = results.flatMap((r) => (r.warps[w] ? [r.warps[w]!.hazard.hull.collision] : []));
+    if (xs.length) per.push(median(xs));
+  }
+  return per.length ? per.reduce((a, b) => a + b, 0) / per.length : 0;
+}
+
+/** Median value/min over every finished mid-game seed-warp (the same systems the active-play target uses). */
+function midValuePerMin(results: SeedResult[]): number {
+  const xs = results.flatMap((r) =>
+    r.warps
+      .slice(MID_GAME_START - 1, MID_GAME_END)
+      .flatMap((x, i) => (r.wall === MID_GAME_START - 1 + i ? [] : [(x.value / x.sec) * 60])),
+  );
+  return xs.length ? median(xs) : 0;
+}
+
 const dmg = (n: number): string => n.toFixed(n < 10 ? 1 : 0);
 const whole = (n: number): string => `${Math.round(n)}`;
 
@@ -250,7 +311,7 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
   const lines: string[] = [
     '# Balance report',
     '',
-    `Generated by \`npm run balance -- --seeds ${seeds} --warps ${warps}${seedArg}\` at commit \`${commit}\` on Node ${process.versions.node} (${process.platform} ${process.arch}). The bot (\`scripts/bot.ts\`) plays the flagship; drones and haulers use their built-in AI. At each warp the bot takes the richest of the candidate routes (most opening rocks × richness, lower hazard on a tie). Hazards: ${hazards}. Times are sim time (m:ss). Cells show median (min–max) across seeds.`,
+    `Generated by \`npm run balance -- --seeds ${seeds} --warps ${warps}${seedArg}\` at commit \`${commit}\` on Node ${process.versions.node} (${process.platform} ${process.arch}). The bot (\`scripts/bot.ts\`) plays the flagship; drones, haulers and construction drones use their built-in AI. At each warp the bot takes the richest of the candidate routes (most opening rocks × richness, lower hazard on a tie). Hazards: ${hazards}. Times are sim time (m:ss). Cells show median (min–max) across seeds.`,
     '',
     '## Opening (system 1)',
     '',
@@ -428,6 +489,32 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     '',
     `- Overall (systems ${FLEET_FROM}–${MID_GAME_END}): **${fleetHit ? 'PASS' : 'FAIL'}**`,
   );
+  // Acceptance check for #174: construction drones, not the flagship, should be placing the outposts by system 4.
+  const builderSum = (pick: (x: WarpStats) => number, w: number): number =>
+    results.reduce((n, r) => n + (r.warps[w] ? pick(r.warps[w]!) : 0), 0);
+  const builderRows = Array.from({ length: BUILDER_TO - BUILDER_FROM + 1 }, (_, i) => {
+    const w = BUILDER_FROM - 1 + i;
+    return { w, b: builderSum((x) => x.builderOutposts, w), f: builderSum((x) => x.flagshipOutposts, w) };
+  });
+  const builderTotal = builderRows.reduce((n, x) => n + x.b, 0);
+  const flagshipTotal = builderRows.reduce((n, x) => n + x.f, 0);
+  const builderShare = share(builderTotal, builderTotal + flagshipTotal);
+  const builderHit = builderTotal + flagshipTotal > 0 && builderShare >= BUILDER_OUTPOST_TARGET;
+  lines.push(
+    '',
+    '## Outposts by builder vs flagship (#174)',
+    '',
+    `A construction drone builds outposts on its own, so once the bot owns one the flagship stops deploying them. Target: **construction drones place ≥ ${pct(BUILDER_OUTPOST_TARGET)} of the outposts in systems ${BUILDER_FROM}–${BUILDER_TO}**. Counts are outposts placed across all seeds.`,
+    '',
+    '| System | By builders | By flagship | Builder share |',
+    '| --- | --- | --- | --- |',
+    ...builderRows.map(
+      (x) =>
+        `| ${x.w + 1} | ${Math.round(x.b)} | ${Math.round(x.f)} | ${x.b + x.f ? pct(share(x.b, x.b + x.f)) : '—'} |`,
+    ),
+    '',
+    `- Systems ${BUILDER_FROM}–${BUILDER_TO}: builders ${builderTotal} · flagship ${flagshipTotal} (${pct(builderShare)}) — **${builderHit ? 'PASS' : 'FAIL'}**`,
+  );
   lines.push(
     '',
     '## Modifiers',
@@ -489,6 +576,32 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     '',
     `- Defensive share, pooled over ${all.length} seed-warps (${dmg(raw)} raw damage): armor turned away **${pct(sum((h) => h.armor) / Math.max(1e-9, raw))}**, shields absorbed **${pct(sum((h) => h.shield) / Math.max(1e-9, raw))}**, the hull took **${pct(sum(hullTotal) / Math.max(1e-9, raw))}**.`,
     `- Ships lost: ${sum((h) => h.shipsLost)} in total; repair spend ${whole(sum((h) => h.repairOre))} ore in total.`,
+  );
+  const roles = ['flagship', 'drone', 'hauler', 'builder'] as const;
+  const hitCount = sum((h) => h.hits);
+  const statusTotals = new Map<string, number>();
+  for (const h of all)
+    for (const [k, v] of Object.entries(h.collisionStatus)) statusTotals.set(k, (statusTotals.get(k) ?? 0) + v);
+  lines.push(
+    `- Collision hull loss by role (pooled): ${roles.map((r) => `${r} ${dmg(sum((h) => h.collisionRole[r]))}`).join(' · ')}.`,
+    `- Collision hull loss by what the ship was doing (pooled): ${[...statusTotals]
+      .toSorted((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+      .map(([k, v]) => `${k} ${dmg(v)}`)
+      .join(' · ')}.`,
+    `- Damaging collisions: ${hitCount}, at a mean ${dmg(sum((h) => h.hitSpeed) / Math.max(1, hitCount))} speed before the tick.`,
+  );
+  const collisionNow = collisionMetric(results);
+  const valueNow = midValuePerMin(results);
+  const collisionOk = collisionNow <= COLLISION_BASELINE * COLLISION_TARGET_SHARE;
+  const valueOk = valueNow >= VALUE_PER_MIN_BASELINE * VALUE_GUARD_SHARE;
+  lines.push(
+    '',
+    `Collision damage is the mean over systems ${COLLISION_FROM}–${COLLISION_TO} of each system's median collision hull loss. Value/min is the median over mid-game seed-warps (systems ${MID_GAME_START}–${MID_GAME_END}). Baselines are from commit 0e525b1, before autopilot ships braked for rocks (#174).`,
+    '',
+    '| Check | Now | Baseline | Target | Verdict |',
+    '| --- | --- | --- | --- | --- |',
+    `| Collision damage vs baseline (#174) | ${dmg(collisionNow)} | ${COLLISION_BASELINE} | ≤ ${dmg(COLLISION_BASELINE * COLLISION_TARGET_SHARE)} (⅔) | **${collisionOk ? 'PASS' : 'FAIL'}** |`,
+    `| Mid-game value/min vs baseline (#174) | ${whole(valueNow)} | ${VALUE_PER_MIN_BASELINE} | ≥ ${whole(VALUE_PER_MIN_BASELINE * VALUE_GUARD_SHARE)} (95%) | **${valueOk ? 'PASS' : 'FAIL'}** |`,
   );
   lines.push(
     '',
