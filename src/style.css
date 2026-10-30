@@ -95,6 +95,44 @@ body {
   color: var(--accent);
   font-weight: 600;
 }
+.map-label.belt {
+  color: var(--dim);
+  font-size: calc(11px * var(--hud-scale, 1));
+}
+/* Fleet, outpost and hazard blips; the glyph is centred on its transform origin. */
+.map-blip {
+  position: absolute;
+  left: 0;
+  top: 0;
+  margin: calc(-0.6em * var(--hud-scale, 1)) 0 0 calc(-0.5em * var(--hud-scale, 1));
+  font-size: calc(14px * var(--hud-scale, 1));
+  line-height: 1.2;
+  color: var(--txt);
+  text-shadow:
+    0 0 5px rgba(0, 0, 0, 0.95),
+    0 1px 2px #000;
+}
+.map-blip[data-kind='selected'] {
+  color: #59ffa0;
+  font-size: calc(18px * var(--hud-scale, 1));
+}
+.map-blip[data-kind='outpost'] {
+  color: var(--accent);
+}
+.map-blip[data-kind='comet'],
+.map-blip[data-kind='flare'] {
+  color: #ff7a4d;
+}
+@keyframes map-blip-pulse {
+  50% {
+    opacity: 0.45;
+  }
+}
+.map-labels.pulse .map-blip[data-kind='selected'],
+.map-labels.pulse .map-blip[data-kind='comet'],
+.map-labels.pulse .map-blip[data-kind='flare'] {
+  animation: map-blip-pulse 1s ease-in-out infinite;
+}
 
 .hidden {
   display: none !important;

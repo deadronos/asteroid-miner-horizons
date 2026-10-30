@@ -1,6 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { LABEL_FADE, MapLabels, labelOpacity, placeLabels, planetPos } from '../src/render/labels';
 import { generateSystem } from '../src/sim/generate';
+import { newProfile, newRun } from '../src/sim/create';
+import type { Run } from '../src/sim/types';
+import { beltLabel } from '../src/render/mapBlips';
+
+/** A fresh run in the given system. */
+const runIn = (seed: number, n: number): Run => {
+  const run = newRun(newProfile(seed));
+  run.system = generateSystem(seed, n);
+  return run;
+};
 
 const view = { w: 1280, h: 720 };
 /** A map-like projection: 3.2 world units per pixel around the star. */
@@ -78,6 +88,8 @@ const fakeEl = () => ({
   className: '',
   textContent: '',
   style: {},
+  dataset: {} as Record<string, string>,
+  classList: { toggle() {} },
   offsetWidth: 60,
   offsetHeight: 14,
   clientWidth: view.w,
@@ -98,15 +110,27 @@ describe('MapLabels', () => {
   it('relabels for another game whose system shares the name and number', () => {
     vi.stubGlobal('document', { createElement: fakeEl });
     // Seeds 1 and 21 both name their first system "Qutha", with 3 and 5 planets.
-    const a = generateSystem(1, 1);
-    const b = generateSystem(21, 1);
-    expect(`${a.name}#${a.number}`).toBe(`${b.name}#${b.number}`);
+    const a = runIn(1, 1);
+    const b = runIn(21, 1);
+    expect(`${a.system.name}#${a.system.number}`).toBe(`${b.system.name}#${b.system.number}`);
 
     const labels = new MapLabels(fakeEl() as unknown as HTMLElement, () => []);
     const texts = () => (labels.el as unknown as ReturnType<typeof fakeEl>).children.map((c) => c.textContent);
     const fit = LABEL_FADE[1];
     labels.update(a, fit, 3.2, 1, toScreen);
     labels.update(b, fit, 3.2, 1, toScreen);
-    expect(texts()).toEqual([`${b.name} Station`, ...b.planets.map((p) => p.name)]);
+    expect(texts().slice(0, 1 + b.system.planets.length)).toEqual([
+      `${b.system.name} Station`,
+      ...b.system.planets.map((p) => p.name),
+    ]);
+    expect(texts().slice(1 + b.system.planets.length, -1)).toEqual(b.system.belts.map(beltLabel));
+  });
+});
+
+describe('label fallback anchors', () => {
+  it('moves to an alternative anchor when the main spot is covered', () => {
+    const panel = { x: 300, y: 200, w: 200, h: 200 };
+    const [b] = placeLabels([{ ...item(400, 300), alts: [700, 300] }], [panel], view);
+    expect(b).toEqual({ x: 660, y: 300 - 10 - 4 - 16, w: 80, h: 16 });
   });
 });

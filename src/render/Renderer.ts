@@ -113,6 +113,7 @@ export class Renderer {
   private shakeScale = 1;
   private alwaysBars = false;
   private reducedMotion = false;
+  private lowQuality = false;
 
   /**
    * `antialias` is fixed for the WebGL context's lifetime; it applies on reload. The context gets it only when
@@ -195,6 +196,8 @@ export class Renderer {
     this.fx.density = q.particles;
     this.shakeScale = SHAKE_SCALE[s.shake];
     this.alwaysBars = s.alwaysShowBars;
+    this.lowQuality = quality === 'low';
+    this.syncMapPulse();
   }
 
   /** Applies the OS reduced-motion preference without changing saved settings. */
@@ -202,6 +205,12 @@ export class Renderer {
     if (this.reducedMotion === on) return;
     this.reducedMotion = on;
     this.dirty = true;
+    this.syncMapPulse();
+  }
+
+  /** Map blips pulse only when motion is welcome and the quality preset is not Low. */
+  private syncMapPulse(): void {
+    this.labels.setPulse(!this.reducedMotion && !this.lowQuality);
   }
 
   private ensureComposer(): { composer: EffectComposer; bloom: UnrealBloomPass } {
@@ -325,7 +334,7 @@ export class Renderer {
     this.fx.update(dt);
     this.updateMarkers(state, moveMark, wpp);
     this.setPlayfieldVisible(!w.hidden);
-    this.labels.update(sys, w.hidden ? 0 : this.cam.halfH, this.wpp, dt, this.toScreen);
+    this.labels.update(run, w.hidden ? 0 : this.cam.halfH, this.wpp, dt, this.toScreen);
     this.fx.updateText(dt, this.toScreen, this.anchorOf);
 
     if (this.warmup) {
