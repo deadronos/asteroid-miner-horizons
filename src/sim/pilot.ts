@@ -101,7 +101,8 @@ function brakeForRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 /**
  * Accelerate along a wish vector (length 0..1), capped at top speed.
  * `avoid` enables autopilot obstacle avoidance (off for manual WASD flight);
- * `ignoreId` exempts the rock being approached for mining.
+ * `ignoreId` exempts the rock being approached for mining. `brake` (with `avoid`) slows the approach to nearby rocks;
+ * hazard reflexes pass false so nothing holds a ship back from leaving danger.
  */
 export function steer(
   ctx: TickCtx,
@@ -111,6 +112,7 @@ export function steer(
   wz: number,
   avoid = false,
   ignoreId: number | null = null,
+  brake = true,
 ): void {
   const { dt } = ctx;
   let want = Math.min(1, hypot2(wx, wz));
@@ -134,7 +136,7 @@ export function steer(
     x += a.x * Math.max(want, 0.5);
     z += a.z * Math.max(want, 0.5);
     want *= 1 - 0.7 * danger; // ease off the throttle while threading a cluster
-    brakeForRocks(ctx, ship, st);
+    if (brake) brakeForRocks(ctx, ship, st);
   }
   const l = hypot2(x, z);
   if (l > 1e-6) {
@@ -160,7 +162,14 @@ export function steer(
  * round the star in an arc. The safe circle shrinks to the target's own distance from the star, so a point inside
  * it (a player's move order) is still reached, just by the shortest path that does not dip deeper.
  */
-function starDetour(ctx: TickCtx, ship: Ship, st: ShipStats, target: Vec2, avoidId: number | null): boolean {
+function starDetour(
+  ctx: TickCtx,
+  ship: Ship,
+  st: ShipStats,
+  target: Vec2,
+  avoidId: number | null,
+  brake: boolean,
+): boolean {
   const safe = Math.min(ctx.state.run.system.heatRadius + TUNING.starRoutePad + st.size, len(target));
   const dx = target.x - ship.pos.x;
   const dz = target.z - ship.pos.z;
@@ -176,7 +185,7 @@ function starDetour(ctx: TickCtx, ship: Ship, st: ShipStats, target: Vec2, avoid
   const nx = c > 1e-6 ? cx / c : -dz / l;
   const nz = c > 1e-6 ? cz / c : dx / l;
   const wp = { x: nx * (safe + TUNING.starRoutePad), z: nz * (safe + TUNING.starRoutePad) };
-  steer(ctx, ship, st, wp.x - ship.pos.x, wp.z - ship.pos.z, ctx.assists.avoid, avoidId);
+  steer(ctx, ship, st, wp.x - ship.pos.x, wp.z - ship.pos.z, ctx.assists.avoid, avoidId, brake);
   return true;
 }
 
@@ -191,16 +200,17 @@ export function arrive(
   target: Vec2,
   stopDist = 12,
   avoidId: number | null = null,
+  rockBrake = true,
 ): boolean {
   const dx = target.x - ship.pos.x;
   const dz = target.z - ship.pos.z;
   const d = hypot2(dx, dz);
   if (d <= stopDist) return true;
-  if (starDetour(ctx, ship, st, target, avoidId)) return false;
+  if (starDetour(ctx, ship, st, target, avoidId, rockBrake)) return false;
   // Slow down within the braking distance v²/2a.
   const brake = (st.speed * st.speed) / (2 * st.accel) + 20;
   const throttle = Math.min(1, (d - stopDist) / brake + 0.08);
-  steer(ctx, ship, st, (dx / d) * throttle, (dz / d) * throttle, ctx.assists.avoid, avoidId);
+  steer(ctx, ship, st, (dx / d) * throttle, (dz / d) * throttle, ctx.assists.avoid, avoidId, rockBrake);
   return false;
 }
 
@@ -246,8 +256,9 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
 
 /** Full throttle straight away from `from`, which lies `d` away. */
 function backOff(ctx: TickCtx, ship: Ship, st: ShipStats, from: Vec2, d: number): void {
-  if (d > 1e-6) steer(ctx, ship, st, (ship.pos.x - from.x) / d, (ship.pos.z - from.z) / d, ctx.assists.avoid);
-  else steer(ctx, ship, st, 1, 0, ctx.assists.avoid);
+  if (d > 1e-6)
+    steer(ctx, ship, st, (ship.pos.x - from.x) / d, (ship.pos.z - from.z) / d, ctx.assists.avoid, null, false);
+  else steer(ctx, ship, st, 1, 0, ctx.assists.avoid, null, false);
 }
 
 /** True if `pos` lies inside the safe distance of a breaking volatile rock other than `exceptId`. */
@@ -381,15 +392,15 @@ export function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: bool
   const esc = { x: 0, z: 0 };
   if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, esc)) {
     setStatus(ctx.state.out, ship.id, 'avoidComet');
-    steer(ctx, ship, st, esc.x, esc.z, ctx.assists.avoid);
+    steer(ctx, ship, st, esc.x, esc.z, ctx.assists.avoid, null, false);
     return true;
   }
   if (!inFlareZone(run, ship.pos)) return false;
   setStatus(ctx.state.out, ship.id, 'flare');
   const shelter = { x: 0, z: 0 };
   if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, shelter) === 'dock')
-    arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.5);
-  else arrive(ctx, ship, st, shelter, 20);
+    arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.5, null, false);
+  else arrive(ctx, ship, st, shelter, 20, null, false);
   return true;
 }
 

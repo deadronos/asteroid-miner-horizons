@@ -64,7 +64,7 @@ export function renderGameplay(settings: SettingsStore): Node[] {
       settings,
       'assistAvoid',
       'Steer around asteroids',
-      'Move, dock and mining approaches avoid rocks. Off: straight lines; you may crash.',
+      'Move, dock and mining approaches avoid rocks and slow down near them. Off: straight lines; you may crash.',
     ),
     toggleRow(
       settings,

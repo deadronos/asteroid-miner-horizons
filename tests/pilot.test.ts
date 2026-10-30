@@ -455,7 +455,7 @@ describe('star detour', () => {
 });
 
 /** Hull a drone loses collecting a pickup past a seeded scatter of rocks; deterministic per `k`. */
-function pickupRun(k: number): number {
+function pickupRun(k: number, avoid = true): number {
   let a = 12345 + k * 777;
   const rnd = (): number => (a = (a * 1664525 + 1013904223) >>> 0) / 4294967296;
   const { state, drone } = droneGame();
@@ -480,13 +480,44 @@ function pickupRun(k: number): number {
     age: 0,
   });
   const hull = drone.hull;
-  runTicks(state, 600);
+  runTicks(state, 600, { assists: { ...DEFAULT_ASSISTS, avoid } });
   return hull - drone.hull;
 }
+
+/** Speed along the escape direction after 8 reflex steps, with or without a rock right ahead. */
+const escape = (withRock: boolean): number => {
+  const { state, drone } = hazardGame('G', { x: 0, z: 610 });
+  drone.aiMode = 'assist';
+  flagship(state.run).pos = { x: 0, z: 600 };
+  state.run.hazards.comet = { from: { x: -3200, z: 600 }, vel: { x: 130, z: 0 }, belt: 0, timeLeft: 8 };
+  const dir = { x: 0, z: 0 };
+  cometPathEscape(state.run, [], drone.pos, TUNING.cometDodgePad + 8, dir);
+  if (withRock) {
+    const at = { x: drone.pos.x + dir.x * 40, z: drone.pos.z + dir.z * 40 };
+    const rock = makeRock(state.run, 'ore', 0, at, 20, 0);
+    rock.hp = rock.maxHp = 1e9;
+    state.run.rocks.push(rock);
+  }
+  drone.vel = { x: dir.x * 70, z: dir.z * 70 };
+  const ctx = ctxFor(state);
+  for (let i = 0; i < 8; i++) expect(dodgeHazards(ctx, drone, ctx.index.stats.get(drone.id)!, false)).toBe(true);
+  return drone.vel.x * dir.x + drone.vel.z * dir.z;
+};
 
 describe('rock-approach brake (#174)', () => {
   it('a drone sweeping a pickup through a rock scatter does not hit rocks above collisionMinSpeed', () => {
     for (let k = 0; k < 40; k++) expect(pickupRun(k), `scatter ${k}`).toBe(0);
+  });
+
+  it('does not engage with Steer around asteroids off (the old, unbraked approach)', () => {
+    let total = 0;
+    for (let k = 0; k < 40; k++) total += pickupRun(k, false);
+    expect(total).toBeGreaterThan(0);
+  });
+
+  it('a drone leaving a comet path is not braked by a nearby rock', () => {
+    // Avoidance still eases the throttle round the rock; the brake would pin the closing speed at the cap (20).
+    expect(escape(true)).toBeGreaterThan(TUNING.collisionMinSpeed * TUNING.rockApproachCap + 10);
   });
 
   it('does not slow a drone crossing open space', () => {
