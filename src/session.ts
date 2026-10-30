@@ -48,6 +48,8 @@ export interface GameSessionHooks {
   onSwitch?(): void;
   /** Whether the running slot is now read-only because another tab holds it; fires once the lock is decided. */
   onAccess?(readOnly: boolean): void;
+  /** Whether the player has manually paused; a tab hidden while paused earns no offline credit when shown again. */
+  isPaused?(): boolean;
 }
 
 export class GameSession implements SaveActions {
@@ -69,6 +71,8 @@ export class GameSession implements SaveActions {
   private suspended = false;
   /** Wall time (ms) the tab was hidden at, or null while it is visible; the absence is credited on return. */
   private hiddenAt: number | null = null;
+  /** True when the player had manually paused as the tab was hidden, so that span is not credited. */
+  private hiddenPaused = false;
   /** `pending` until the slot lock is decided; only an `owned` slot is ever written or credited offline time. */
   private access: 'pending' | 'owned' | 'readonly' = 'pending';
   private lock: SlotLock | null = null;
@@ -210,11 +214,13 @@ export class GameSession implements SaveActions {
     const onVisibility = (): void => {
       if (document.hidden) {
         this.hiddenAt = Date.now();
+        this.hiddenPaused = this.hooks.isPaused?.() ?? false;
         persist();
       } else if (this.hiddenAt !== null) {
         const since = this.hiddenAt;
         this.hiddenAt = null;
-        this.creditOffline(since);
+        if (!this.hiddenPaused) this.creditOffline(since);
+        this.hiddenPaused = false;
       }
     };
     // Opened in a background tab: the absence starts now.

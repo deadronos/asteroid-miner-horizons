@@ -276,6 +276,27 @@ describe('GameSession offline progress', () => {
       s.stop();
     });
 
+    it('credits nothing for a span hidden while manually paused, but credits a later unpaused one', () => {
+      let paused = true;
+      writeSlot(0, withDrones(2));
+      const s = new GameSession(settings(), { isPaused: () => paused }, granted);
+      s.start();
+      const bank0 = walletTotal(s.state.run.bank);
+      setHidden(true);
+      vi.setSystemTime(T0 + HOUR * 1000);
+      setHidden(false);
+      expect(walletTotal(s.state.run.bank)).toBe(bank0);
+      expect(aways(s)).toEqual([]);
+
+      paused = false;
+      setHidden(true);
+      vi.setSystemTime(T0 + 2 * HOUR * 1000);
+      setHidden(false);
+      expect(walletTotal(s.state.run.bank) - bank0).toBeCloseTo(droneRate(s.state) * HOUR, 3);
+      expect(aways(s)).toHaveLength(1);
+      s.stop();
+    });
+
     it('does not credit the span again after hide, reload, show', () => {
       const s = running();
       s.start();
