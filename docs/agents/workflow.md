@@ -59,7 +59,7 @@ After every task, before committing:
    bundle-size`. CI fails when the gzipped JS in `dist/assets` totals more than **240 kB** (about 5% over today's
    ~223 kB). `three` is split into a `vendor` chunk (`vite.config.ts`) so game updates keep it cached; raise the
    budget in `scripts/bundle-size.mjs` only with a reason in the PR.
-5. Regenerate generated files (`docs/balance.md`) rather than hand-editing them.
+5. Regenerate generated files rather than hand-editing them; `docs/balance.md` comes from `npm run balance:ci`.
 
 ## Branches, commits, PRs
 
