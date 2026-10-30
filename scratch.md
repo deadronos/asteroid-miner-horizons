@@ -1,60 +1,58 @@
 # Suggested next issues
 
-Rewritten 2026-10-30 at v0.12.0, after #213, #214, #215 and #218 landed (PRs #221–#223). Ordered by leverage,
-not size. The index of open work is #178; the category umbrellas are #42 (scope), #51 (balance), #28 (visuals)
-and #18 (performance). This file is the maintainer's notebook; agents do not edit it (see AGENTS.md).
+Rewritten 2026-10-31 at v0.12.0 (unreleased work on `main` since then), after the 2026-10-30 wave landed: #159,
+#164, #174, #206–#212, #216, #217, #219, #220 (PRs #225–#238). Ordered by leverage, not size. The index of open
+work is #178; the category umbrellas are #42 (scope), #51 (balance), #28 (visuals) and #18 (performance). This file
+is the maintainer's notebook; agents do not edit it (see AGENTS.md).
 
 ## 0. Housekeeping
 
-- **Close PR #224.** It duplicates #222 (save-v13 fixture for #215), which is already merged.
-- **#220 needs your decision** before #211 is built: does offline income accrue while manually paused, and for
-  every slot in parallel? Options (a)/(b)/(c) are in the issue; (c) needs a save field and a `SAVE_VERSION` bump.
+- **Cut a release.** `main` carries save v14, construction drones, gamepad, colour-vision palette, tab lock and the
+  balance pass, all since v0.12.0. Bump to 0.13.0 and tag.
+- **Close #18** (performance umbrella): every child is done. #28 is down to #27; #51 to #50, #173 and #176.
+- **Delete merged remote branches.** 13 `claude/*` branches from PRs #225–#237 (and `fix/frozen-save-v13-215`
+  from the closed #224) are still on origin.
 
-## 1. Bugs that players hit
+## 1. Small follow-ups from #174 (one issue, S)
 
-- **#219 slow motion below ~7.5 fps (S).** The loop drops its backlog after 8 steps, so low-end phones lose game
-  time silently. Raise the cap to cover the 0.25 s clamp and report dropped time. Matters more since touch
-  controls (#194) invite weaker devices.
-- **#211 two tabs on one slot (M).** Autosaves clobber each other and offline income can be paid twice. A per-slot
-  `navigator.locks` lock with a read-only second tab. Do it right after #220 is decided, since both touch the
-  offline-credit path in `src/session.ts`.
+File these together; each is a few lines plus a test.
 
-## 2. Make the balance numbers trustworthy, then tune
+- A build order that is waiting (unsafe rock, outpost limit, reserve) has no status of its own; it reads as
+  hauling. Add a `buildWaiting` reason.
+- A hand-flown (WASD) drone keeps its last AI status in the fleet list.
+- The README doesn't mention scarcity-aware mining or autopilot rock braking.
+- `tests/alloc.test.ts`: its construction drone never builds (no alloy), so the build path's allocation is unmeasured.
 
-Do these in order; each depends on the one before.
+## 2. Balance watch (S, file if it bites)
 
-1. **#212 balance report does not reproduce (S).** Regenerate `docs/balance.md` from clean `main`, pin the Node
-   version if the output is environment-dependent, and make the CI freshness step fail instead of warn.
-2. **#208 measure hazard damage, losses and repair spend (S/M).** Harness-only counters, no save change. Gives
-   #175 a baseline before combat exists.
-3. **#206 refining, outposts and haulers idle until system 6** and **#207 fleet cap unused through system 5.**
-   Tuning against the fresh report; add each target as a PASS/FAIL row. Keep the ≥ 40% active-play target green.
+The opening target sits at exactly 24/30 (80%) in the Docker report and reads 23/30 natively. Any tuning that
+nudges the early game can flip it. Worth a short look at why 6 seeds miss the first drone + tier-2 laser before
+the first warp, before more pillar work moves the numbers again.
 
-## 3. Performance and build
+## 3. The next pillar: #175 pirates and combat
 
-- **#216 vendor chunk + bundle budget (S/M).** Split three.js out so game updates stop busting an 800 kB cache
-  entry; a gzip budget in CI.
-- **#217 per-tick and per-frame allocations (M).** O(n²) ship scan, belt regrow closures, renderer/labels/audio
-  garbage; tighten `TICK_ALLOC_BUDGET` to 32 kB.
-- **#159 bench stress mode.** Pair with #217: the stress run is what shows the O(n²) cost at 50 ships.
+Now well-founded: #208's report shows shields and armor absorb 0% of damage, and #174's rock braking cut
+collision damage from 165 to 42 per system, so defensive components have even less to do. Combat gives them a
+job. Large; spec first (brainstorm → design → plan, as #174 did). The hazards pillar (#37) and the construction
+drone (#174) are the templates for a new hull, a brain and a balance row. Keep hostile spawns out of system 1 and
+behind the hazard setting.
 
-## 4. The next pillar
+## 4. Then the economy and the ending
 
-- **#174 fleet command depth** first: roles, priorities and an "idle because…" reason. It explains the #206/#207
-  findings to the player and builds on `src/sim/fleetAuto.ts`.
-- **#175 pirates and combat** when there is appetite for a new pillar. Large; spec first, and use #208's numbers.
-- Then **#173 contracts and reputation**, **#176 market and trade**, **#177 Horizon Gate / NG+**. All three can
-  hang off warp routes (#172, done).
+- **#173 contracts and reputation**: survey, refined-goods, bounty and escort kinds; reputation per contractor.
+  Escort contracts want #175 first.
+- **#176 station market and trade routes**: per-system prices from the seed; warp routes (#172) are the hook.
+- **#177 Horizon Gate / New Game+**: the ending. Needs a target the bot can reach; best after #176 gives Horizon
+  Data and goods somewhere to go.
 
-## 5. Reach and readability
+## 5. Small scope items with thin specs
 
-- **#164 map view** (fleet, outposts, hazards, belt labels), then decide whether **#27 corner minimap** is still
-  wanted.
-- **#209 gamepad** onto the existing `KeyBindings` action map; **#210 colour-vision palette** and non-colour cues
-  in the 3D view.
+- **#50 choice-based perks** and **#38 exploration**: still two-line specs from the first review. Rewrite each in
+  Why / Proposal / Acceptance before picking them up.
+- **#27 corner minimap**: #164 made the map view readable. Decide whether a minimap is still wanted; close it if
+  not.
 
-## Later / when there is appetite
+## Later / help wanted
 
-- **#50 choice-based perks**, **#38 exploration**: older scope items with two-line specs; rewrite them in the
-  Why / Proposal / Acceptance format before picking them up.
-- **#129 headless browser tests**, **#123 AA check on HiDPI/Safari/Firefox**: `help wanted`; infra or manual.
+- **#129 headless browser test tier** and **#123 AA check on HiDPI / Safari / Firefox**: infra or manual.
+  #129 would also cover the renderer numbers #159's stress bench couldn't measure.
