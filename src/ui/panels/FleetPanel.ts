@@ -82,14 +82,16 @@ export function autoToggleCommand(ship: Ship, kind: 'repair' | 'upgrade' | 'buil
   return { t: 'shipAuto', shipId: ship.id, kind, on: !cur };
 }
 
-function status(state: GameState, s: Ship): string {
+/** The line the fleet list shows for a ship; exported so its precedence can be tested without the DOM. */
+export function fleetStatus(state: GameState, s: Ship): string {
   if (!isAlive(s)) return `Rebuilding ${Math.ceil(s.respawn)}s`;
   if (isDocked(state.run, s) && !s.order && isFlagship(s)) return 'Docked';
   if (s.order?.kind === 'mine') return s.beamOn ? 'Mining' : 'Approaching';
   if (s.order?.kind === 'dock') return 'Returning';
   if (s.order?.kind === 'move') return 'Moving';
-  if (isFlagship(s)) return s.beamOn ? 'Mining' : 'Idle';
   const st = state.out.status.get(s.id);
+  if (st?.kind === 'manual') return formatStatus(st, 0);
+  if (isFlagship(s)) return s.beamOn ? 'Mining' : 'Idle';
   if (!st) return 'Standby';
   const cap = shipStats(s, state.profile).cargoCap;
   return formatStatus(st, cap > 0 ? walletTotal(s.cargo) / cap : 0);
@@ -179,7 +181,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           if (!cur) return;
           const stt = shipStats(cur, s.profile);
           row.classList.toggle('sel', s.run.selectedId === id);
-          setText(stat, status(s, cur));
+          setText(stat, fleetStatus(s, cur));
           hb.set(cur.hull / stt.maxHull);
           cb.set(walletTotal(cur.cargo) / stt.cargoCap);
           if (mode) setText(mode, cur.aiMode === 'assist' ? 'ASSIST' : 'AUTO');

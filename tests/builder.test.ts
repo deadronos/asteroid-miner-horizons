@@ -306,13 +306,42 @@ describe('builder brain', () => {
     expect(s.out.status.get(builder.id)).toMatchObject({ kind: 'idle', reason: 'buildWaiting' });
   });
 
-  it('reports a build order blocked by the outpost limit as waiting to build', () => {
+  it('reports a build order blocked by the outpost limit with that reason', () => {
     const { s, rocks, builder } = world([300, 400, 500, 600]);
     for (const r of rocks.slice(0, 3)) s.run.automation.outposts.push(makeOutpost(r));
     builder.autoBuild = false;
     builder.order = { kind: 'build', rockId: rocks[3]!.id };
     runTicks(s, 2);
-    expect(s.out.status.get(builder.id)).toMatchObject({ kind: 'idle', reason: 'buildWaiting' });
+    expect(s.out.status.get(builder.id)).toMatchObject({ kind: 'idle', reason: 'outpostLimit' });
+  });
+
+  it('reports a build order blocked by the bank reserve with that reason', () => {
+    const { s, rocks, builder } = world([300]);
+    s.run.bank = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
+    builder.autoBuild = false;
+    builder.order = { kind: 'build', rockId: rocks[0]!.id };
+    runTicks(s, 2);
+    expect(s.out.status.get(builder.id)).toMatchObject({ kind: 'idle', reason: 'belowReserve' });
+  });
+
+  it('drops a cancelled build order without waiting on it for another tick', () => {
+    const { s, rocks, builder } = world([300, 400, 500, 600]);
+    for (const r of rocks.slice(0, 3)) s.run.automation.outposts.push(makeOutpost(r));
+    builder.autoBuild = false;
+    builder.order = { kind: 'build', rockId: rocks[3]!.id };
+    s.run.rocks = s.run.rocks.filter((r) => r !== rocks[3]);
+    runTicks(s, 1);
+    expect(builder.order).toBeNull();
+    expect(s.out.status.get(builder.id)).toMatchObject({ kind: 'idle', reason: 'outpostLimit' });
+  });
+
+  it('deploys a ready order beside a free rock in one tick', () => {
+    const { s, rocks, builder } = world([300]);
+    builder.autoBuild = false;
+    builder.pos = { x: rocks[0]!.pos.x - rocks[0]!.radius - 20, z: rocks[0]!.pos.z };
+    builder.order = { kind: 'build', rockId: rocks[0]!.id };
+    runTicks(s, 1);
+    expect(outpostAt(s, rocks[0]!.id)).toBeDefined();
   });
 
   it('a build order with autoBuild on overrides the builder own pick once', () => {
