@@ -66,7 +66,7 @@ A save is `{ version, profile, run }`. Two files, one rule: **an old save must a
 3. **`src/sim/validate.ts`** — if the new field is one the tick reads, add it to `validateState`, which
    `fromData` in `save.ts` runs on every migrated save, so a malformed save is rejected with `{ ok: false }`
    instead of throwing mid-tick. `migrate()` already downgrades a throwing migration to a rejection.
-4. **`tests/migrations.test.ts`** — add a fixture under `tests/fixtures/save-vN.json` and assert the upgrade.
+4. **`tests/migrations.test.ts`** — add a fixture under `tests/fixtures/save-vN.json` and assert the upgrade. Keep one frozen fixture for every version from 2 through `SAVE_VERSION`; the migration tests fail if a version is missing or the current fixture no longer validates.
    Existing fixtures are the regression net for old saves; do not delete them.
 
 Note the two shapes in play: `GameState` includes the transient `out`; the persisted and exported shape is
