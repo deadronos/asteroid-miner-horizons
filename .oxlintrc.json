@@ -10,7 +10,7 @@
     "browser": true,
     "es2024": true
   },
-  "ignorePatterns": ["dist/**", "node_modules/**"],
+  "ignorePatterns": ["dist/**", "node_modules/**", ".claude/**"],
   "rules": {
     "import/no-cycle": "error",
     "no-unused-vars": [
