@@ -1,15 +1,16 @@
 import { describe, expect, it } from 'vitest';
-import { botCommands, chooseRoute, ICE_RESERVE } from '../scripts/bot';
+import { botCommands, chooseRoute, HAULER_AFTER, ICE_RESERVE } from '../scripts/bot';
 import { runBot } from '../scripts/harness';
 import { contractReward } from '../src/sim/contracts';
 import { isVariant, type Tier } from '../src/data/components';
+import { HULLS } from '../src/data/hulls';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
 import { makeOutpost } from '../src/sim/automation';
 import { cometPathEscape, inFlareZone } from '../src/sim/hazards';
 import { warpCost } from '../src/sim/economy';
 import { routeValue, warpRoutes } from '../src/sim/routes';
-import { droneCount, flagship, makeShip, shipStats } from '../src/sim/ships';
+import { droneCount, fleetCap, flagship, makeShip, shipStats } from '../src/sim/ships';
 import type { Command } from '../src/sim/commands';
 import type { Contract, GameState, Rock } from '../src/sim/types';
 
@@ -202,8 +203,14 @@ describe('balance bot', () => {
       { type: 'armor', variant: 'standard', tier: 3 },
     ];
     fs.hull = shipStats(fs, s.profile).maxHull;
-    // Fill the fleet so the drone isn't the next purchase, and fill drone slots.
-    for (let i = 0; i < 2; i++) {
+    // Fill the fleet so the drone isn't the next purchase (a hauler too, or it would be), and fill drone slots.
+    const hauler = makeShip(s.run, s.profile, 'hauler', 'Hauler-0', { ...s.run.system.station.pos });
+    hauler.slots = [
+      { type: 'engine', variant: 'ion', tier: 3 },
+      { type: 'cargo', variant: 'standard', tier: 3 },
+    ];
+    s.run.ships.push(hauler);
+    for (let i = 0; i < fleetCap(s.profile) - 1; i++) {
       const d = makeShip(s.run, s.profile, 'drone', `Drone-${i}`, { ...s.run.system.station.pos });
       d.slots = [
         { type: 'cargo', variant: 'standard', tier: 2 },
@@ -217,6 +224,21 @@ describe('balance bot', () => {
 
     // Tier-3 cargo costs 80 ore, 64 alloy, 128 ice, 14 crystal; the ore covers the shortfall.
     expect(botCommands(s, { warp: false })).toEqual([{ t: 'refine', recipe: 'alloy', count: 64 }]);
+  });
+
+  it('smelts the alloy a hauler is short of instead of skipping it', () => {
+    const s = newGame(1000);
+    const fs = flagship(s.run);
+    fs.pos = { ...s.run.system.station.pos };
+    fs.slots[0] = { type: 'laser', variant: 'focused', tier: 2 };
+    for (let i = 0; i < HAULER_AFTER; i++)
+      s.run.ships.push(makeShip(s.run, s.profile, 'drone', `Drone-${i}`, { ...s.run.system.station.pos }));
+    s.run.contracts.active = null;
+    s.run.contracts.offers = [];
+    s.run.bank = { ore: 10000, ice: 10000, crystal: 0, alloy: 0, fuel: 1000 };
+    expect(botCommands(s, { warp: false })).toEqual([{ t: 'refine', recipe: 'alloy', count: HULLS.hauler.cost.alloy }]);
+    s.run.bank.alloy = HULLS.hauler.cost.alloy!;
+    expect(botCommands(s, { warp: false })).toEqual([{ t: 'buyHull', hullId: 'hauler' }]);
   });
 
   it('a refine cycle while docked also buys an affordable item', () => {

@@ -40,6 +40,10 @@ const MID_GAME_START = 3;
 const MID_GAME_END = 6;
 /** Acceptance target for active play's share of income through the mid-game (#46). */
 const ACTIVE_SHARE_TARGET = 0.4;
+/** By this system the refinery and an outpost should have shown up in most seeds (#206). */
+const AUTOMATION_BY = 4;
+/** Share of seeds that must have refined alloy and deployed an outpost by `AUTOMATION_BY` (#206). */
+const AUTOMATION_TARGET_SHARE = 0.5;
 /** Share of seeds that must reach the opening target before the first warp (#197). */
 const OPENING_TARGET_SHARE = 0.8;
 /** Hazard level the report plays at unless --hazards says otherwise; matches the game's settings default. */
@@ -368,6 +372,30 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     `- Mid-game pooled (income-weighted, ${midShares.length} seed-warps): **${pct(midPooled)}** (flagship ${pct(midFlagship / Math.max(1, midIncome))} · drones ${pct(midDrone / Math.max(1, midIncome))} · haulers ${pct(midHauler / Math.max(1, midIncome))} · contracts ${pct(midContract / Math.max(1, midIncome))}) — **${midPooled >= ACTIVE_SHARE_TARGET ? 'PASS' : 'FAIL'}**`,
     `- Mid-game across seed-warps: median ${pct(median(midShares))}, ${pct(Math.min(...midShares))}–${pct(Math.max(...midShares))}`,
     perSystem,
+  );
+  // Acceptance check for #206: refining, outposts and haulers must not sit idle until system 6.
+  const earlySeeds = results.map((r) => r.warps.slice(0, AUTOMATION_BY));
+  const alloySeeds = earlySeeds.filter((ws) => ws.some((x) => x.alloy > 0)).length;
+  const outpostSeeds = earlySeeds.filter((ws) => ws.some((x) => x.outpostUnits > 0)).length;
+  const bothSeeds = earlySeeds.filter((ws) => ws.some((x) => x.alloy > 0) && ws.some((x) => x.outpostUnits > 0)).length;
+  const haulerMid = Array.from({ length: MID_GAME_END - AUTOMATION_BY + 1 }, (_, i) => {
+    const w = AUTOMATION_BY - 1 + i;
+    const xs = results.flatMap((r) => (r.warps[w] ? [share(r.warps[w]!.haulerValue, warpIncome(r.warps[w]!))] : []));
+    return { w, median: xs.length ? median(xs) : 0 };
+  });
+  const haulerHit = haulerMid.every((h) => h.median > 0);
+  lines.push(
+    '',
+    '## Automation by the early game (#206)',
+    '',
+    `Refining, outposts and haulers are the second pillar of the game, so they should show up before the mid-game, not at system ${MID_GAME_END}. Targets: refined alloy and a working outpost, both by system ${AUTOMATION_BY}, in at least ${pct(AUTOMATION_TARGET_SHARE)} of seeds; and a median hauler share of income above 0% in every system from ${AUTOMATION_BY} to ${MID_GAME_END}.`,
+    '',
+    '| Check | Result | Target | Verdict |',
+    '| --- | --- | --- | --- |',
+    `| Refined alloy by system ${AUTOMATION_BY} | ${alloySeeds}/${results.length} seeds | — | — |`,
+    `| Outpost output by system ${AUTOMATION_BY} | ${outpostSeeds}/${results.length} seeds | — | — |`,
+    `| Both by system ${AUTOMATION_BY} | ${bothSeeds}/${results.length} seeds (${pct(share(bothSeeds, results.length))}) | ≥ ${pct(AUTOMATION_TARGET_SHARE)} of seeds | **${bothSeeds >= AUTOMATION_TARGET_SHARE * results.length ? 'PASS' : 'FAIL'}** |`,
+    `| Median hauler share, systems ${AUTOMATION_BY}–${MID_GAME_END} | ${haulerMid.map((h) => `${h.w + 1}: ${pct(h.median)}`).join(' · ')} | > 0% in each | **${haulerHit ? 'PASS' : 'FAIL'}** |`,
   );
   lines.push(
     '',

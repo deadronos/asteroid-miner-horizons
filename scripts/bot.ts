@@ -8,7 +8,9 @@
 //   repair / buy one thing (after the first drone, the flagship's tier-2
 //   laser before any more hulls) → deploy an outpost on a large rock alongside (once
 //   a hauler can service it) → chase nearby debris → mine the nearest rock of
-//   whichever resource the bank (or the active delivery contract) needs.
+//   whichever resource the bank (or the active delivery contract) needs. The
+//   flagship also leaves the rock to dock when the bank can pay for a hull, and
+//   heads for a large rock when an outpost is affordable.
 //   Hazard reflexes come first in the flagship's order: step out of a comet
 //   path, and dock (staying docked) or flee past the reach of a pending or
 //   burning flare; targets in either are skipped. A fuel refine rides
@@ -26,10 +28,10 @@
 import { dist, distSq, type Vec2 } from '../src/core/vec';
 import { variantDef, type ComponentId, type VariantId } from '../src/data/components';
 import { CONTRACTS } from '../src/data/contracts';
-import { HULLS } from '../src/data/hulls';
+import { HULLS, type HullId } from '../src/data/hulls';
 import type { PerkId } from '../src/data/perks';
 import { RECIPES } from '../src/data/refining';
-import { canAfford, pay, type Cost } from '../src/data/resources';
+import { canAfford, pay, type Cost, type Wallet } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
@@ -61,7 +63,7 @@ const UPGRADE_ORDER: ComponentId[] = ['laser', 'cargo', 'sensor', 'engine', 'arm
 const PERK_ORDER: PerkId[] = ['yield', 'optics', 'furnace', 'bay', 'hopper', 'kit', 'thrust', 'warp'];
 const PICKUP_CHASE = 260;
 /** Mining drones owned before the bot spends a fleet slot on a hauler. */
-const HAULER_AFTER = 2;
+export const HAULER_AFTER = 2;
 /** How far sideways the flagship is sent to leave a comet path. */
 const COMET_STEP = 150;
 
@@ -146,7 +148,9 @@ function purse(state: GameState, wc: number): Purse {
 function nextOutpost(state: GameState, fs: Ship, wc: number): Command | null {
   const { run } = state;
   if (!run.ships.some(isHauler) || run.automation.outposts.length >= TUNING.outpostMax) return null;
-  if (!purse(state, wc).ok(TUNING.outpostCost)) return null;
+  const { ok, needsAlloy, smeltFor } = purse(state, wc);
+  if (needsAlloy(TUNING.outpostCost)) return smeltFor(TUNING.outpostCost);
+  if (!ok(TUNING.outpostCost)) return null;
   const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
   for (const r of run.rocks) {
     if (r.size !== 0 || dist(r.pos, fs.pos) > r.radius + TUNING.outpostDeployGap + 40) continue;
@@ -208,7 +212,9 @@ function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number): C
     return [{ t: 'move', shipId: fs.id, to: { ...hz.out } }];
   }
 
-  if (full) return fs.order?.kind === 'dock' ? [] : [{ t: 'dock', shipId: fs.id }];
+  // A hull the bank can already pay for is worth the trip home, as a player would dock for it (#206, #207).
+  const affordsHull = nextPurchase(state, wc)?.t === 'buyHull';
+  if (full || affordsHull) return fs.order?.kind === 'dock' ? [] : [{ t: 'dock', shipId: fs.id }];
   const o = fs.order;
   if (o?.kind === 'dock') return [];
   // A mine order stands unless its rock has drifted into danger.
@@ -290,6 +296,15 @@ function nextContract(state: GameState): Command | null {
   return offer ? { t: 'acceptContract', contractId: offer.id } : null;
 }
 
+/**
+ * True if `hullId` is blocked for a reason a purchase could not fix (fleet full, flagship undocked). A resource
+ * shortfall does not count: the bot smelts a missing alloy, so it must reach the price check to do that.
+ */
+function hullBlocked(state: GameState, hullId: HullId): boolean {
+  const rich: Wallet = { ore: Infinity, ice: Infinity, crystal: Infinity, alloy: Infinity, fuel: Infinity };
+  return hullBlock({ ...state, run: { ...state.run, bank: rich } }, hullId) != null;
+}
+
 /** Repair, then one purchase per call: hauler or drone, empty-slot installs, upgrades, bigger flagship. */
 function nextPurchase(state: GameState, wc: number): Command | null {
   const { run, profile } = state;
@@ -309,12 +324,12 @@ function nextPurchase(state: GameState, wc: number): Command | null {
 
   // Once two drones mine, the next fleet slot is kept for one hauler rather than another drone.
   const wantHauler = miners >= HAULER_AFTER && !run.ships.some(isHauler);
-  if (hulls && wantHauler && !hullBlock(state, 'hauler')) {
+  if (hulls && wantHauler && !hullBlocked(state, 'hauler')) {
     if (ok(HULLS.hauler.cost)) return { t: 'buyHull', hullId: 'hauler' };
     const refine = needsAlloy(HULLS.hauler.cost) ? smeltFor(HULLS.hauler.cost) : null;
     if (refine) return refine;
   }
-  if (hulls && !wantHauler && !hullBlock(state, 'drone') && ok(HULLS.drone.cost))
+  if (hulls && !wantHauler && !hullBlocked(state, 'drone') && ok(HULLS.drone.cost))
     return { t: 'buyHull', hullId: 'drone' };
 
   const docked = run.ships.filter((s) => !refitBlock(state, s));
@@ -337,7 +352,7 @@ function nextPurchase(state: GameState, wc: number): Command | null {
       }
     }
   }
-  if (hulls && !hullBlock(state, 'excavator')) {
+  if (hulls && !hullBlocked(state, 'excavator')) {
     if (ok(HULLS.excavator.cost)) return { t: 'buyHull', hullId: 'excavator' };
     if (needsAlloy(HULLS.excavator.cost)) {
       const refine = smeltFor(HULLS.excavator.cost);
@@ -359,6 +374,11 @@ function pickRock(state: GameState, fs: Ship, wc: number, hz: Hazard): Rock | nu
   const iceEq = bank.ice + ICE_PER_FUEL * (bank.fuel + queuedOutput(state.run, 'fuel'));
   const want =
     (active && CONTRACTS[active.kind].resource) ?? (iceEq / (ICE_PER_FUEL * wc) < bank.ore / 300 ? 'ice' : 'ore');
+  // With a hauler to service one and the price in the bank, head for a large rock to plant an outpost on.
+  const siting =
+    state.run.ships.some(isHauler) &&
+    state.run.automation.outposts.length < TUNING.outpostMax &&
+    purse(state, wc).ok(TUNING.outpostCost);
   const breakLarge = active?.kind === 'breakLarge';
   // A delivery contract owns the want: crystal stops being a free bonus while it runs.
   const bonusCrystal = !active || breakLarge;
@@ -369,7 +389,7 @@ function pickRock(state: GameState, fs: Ship, wc: number, hz: Hazard): Rock | nu
     if (unsafe(state.run, hz, r.pos)) continue;
     if (!canMine(st, r) || outpostAt(state, r.id)) continue;
     let score = dist(fs.pos, r.pos) * (r.kind === want || (bonusCrystal && r.kind === 'crystal') ? 0.5 : 1);
-    if (breakLarge && r.size === 0) score *= 0.5;
+    if ((breakLarge || siting) && r.size === 0) score *= 0.5;
     if (score < bestScore) {
       bestScore = score;
       best = r;
