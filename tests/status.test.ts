@@ -25,8 +25,6 @@ function setup(pos = { x: 300, z: 0 }): { state: GameState; drone: Ship; ctx: Ti
   return { state, drone, ctx };
 }
 
-const state0Station = () => newGame(1).run.system.station.pos;
-
 describe('ship status', () => {
   it('drone mining reports mining with the rock kind', () => {
     const { state, drone } = setup();
@@ -68,7 +66,7 @@ describe('ship status', () => {
   });
 
   it('docked drone that cannot afford repair above the reserve reports idle/repairMoney', () => {
-    const { state, drone } = setup(state0Station());
+    const { state, drone } = setup();
     const st = state.run.system.station.pos;
     drone.pos = { x: st.x, z: st.z };
     drone.autoRepair = true;
