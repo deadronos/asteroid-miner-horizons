@@ -10,7 +10,6 @@ import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
 import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 import { damp, type Vec2 } from '../core/vec';
 import { HULLS } from '../data/hulls';
-import { RESOURCE_INFO } from '../data/resources';
 import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
 import { findRock } from '../sim/generate';
 import { findShip, isAlive, selectedShip } from '../sim/ships';
@@ -27,12 +26,13 @@ import { HazardView } from './hazardView';
 import { type Box, MapLabels } from './labels';
 import { OutpostView } from './outpostView';
 import { type InfoSnapshot, infoSnapshot } from './renderInfo';
-import { RockView } from './rocks';
+import { RockView, syncRockTints } from './rocks';
 import { ShipView } from './shipView';
 import { SystemView } from './systemView';
 import { additive, flat } from './util';
 import { withVisible } from './warmup';
 import { WARP_REST, WARP_TOTAL, type WarpFrame, WarpStreaks, toneDownWarpMotion, warpFrame } from './warpFx';
+import { palette, setColourVision } from './activePalette';
 
 /**
  * Final composer pass: presents the sRGB-encoded buffer as-is (no second
@@ -163,6 +163,10 @@ export class Renderer {
   }
 
   applySettings(s: Settings, autoLevel = 0): void {
+    if (setColourVision(s.colourVision)) {
+      syncRockTints();
+      this.dirty = true;
+    }
     const automatic = s.quality === 'auto' ? autoQualitySettings(autoLevel) : null;
     const quality = automatic ? automatic.quality : s.quality === 'auto' ? 'high' : s.quality;
     const q = QUALITY[quality];
@@ -397,8 +401,8 @@ export class Renderer {
     const h = this.hover;
     let target: { pos: Vec2; r: number; color: number } | null = null;
     if (h?.kind === 'rock')
-      target = { pos: h.rock.pos, r: h.rock.radius + 6 * wpp, color: RESOURCE_INFO[h.rock.kind].color };
-    else if (h?.kind === 'station') target = { pos: state.run.system.station.pos, r: 60, color: 0x59ffa0 };
+      target = { pos: h.rock.pos, r: h.rock.radius + 6 * wpp, color: palette().resource[h.rock.kind] };
+    else if (h?.kind === 'station') target = { pos: state.run.system.station.pos, r: 60, color: palette().ok };
     else if (h?.kind === 'ship') {
       const s = findShip(state.run, h.id);
       if (s) target = { pos: s.pos, r: HULLS[s.hullId].size * 2.4 + 6 * wpp, color: 0xffffff };
@@ -415,6 +419,7 @@ export class Renderer {
 
     this.moveMarker.visible = !!moveMark;
     if (moveMark) {
+      (this.moveMarker.material as THREE.MeshBasicMaterial).color.setHex(palette().ok);
       this.moveMarker.position.set(moveMark.x, 2, moveMark.z);
       this.moveMarker.scale.setScalar(10 * wpp * (1 + Math.sin(t * 8) * 0.15));
     }

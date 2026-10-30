@@ -220,3 +220,13 @@ describe('assists', () => {
     }
   });
 });
+
+describe('colour vision setting (#210)', () => {
+  it('defaults, round-trips valid modes and ignores unknown values', () => {
+    expect(SettingsStore.merge(null).colourVision).toBe('default');
+    expect(SettingsStore.merge({ colourVision: 'tritan' }).colourVision).toBe('tritan');
+    expect(SettingsStore.merge({ colourVision: 'deutan' }).colourVision).toBe('deutan');
+    expect(SettingsStore.merge({ colourVision: 'protan' }).colourVision).toBe('default');
+    expect(SettingsStore.merge({ colourVision: 3 }).colourVision).toBe('default');
+  });
+});

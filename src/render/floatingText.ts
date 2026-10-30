@@ -4,6 +4,8 @@
 
 import { RESOURCE_INFO, type Resource } from '../data/resources';
 import type { Vec2 } from '../core/vec';
+import { cssColour } from '../data/palette';
+import { palette, paletteGeneration } from './activePalette';
 
 const POOL = 48;
 /** Seconds after the last pickup during which more pickups add to the same label. */
@@ -113,10 +115,10 @@ export class FloatingText {
       span.style.opacity = (t < 0.7 ? 1 : 1 - (t - 0.7) / 0.3).toFixed(3);
       const info = RESOURCE_INFO[f.kind];
       const text = `+${formatAmount(f.amount)} ${info.icon}`;
-      const tag = `${text}|${f.kind}`;
+      const tag = `${text}|${f.kind}|${paletteGeneration()}`;
       if (this.shown[i] !== tag) {
         span.textContent = text;
-        span.style.color = info.css;
+        span.style.color = cssColour(palette().resource[f.kind]);
         this.shown[i] = tag;
       }
     });

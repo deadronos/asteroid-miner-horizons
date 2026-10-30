@@ -11,6 +11,8 @@ import { type HudPanelId, type SettingsStore, keyLabel } from '../settings';
 import type { GameState, LogEntry, Outpost, Rock } from '../sim/types';
 import { type Panel, h, setText } from './dom';
 import { hazardBanner } from './hazardBanner';
+import { PALETTES } from '../data/palette';
+import { applyPaletteVars } from './paletteVars';
 import { helpVisible, isCollapsed, toggledCollapse, touchControlsShown } from './hudLayout';
 import { Menu } from './Menu';
 import type { PanelCtx } from './panels/context';
@@ -159,6 +161,7 @@ export class Hud {
     const s = this.settings.value;
     this.root.style.setProperty('--hud-scale', String(s.hudScale));
     this.root.classList.toggle('compact', s.hudCompact);
+    applyPaletteVars(this.root, PALETTES[s.colourVision]);
     const touch = touchControlsShown(s.touchControls, !!this.coarseMq?.matches);
     this.touch.setShown(touch);
     this.root.classList.toggle('touch', touch);

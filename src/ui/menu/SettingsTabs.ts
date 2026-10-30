@@ -138,6 +138,17 @@ export function renderInterface(settings: SettingsStore): Node[] {
     toggleRow(settings, 'hudCompact', 'Compact HUD', 'Tighter panels and a shorter event log'),
     selectRow(
       settings,
+      'colourVision',
+      'Colour vision',
+      [
+        ['default', 'Default'],
+        ['deutan', 'Deuteranopia / protanopia'],
+        ['tritan', 'Tritanopia'],
+      ],
+      'Recolours resources, hull bars and hazards. Shapes and icons mark them either way.',
+    ),
+    selectRow(
+      settings,
       'help',
       'Help box',
       [

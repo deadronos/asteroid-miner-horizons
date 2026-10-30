@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { len } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import type { Hazards } from '../sim/types';
+import { palette } from './activePalette';
 
 const DASH_PX = 14;
 const GAP_PX = 9;
@@ -44,6 +45,7 @@ export class HazardView {
     this.line.position.z = c.from.z;
     this.line.rotation.y = -Math.atan2(c.vel.z / speed, c.vel.x / speed);
     // Geometry is at real length, so dash sizes are world units.
+    this.mat.color.setHex(palette().hazard);
     this.mat.dashSize = DASH_PX * wpp;
     this.mat.gapSize = GAP_PX * wpp;
     // Brighter and pulsing faster as the comet nears.
