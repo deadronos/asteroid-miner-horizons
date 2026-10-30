@@ -2,7 +2,7 @@
 // drone AI. Everything here operates on one ship per call.
 
 import type { HazardLevel } from '../data/hazards';
-import { damp, dist, distSq, len, type Vec2 } from '../core/vec';
+import { damp, dist, distSq, len, type Vec2, hypot2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import type { Assists, FleetAuto } from './assists';
 import { isDocked } from './economy';
@@ -47,7 +47,7 @@ function avoidance(
     if (r.id === ignoreId || !ctx.index.rockById.has(r.id)) return;
     const rx = r.pos.x - ship.pos.x;
     const rz = r.pos.z - ship.pos.z;
-    const d = Math.hypot(rx, rz) || 0.01;
+    const d = hypot2(rx, rz) || 0.01;
     const gap = d - r.radius - st.size;
     if (gap < 12) {
       const k = (1 - Math.max(0, gap) / 12) * 2;
@@ -85,7 +85,7 @@ export function steer(
   ignoreId: number | null = null,
 ): void {
   const { dt } = ctx;
-  let want = Math.min(1, Math.hypot(wx, wz));
+  let want = Math.min(1, hypot2(wx, wz));
   let x = wx;
   let z = wz;
   if (avoid && want > 1e-6) {
@@ -97,7 +97,7 @@ export function steer(
       px = ship.vel.x / sp;
       pz = ship.vel.z / sp;
     } else {
-      const w = Math.hypot(wx, wz);
+      const w = hypot2(wx, wz);
       px = wx / w;
       pz = wz / w;
     }
@@ -107,7 +107,7 @@ export function steer(
     z += a.z * Math.max(want, 0.5);
     want *= 1 - 0.7 * danger; // ease off the throttle while threading a cluster
   }
-  const l = Math.hypot(x, z);
+  const l = hypot2(x, z);
   if (l > 1e-6) {
     x = (x / l) * want;
     z = (z / l) * want;
@@ -140,7 +140,7 @@ function starDetour(ctx: TickCtx, ship: Ship, st: ShipStats, target: Vec2, avoid
   const t = Math.max(0, Math.min(1, -(ship.pos.x * dx + ship.pos.z * dz) / l2));
   const cx = ship.pos.x + dx * t;
   const cz = ship.pos.z + dz * t;
-  const c = Math.hypot(cx, cz);
+  const c = hypot2(cx, cz);
   if (c >= safe - 1e-6) return false;
   // Straight through the centre: pick the side to the ship's left of the line.
   const l = Math.sqrt(l2);
@@ -165,7 +165,7 @@ export function arrive(
 ): boolean {
   const dx = target.x - ship.pos.x;
   const dz = target.z - ship.pos.z;
-  const d = Math.hypot(dx, dz);
+  const d = hypot2(dx, dz);
   if (d <= stopDist) return true;
   if (starDetour(ctx, ship, st, target, avoidId)) return false;
   // Slow down within the braking distance v²/2a.

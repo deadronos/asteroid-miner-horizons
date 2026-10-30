@@ -14,7 +14,7 @@ import { RESOURCE_INFO } from '../data/resources';
 import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
 import { findRock } from '../sim/generate';
 import { findShip, isAlive, selectedShip } from '../sim/ships';
-import type { GameState, Rock, StarSystem } from '../sim/types';
+import type { GameState, Rock, Run, StarSystem } from '../sim/types';
 import { autoQualitySettings } from './autoQuality';
 import { contextAntialias, useComposer } from './aa';
 import { Backdrop } from './backdrop';
@@ -68,6 +68,15 @@ export class Renderer {
   private ships = new ShipView();
   private hazardView = new HazardView();
   private outpostView = new OutpostView();
+  /** The run being drawn this frame, read by the hoisted callbacks below so `render` allocates no closures. */
+  private curRun: Run | null = null;
+  private readonly rockOf = (id: number): Rock | undefined => (this.curRun ? findRock(this.curRun, id) : undefined);
+  private readonly anchorOf = (id: number): Vec2 | null => {
+    const s = this.curRun ? findShip(this.curRun, id) : undefined;
+    return s && isAlive(s) ? s.pos : null;
+  };
+  private readonly toScreen = (p: Vec2): { x: number; y: number } => this.cam.worldToScreen(p);
+  private readonly onScreen = (p: Vec2): boolean => this.cam.onScreen(p);
   private fx: FxView;
   /** 0..1 star-glow boost, eased toward 1 while a solar flare is active. */
   private flareGlow = 0;
@@ -306,24 +315,18 @@ export class Renderer {
     this.flareGlow += ((run.hazards.flare?.phase === 'active' ? 1 : 0) - this.flareGlow) * (1 - damp(4, dt));
     this.system.update(sys, run.time, this.flareGlow);
     this.rocks.update(run.rocks, run.pickups, run.time, v);
-    this.outpostView.update(run.automation.outposts, (id) => findRock(run, id), run.time);
+    this.curRun = run;
+    this.outpostView.update(run.automation.outposts, this.rockOf, run.time);
     const wpp = this.wpp;
     const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars, motionK);
     this.hazardView.update(run.hazards, run.time, wpp);
 
-    if (this.fx.consume(state, hits, dt, (p) => this.cam.onScreen(p))) this.follow = true;
+    if (this.fx.consume(state, hits, dt, this.onScreen)) this.follow = true;
     this.fx.update(dt);
     this.updateMarkers(state, moveMark, wpp);
     this.setPlayfieldVisible(!w.hidden);
-    this.labels.update(sys, w.hidden ? 0 : this.cam.halfH, this.wpp, dt, (p) => this.worldToScreen(p));
-    this.fx.updateText(
-      dt,
-      (p) => this.worldToScreen(p),
-      (id) => {
-        const s = findShip(run, id);
-        return s && isAlive(s) ? s.pos : null;
-      },
-    );
+    this.labels.update(sys, w.hidden ? 0 : this.cam.halfH, this.wpp, dt, this.toScreen);
+    this.fx.updateText(dt, this.toScreen, this.anchorOf);
 
     if (this.warmup) {
       this.warmup = false;

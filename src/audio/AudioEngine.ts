@@ -73,6 +73,8 @@ export class AudioEngine {
   private limiter = new RateLimiter();
   private streak = new Streak();
   private hums = new Map<number, HumVoice>();
+  /** Scratch: ship ids with a beam this frame. */
+  private readonly liveHums = new Set<number>();
   private nextAlarm = 0;
   private ducker = new Ducker();
 
@@ -236,7 +238,9 @@ export class AudioEngine {
     const now = ctx.currentTime;
     if (policy.hums) {
       const hums = beamHums(state.run, state.profile, view);
-      const live = new Set(hums.map((h) => h.shipId));
+      const live = this.liveHums;
+      live.clear();
+      for (const h of hums) live.add(h.shipId);
       // Release dropped voices first: a beam that newly fits the cap isn't left silent for a frame.
       for (const [shipId, voice] of this.hums) {
         if (live.has(shipId)) continue;
