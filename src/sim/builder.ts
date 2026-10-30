@@ -29,8 +29,10 @@ let pickCtx: TickCtx;
 let pickShip: Ship;
 let pickBest: Rock | null = null;
 let pickD = 0;
+let pickStation: Vec2;
 const considerRock = (r: Rock): void => {
   if (!pickCtx.index.rockById.has(r.id) || !buildable(pickCtx, r) || claimedByOther(pickCtx, pickShip, r)) return;
+  if (distSq(r.pos, pickStation) > TUNING.builderLeash * TUNING.builderLeash) return;
   const d = distSq(pickShip.pos, r.pos);
   if (d < pickD || (d === pickD && pickBest !== null && r.id < pickBest.id)) {
     pickD = d;
@@ -42,6 +44,7 @@ const considerRock = (r: Rock): void => {
 function pickBuildRock(ctx: TickCtx, ship: Ship, station: Vec2): Rock | null {
   pickCtx = ctx;
   pickShip = ship;
+  pickStation = station;
   pickBest = null;
   pickD = Infinity;
   ctx.index.rockHash.query(station, TUNING.builderLeash, considerRock);

@@ -170,8 +170,25 @@ describe('builder brain', () => {
     comet.pos = { x: st.x - 3000, z: st.z };
     comet.vel = { x: 60, z: 0 };
     s.run.rocks.push(comet);
-    runFor(s, 4);
+    // Long enough for the builder to reach the third rock if it were willing to.
+    const index = new SimIndex();
+    let targeted = 0;
+    for (let t = 0; t < 60 * 10; t++) {
+      runTicks(s, 1, { index });
+      if (s.run.ships[1]!.aiTargetId === rocks[2]!.id) targeted++;
+    }
+    expect(targeted).toBe(0);
     expect(rockIds(s)).toEqual(ids(rocks[1]!));
+  });
+
+  it('ignores a decoy rock just outside the leash even when it is nearest to a far-off builder', () => {
+    const { s, rocks, builder } = world([300, 100]);
+    const st = s.run.system.station.pos;
+    rocks[1]!.pos = { x: st.x + 1000, z: st.z + 900 }; // 1345 from the station: outside the leash
+    builder.pos = { x: st.x + 1000, z: st.z + 1000 };
+    runTicks(s, 30);
+    expect(builder.aiTargetId).toBe(rocks[0]!.id);
+    expect(s.out.status.get(builder.id)?.kind).toBe('buildHeading');
   });
 
   it('refills a slot after an outpost is dismantled', () => {

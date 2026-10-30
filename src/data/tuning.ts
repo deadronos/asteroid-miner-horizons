@@ -145,7 +145,7 @@ export const TUNING = {
   haulRange: 1800,
   /** How far from the station a construction drone looks for a rock to build on. */
   builderLeash: 1050,
-  /** Sim seconds between one construction drone's deploys, so two can't empty the bank in a tick. */
+  /** One construction drone's deploys are at least this many sim seconds apart. */
   buildInterval: 0.5,
   /** Outposts that can be deployed at once. */
   outpostMax: 3,
