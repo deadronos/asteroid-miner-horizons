@@ -12,8 +12,9 @@ import { newRefinery } from '../src/sim/refining';
 import { deserialize, parseImport } from '../src/sim/save';
 import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
+import { validateState } from '../src/sim/validate';
 import { goalDone, type GoalId } from '../src/ui/goals';
-// Real saves frozen at versions 2 to 12 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 13 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
@@ -26,6 +27,28 @@ import V9_FIXTURE from './fixtures/save-v9.json?raw';
 import V10_FIXTURE from './fixtures/save-v10.json?raw';
 import V11_FIXTURE from './fixtures/save-v11.json?raw';
 import V12_FIXTURE from './fixtures/save-v12.json?raw';
+import V13_FIXTURE from './fixtures/save-v13.json?raw';
+
+// The root tsconfig has `types: []`; referencing @types/node here would leak Node globals into src/.
+interface Fs {
+  readdirSync(path: URL): string[];
+}
+const { readdirSync } = (
+  globalThis as unknown as { process: { getBuiltinModule(id: 'node:fs'): Fs } }
+).process.getBuiltinModule('node:fs');
+
+// Read at run time, not via import.meta.glob: Vitest's module cache keeps a stale glob list when a file is added.
+const FIXTURE_DIR = new URL('./fixtures/', import.meta.url);
+
+/** Versions that have a `tests/fixtures/save-vN.json`. */
+function frozenFixtureVersions(): Set<number> {
+  const versions = new Set<number>();
+  for (const name of readdirSync(FIXTURE_DIR)) {
+    const match = /^save-v(\d+)\.json$/.exec(name);
+    if (match) versions.add(Number(match[1]));
+  }
+  return versions;
+}
 
 const fixtureState = (): SaveData => JSON.parse(FIXTURE).state as SaveData;
 
@@ -957,6 +980,7 @@ describe('first-steps migration to v13', () => {
     ['v10', V10_FIXTURE],
     ['v11', V11_FIXTURE],
     ['v12', V12_FIXTURE],
+    ['v13', V13_FIXTURE],
   ])('loads the %s fixture with every stat present and the checklist not dismissed', (_label, raw) => {
     const state = loadFrozen(raw);
     expect(state.version).toBe(SAVE_VERSION);
@@ -1017,5 +1041,36 @@ describe('first-steps migration to v13', () => {
     const { installs: _installs, ...stats } = loaded.profile.stats;
     const profile = { ...loaded.profile, stats };
     expect(parseImport(JSON.stringify({ version: SAVE_VERSION, profile, run: loaded.run })).ok).toBe(false);
+  });
+});
+
+describe('frozen save fixtures', () => {
+  it('has a fixture for every version from 2 through SAVE_VERSION', () => {
+    const present = frozenFixtureVersions();
+    const missing: number[] = [];
+    for (let version = 2; version <= SAVE_VERSION; version++) if (!present.has(version)) missing.push(version);
+    expect(missing).toEqual([]);
+  });
+
+  // Seed 4242, hazards on, stopped at 600 sim seconds in system 2. Belt trimmed to eight rocks.
+  it('loads the frozen v13 save through migrate and validate', () => {
+    const frozen = JSON.parse(V13_FIXTURE).state as SaveData;
+    expect(frozen.version).toBe(13);
+    expect(frozen.profile.warps).toBeGreaterThan(0);
+    expect(frozen.run.system.number).toBeGreaterThan(1);
+    expect(frozen.run.ships.length).toBeGreaterThan(1);
+
+    const migrated = migrate(JSON.parse(V13_FIXTURE).state);
+    if (!migrated) throw new Error('migrate rejected the v13 fixture');
+    expect(migrated.version).toBe(SAVE_VERSION);
+    const validated = validateState(migrated);
+    if (!validated) throw new Error('validate rejected the v13 fixture');
+    expect(validated.profile).toEqual(frozen.profile);
+    expect(validated.run).toEqual(frozen.run);
+
+    const state = loadFrozen(V13_FIXTURE);
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.profile).toEqual(frozen.profile);
+    expect(state.run).toEqual(frozen.run);
   });
 });
