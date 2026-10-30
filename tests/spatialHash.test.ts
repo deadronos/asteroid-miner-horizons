@@ -8,17 +8,17 @@ const at = (x: number, z: number): Thing => ({ pos: { x, z } });
 /** A recycled bucket: slot 0 is the count, items follow. Mirrors the private type. */
 type Bucket = (Thing | number | undefined)[];
 /** The private fields the reuse test inspects. */
-type Internals = { cells: Map<number, Bucket> };
+type Internals = { liveBuckets: Bucket[] };
 
 describe('SpatialHash', () => {
   it('reuses the same bucket array for a cell across rebuilds', () => {
     const hash = new SpatialHash<Thing>(128);
     const internals = hash as unknown as Internals;
     hash.rebuild([at(10, 10)]);
-    const bucket = internals.cells.values().next().value;
+    const bucket = internals.liveBuckets[0];
     expect(Array.isArray(bucket)).toBe(true);
     hash.rebuild([at(11, 11)]); // same cell: (0, 0) at cell size 128
-    expect(internals.cells.values().next().value).toBe(bucket);
+    expect(internals.liveBuckets[0]).toBe(bucket);
   });
 
   it('allocates no new buckets across rebuilds once warm', () => {
@@ -27,9 +27,9 @@ describe('SpatialHash', () => {
     const seen = new Set<Bucket>();
     for (let i = 0; i < 50; i++) {
       hash.rebuild([at(10, 10)]);
-      seen.add(internals.cells.values().next().value!);
+      seen.add(internals.liveBuckets[0]!);
     }
-    expect(internals.cells.size).toBe(1);
+    expect(internals.liveBuckets.length).toBe(1);
     expect(seen.size).toBe(1); // one bucket identity served all 50 rebuilds
   });
 

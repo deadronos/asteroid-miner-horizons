@@ -3,7 +3,7 @@
 // shift run.rng.
 
 import { hash01 } from '../core/rng';
-import { len } from '../core/vec';
+import { len, hypot2 } from '../core/vec';
 import { TRAIT_IDS, type RockTrait } from '../data/traits';
 import { TUNING } from '../data/tuning';
 import { isAlive, type ShipStats } from './ships';
@@ -58,7 +58,7 @@ export function magnetPull(run: Run, rock: Rock, dt: number): void {
     if (!isAlive(s)) continue;
     const dx = s.pos.x - rock.pos.x;
     const dz = s.pos.z - rock.pos.z;
-    const sd = Math.hypot(dx, dz);
+    const sd = hypot2(dx, dz);
     if (sd < TUNING.magnetTraitRange && (bestD < 0 || sd < bestD)) {
       bestD = sd;
       bestDx = dx;

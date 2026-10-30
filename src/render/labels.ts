@@ -48,20 +48,36 @@ const overlaps = (a: Box, b: Box): boolean => a.x < b.x + b.w && b.x < a.x + a.w
  * spot must lie inside the `view` and clear every blocker and every label
  * placed before it, so earlier items win. Returns null where neither fits.
  */
-export function placeLabels(items: LabelItem[], blockers: Box[], view: { w: number; h: number }): (Box | null)[] {
-  const placed: Box[] = [];
-  return items.map((it) => {
+export function placeLabels(
+  items: LabelItem[],
+  blockers: Box[],
+  view: { w: number; h: number },
+  out: (Box | null)[] = [],
+  placed: Box[] = [],
+): (Box | null)[] {
+  placed.length = 0;
+  out.length = items.length;
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i]!;
     const x = it.x - it.w / 2;
-    for (const y of [it.y - it.r - GAP - it.h, it.y + it.r + GAP]) {
+    out[i] = null;
+    for (let side = 0; side < 2; side++) {
+      const y = side === 0 ? it.y - it.r - GAP - it.h : it.y + it.r + GAP;
       const b = { x, y, w: it.w, h: it.h };
       if (b.x < EDGE || b.y < EDGE || b.x + b.w > view.w - EDGE || b.y + b.h > view.h - EDGE) continue;
-      if (blockers.some((o) => overlaps(b, o)) || placed.some((o) => overlaps(b, o))) continue;
+      if (hitsAny(b, blockers) || hitsAny(b, placed)) continue;
       placed.push(b);
-      return b;
+      out[i] = b;
+      break;
     }
-    return null;
-  });
+  }
+  return out;
 }
+
+const hitsAny = (b: Box, boxes: Box[]): boolean => {
+  for (let i = 0; i < boxes.length; i++) if (overlaps(b, boxes[i]!)) return true;
+  return false;
+};
 
 /** A planet's current world position. */
 export const planetPos = (p: Planet): Vec2 => ({ x: Math.cos(p.angle) * p.orbitR, z: Math.sin(p.angle) * p.orbitR });
@@ -72,6 +88,11 @@ export class MapLabels {
   /** Label sizes, re-measured with the blockers so a HUD-scale change is picked up. */
   private sizes: { w: number; h: number }[] = [];
   private blockers: Box[] = [];
+  /** Scratch reused by every `update` so label placement allocates no arrays. */
+  private readonly items: LabelItem[] = [];
+  private readonly view = { w: 0, h: 0 };
+  private readonly placedOut: (Box | null)[] = [];
+  private readonly placedScratch: Box[] = [];
   private blockerAge = BLOCKER_REFRESH;
   /** The system the labels were built for; compared by identity, since names repeat across games. */
   private built: StarSystem | null = null;
@@ -135,21 +156,31 @@ export class MapLabels {
       });
     }
 
-    const bodies = [
-      // The station's label clears its dock circle.
-      { pos: sys.station.pos, r: TUNING.dockRadius },
-      ...sys.planets.map((p) => ({ pos: planetPos(p), r: p.radius * (p.ringed ? 2 : 1.2) })),
-    ];
-    const items = bodies.map((b, i) => {
-      const s = toScreen(b.pos);
+    // Item 0 is the station, whose label clears its dock circle; the rest are planets.
+    const n = 1 + sys.planets.length;
+    const items = this.items;
+    while (items.length < n) items.push({ x: 0, y: 0, r: 0, w: 0, h: 0 });
+    items.length = n;
+    for (let i = 0; i < n; i++) {
+      const planet = i === 0 ? null : sys.planets[i - 1]!;
+      const s = toScreen(planet ? planetPos(planet) : sys.station.pos);
+      const r = planet ? planet.radius * (planet.ringed ? 2 : 1.2) : TUNING.dockRadius;
       const sz = this.sizes[i]!;
-      return { x: s.x, y: s.y, r: Math.max(MIN_R_PX, b.r / wpp), w: sz.w, h: sz.h };
-    });
-    const view = { w: this.container.clientWidth, h: this.container.clientHeight };
-    placeLabels(items, this.blockers, view).forEach((b, i) => {
+      const it = items[i]!;
+      it.x = s.x;
+      it.y = s.y;
+      it.r = Math.max(MIN_R_PX, r / wpp);
+      it.w = sz.w;
+      it.h = sz.h;
+    }
+    this.view.w = this.container.clientWidth;
+    this.view.h = this.container.clientHeight;
+    const placed = placeLabels(items, this.blockers, this.view, this.placedOut, this.placedScratch);
+    for (let i = 0; i < placed.length; i++) {
+      const b = placed[i]!;
       const span = this.spans[i]!;
       span.style.visibility = b && b.w > 0 ? 'visible' : 'hidden';
       if (b) span.style.transform = `translate(${b.x.toFixed(1)}px, ${b.y.toFixed(1)}px)`;
-    });
+    }
   }
 }

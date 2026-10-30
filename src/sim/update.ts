@@ -3,7 +3,7 @@
 // contracts → refinery → achievements.
 
 import { range } from '../core/rng';
-import { damp, dist, integrate, len, type Vec2 } from '../core/vec';
+import { damp, dist, integrate, len, type Vec2, hypot2 } from '../core/vec';
 import { HAZARD_LEVELS, FLARES, type HazardLevel } from '../data/hazards';
 import { walletValue, RESOURCES, formatWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
@@ -22,7 +22,7 @@ import { droneThink, runOrder, steer, type TickCtx } from './pilot';
 import { updateRefinery } from './refining';
 import { cargoFree, damageShip, isAlive, isFlagship, isHauler, type ShipStats } from './ships';
 import { magnetPull } from './traits';
-import type { GameState, Run, Ship } from './types';
+import type { GameState, Rock, Run, Ship } from './types';
 
 export interface TickInput {
   /** WASD vector for the selected ship; (0,0) when idle. */
@@ -88,11 +88,11 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   // can remove several ships in one call, so a removal rewinds the scan and
   // `updatedShipIds` keeps an already-ticked ship from running twice.
   const updated = index.updatedShipIds;
-  updated.length = 0;
+  updated.clear();
   for (let i = 0; i < run.ships.length; i++) {
     const ship = run.ships[i]!;
-    if (updated.includes(ship.id)) continue;
-    updated.push(ship.id);
+    if (updated.has(ship.id)) continue;
+    updated.add(ship.id);
     const before = run.ships.length;
     updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
     if (run.ships.length !== before) i = -1;
@@ -105,8 +105,11 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   updateAchievements(state);
 }
 
-/** True once `ship` has died or been removed from the run, so the rest of its update must stop. */
-const shipGone = (run: Run, ship: Ship): boolean => !isAlive(ship) || !run.ships.includes(ship);
+/**
+ * True once `ship` has died or been removed from the run, so the rest of its update must stop. A removed drone
+ * always has no hull left (`damageShip` is the only removal during a tick), so no fleet scan is needed.
+ */
+const shipGone = (ship: Ship): boolean => !isAlive(ship) || ship.hull <= 0;
 
 function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void {
   const { state, dt } = ctx;
@@ -150,7 +153,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
   }
 
   collideRocks(ctx, ship, st);
-  if (shipGone(run, ship)) return;
+  if (shipGone(ship)) return;
 
   // Star heat ramps up toward the photosphere.
   const sys = run.system;
@@ -165,14 +168,14 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
     ) {
       state.out.log.push({ level: 'warn', text: `${ship.name} is overheating near the star!` });
     }
-    if (shipGone(run, ship)) return;
+    if (shipGone(ship)) return;
   }
 
   const flareProfile = FLARES[sys.starClass];
   const k = flareProfile ? flareExposure(run, ship) : 0;
   if (flareProfile && k > 0) {
     damageShip(state, ship, flareProfile.dps * HAZARD_LEVELS[ctx.hazards].damage * k * dt);
-    if (shipGone(run, ship)) return;
+    if (shipGone(ship)) return;
   }
 
   ship.shield = Math.min(st.maxShield, ship.shield + st.shieldRegen * dt);
@@ -186,10 +189,10 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
 function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const { state } = ctx;
   ctx.index.rockHash.query(ship.pos, st.size + 50, (r) => {
-    if (!ctx.index.rockById.has(r.id) || shipGone(state.run, ship)) return;
+    if (!ctx.index.rockById.has(r.id) || shipGone(ship)) return;
     const dx = ship.pos.x - r.pos.x;
     const dz = ship.pos.z - r.pos.z;
-    const d = Math.hypot(dx, dz) || 0.01;
+    const d = hypot2(dx, dz) || 0.01;
     const overlap = r.radius + st.size - d;
     if (overlap <= 0) return;
     const nx = dx / d;
@@ -287,15 +290,26 @@ function regrowBelts(state: GameState, dt: number): void {
   run.regrowTimer += dt;
   if (run.regrowTimer < TUNING.beltRegrowInterval * systemEffects(run.system.modifiers).regrowInterval) return;
   run.regrowTimer = 0;
-  const counts = run.system.belts.map(() => 0);
+  const belts = run.system.belts;
+  const counts = beltCounts;
+  counts.length = belts.length;
+  counts.fill(0);
   for (const r of run.rocks) counts[r.belt] = (counts[r.belt] ?? 0) + 1;
-  run.system.belts.forEach((b, i) => {
-    if (counts[i]! >= b.initialCount * TUNING.beltRegrowTarget) return;
+  for (let i = 0; i < belts.length; i++) {
+    if (counts[i]! >= belts[i]!.initialCount * TUNING.beltRegrowTarget) continue;
     // Spawn out of sight of every ship so rocks don't pop in on screen.
     for (let tries = 0; tries < 6; tries++) {
       const rock = spawnBeltRock(run, state.profile.seed, i, range(run.rng, 0, 1) < 0.5 ? 0 : 1);
-      if (run.ships.every((s) => dist(s.pos, rock.pos) > 900)) return;
+      if (clearOfShips(run, rock)) break;
       run.rocks.pop();
     }
-  });
+  }
 }
+
+/** Scratch for `regrowBelts`: live rocks per belt. */
+const beltCounts: number[] = [];
+
+const clearOfShips = (run: Run, rock: Rock): boolean => {
+  for (const s of run.ships) if (dist(s.pos, rock.pos) <= 900) return false;
+  return true;
+};

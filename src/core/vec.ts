@@ -7,9 +7,29 @@ export interface Vec2 {
 }
 
 export const v = (x = 0, z = 0): Vec2 => ({ x, z });
-export const dist = (a: Vec2, b: Vec2): number => Math.hypot(a.x - b.x, a.z - b.z);
+/**
+ * `Math.hypot(x, z)` for two arguments, bit for bit: the same scaled, compensated sum V8 uses. The builtin
+ * returns a heap number the JIT cannot unbox, so every call in a hot loop allocates; this one does not.
+ */
+export function hypot2(x: number, z: number): number {
+  const ax = Math.abs(x);
+  const az = Math.abs(z);
+  const max = ax > az ? ax : az;
+  if (max === 0 || max === Infinity || max !== max || ax !== ax || az !== az) return Math.hypot(x, z);
+  const nx = ax / max;
+  const nz = az / max;
+  let sum = nx * nx;
+  let comp = 0;
+  const summand = nz * nz - comp;
+  const pre = sum + summand;
+  comp = pre - sum - summand;
+  sum = pre;
+  return Math.sqrt(sum) * max;
+}
+
+export const dist = (a: Vec2, b: Vec2): number => hypot2(a.x - b.x, a.z - b.z);
 export const distSq = (a: Vec2, b: Vec2): number => (a.x - b.x) ** 2 + (a.z - b.z) ** 2;
-export const len = (a: Vec2): number => Math.hypot(a.x, a.z);
+export const len = (a: Vec2): number => hypot2(a.x, a.z);
 export const fromAngle = (a: number, r = 1): Vec2 => ({ x: Math.cos(a) * r, z: Math.sin(a) * r });
 
 /** One explicit Euler step: advances `body.pos` by `body.vel * dt`. */
