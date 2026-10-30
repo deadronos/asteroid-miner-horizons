@@ -142,7 +142,8 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
     if (isHauler(ship)) haulerThink(ctx, ship, st);
     else if (isBuilder(ship)) builderThink(ctx, ship, st);
     else if (!isFlagship(ship)) droneThink(ctx, ship, st);
-    else setStatus(state.out, ship.id, 'idle'); // The flagship has no brain; clear a manual status it has left behind.
+    // The flagship has no brain: drop the manual record it left behind instead of inventing a status.
+    else if (state.out.status.get(ship.id)?.kind === 'manual') state.out.status.delete(ship.id);
   }
 
   // Inertia with gentle drag so space feels slick but controllable.
