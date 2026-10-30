@@ -10,6 +10,7 @@
     "test": "vitest run",
     "bench": "tsx scripts/bench.ts",
     "balance": "tsx scripts/balance.ts",
+    "balance:ci": "scripts/balance-ci.sh",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
     "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",
