@@ -9,16 +9,17 @@ with Vitest, linted and formatted with the Oxc toolchain.
 
 ## Commands
 
-| Command               | What it does                                                                    |
-| --------------------- | ------------------------------------------------------------------------------- |
-| `npm run check`       | format:check + lint + typecheck + tests. Run this before calling anything done. |
-| `npm test`            | Vitest once. One file: `npx vitest run tests/sim.test.ts`                       |
-| `npm run dev`         | Vite dev server on http://localhost:5173                                        |
-| `npm run build`       | `tsc --noEmit` then a production build into `dist/`                             |
-| `npm run bundle-size` | Gzipped JS in `dist/` vs the 240 kB budget (run after a build)                  |
-| `npm run bench`       | Headless tick benchmark: mean/p95 ms per tick                                   |
-| `npm run balance`     | Bot plays 30 seeds × 10 warps, rewrites `docs/balance.md`                       |
-| `npm run balance:ci`  | Same, inside Docker on CI's platform; use this for the committed report         |
+| Command                | What it does                                                                    |
+| ---------------------- | ------------------------------------------------------------------------------- |
+| `npm run check`        | format:check + lint + typecheck + tests. Run this before calling anything done. |
+| `npm test`             | Vitest once. One file: `npx vitest run tests/sim.test.ts`                       |
+| `npm run dev`          | Vite dev server on http://localhost:5173                                        |
+| `npm run build`        | `tsc --noEmit` then a production build into `dist/`                             |
+| `npm run bundle-size`  | Gzipped JS in `dist/` vs the 240 kB budget (run after a build)                  |
+| `npm run bench`        | Headless tick benchmark: mean/p95 ms per tick                                   |
+| `npm run bench:stress` | Opt-in stress run (2,000 rocks, 50 ships, 1,000 pickups); warn-only budget      |
+| `npm run balance`      | Bot plays 30 seeds × 10 warps, rewrites `docs/balance.md`                       |
+| `npm run balance:ci`   | Same, inside Docker on CI's platform; use this for the committed report         |
 
 `npm run check` is exactly what CI runs (plus a build, a warn-only bench and a balance-report
 freshness check that fails on drift). Green means done. Balance numbers depend on CPU architecture, so commit
