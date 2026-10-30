@@ -9,6 +9,7 @@ import { walletValue, RESOURCES, formatWallet, walletTotal } from '../data/resou
 import { TUNING } from '../data/tuning';
 import { updateAchievements } from './achievements';
 import { DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO, type Assists, type FleetAuto } from './assists';
+import { builderThink } from './builder';
 import { haulerThink, updateOutposts } from './automation';
 import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
@@ -20,7 +21,7 @@ import type { SimIndex } from './index';
 import { systemEffects } from './modifiers';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
 import { updateRefinery } from './refining';
-import { cargoFree, damageShip, isAlive, isFlagship, isHauler, type ShipStats } from './ships';
+import { cargoFree, damageShip, isAlive, isBuilder, isFlagship, isHauler, type ShipStats } from './ships';
 import { magnetPull } from './traits';
 import type { GameState, Rock, Run, Ship } from './types';
 
@@ -137,6 +138,7 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
     steer(ctx, ship, st, thrust.x, thrust.z);
   } else if (!runOrder(ctx, ship, st)) {
     if (isHauler(ship)) haulerThink(ctx, ship, st);
+    else if (isBuilder(ship)) builderThink(ctx, ship, st);
     else if (!isFlagship(ship)) droneThink(ctx, ship, st);
   }
 

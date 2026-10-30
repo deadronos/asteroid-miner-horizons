@@ -9,7 +9,7 @@ import { HULLS } from '../data/hulls';
 import { PERKS } from '../data/perks';
 import { credit, emptyWallet, formatCost, formatWallet, pay } from '../data/resources';
 import { TUNING } from '../data/tuning';
-import { makeOutpost, outpostAt, outpostBlock } from './automation';
+import { deployOutpostAt, outpostAt, outpostBlock } from './automation';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
 import { describeContract, fillBoard } from './contracts';
 import { newRun } from './create';
@@ -338,24 +338,11 @@ export const handlers: Handlers = {
   },
 
   deployOutpost: (state, cmd) => {
-    const { run, out } = state;
+    const { run } = state;
     const rock = findRock(run, cmd.rockId);
-    const block = outpostBlock(state, rock);
+    const block = outpostBlock(state, rock, flagship(run));
     if (block || !rock) return fail(state, block ?? 'That rock is gone.');
-    pay(run.bank, TUNING.outpostCost);
-    const outpost = makeOutpost(rock);
-    run.automation.outposts.push(outpost);
-    state.profile.stats.outposts += 1;
-    // Nobody keeps cutting a rock that now hosts an outpost.
-    for (const s of run.ships) {
-      if (s.order?.kind === 'mine' && s.order.rockId === rock.id) s.order = null;
-      if (s.aiTargetId === rock.id) s.aiTargetId = null;
-    }
-    out.log.push({
-      level: 'info',
-      text: `Outpost deployed on a large ${rock.kind} asteroid (${Math.round(outpost.reserve)} units in reserve).`,
-      event: 'outpost',
-    });
+    deployOutpostAt(state, rock);
   },
 
   dismissGoals: (state) => {

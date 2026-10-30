@@ -362,6 +362,8 @@ export function runOrder(ctx: TickCtx, ship: Ship, st: ShipStats): boolean {
     if (arrive(ctx, ship, st, o.to)) ship.order = null;
   } else if (o.kind === 'dock') {
     if (arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.4)) ship.order = null;
+  } else if (o.kind === 'build') {
+    return false; // The builder brain runs it, after the reflexes (see builderThink).
   } else {
     const rock = ctx.index.rockById.get(o.rockId);
     if (!rock) {

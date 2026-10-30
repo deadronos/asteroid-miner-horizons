@@ -143,6 +143,10 @@ export const TUNING = {
   haulTransferRate: 30,
   /** How far from the station a hauler will go to skim a miner (outposts are served anywhere). */
   haulRange: 1800,
+  /** How far from the station a construction drone looks for a rock to build on. */
+  builderLeash: 1050,
+  /** Sim seconds between one construction drone's deploys, so two can't empty the bank in a tick. */
+  buildInterval: 0.5,
   /** Outposts that can be deployed at once. */
   outpostMax: 3,
   /** Bank cost of one outpost. */

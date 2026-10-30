@@ -33,6 +33,10 @@ export class SimIndex {
   readonly repairWait = new Set<number>();
   /** Run time each ship may take its next autoupgrade step (#140). Transient: a reload just allows one at once. */
   readonly upgradeReadyAt = new Map<number, number>();
+  /** Rock id → id of the construction drone heading to build on it (#174). Transient; pruned in `rebuild`. */
+  readonly builderClaims = new Map<number, number>();
+  /** Run time each construction drone may deploy its next outpost. Transient, like `upgradeReadyAt`. */
+  readonly buildReadyAt = new Map<number, number>();
   /** Ids seen in the last `rebuild`, so the next one can prune the departed. */
   private readonly liveShipIds = new Set<number>();
   /** The state's status map during `rebuild`, so the bound prune callback can reach it. */
@@ -41,6 +45,12 @@ export class SimIndex {
   // Bound once: `forEach` with a stored callback allocates neither an iterator nor a closure per tick.
   private readonly pruneUpgrade = (_t: number, id: number): void => {
     if (!this.liveShipIds.has(id)) this.upgradeReadyAt.delete(id);
+  };
+  private readonly pruneBuildReady = (_t: number, id: number): void => {
+    if (!this.liveShipIds.has(id)) this.buildReadyAt.delete(id);
+  };
+  private readonly pruneClaim = (shipId: number, rockId: number): void => {
+    if (!this.liveShipIds.has(shipId) || !this.rockById.has(rockId)) this.builderClaims.delete(rockId);
   };
   private readonly pruneStats = (_s: ShipStats, id: number): void => {
     if (!this.liveShipIds.has(id)) this.stats.delete(id);
@@ -91,6 +101,8 @@ export class SimIndex {
     }
     if (this.upgradeReadyAt.size > 0) this.upgradeReadyAt.forEach(this.pruneUpgrade);
     if (this.repairWait.size > 0) this.repairWait.forEach(this.pruneWait);
+    if (this.buildReadyAt.size > 0) this.buildReadyAt.forEach(this.pruneBuildReady);
+    if (this.builderClaims.size > 0) this.builderClaims.forEach(this.pruneClaim);
   }
 
   /** Drop every reference; used when the running game is swapped. */
@@ -104,5 +116,7 @@ export class SimIndex {
     this.liveShipIds.clear();
     this.upgradeReadyAt.clear();
     this.repairWait.clear();
+    this.buildReadyAt.clear();
+    this.builderClaims.clear();
   }
 }

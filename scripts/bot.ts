@@ -154,7 +154,7 @@ function nextOutpost(state: GameState, fs: Ship, wc: number): Command | null {
   const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
   for (const r of run.rocks) {
     if (r.size !== 0 || dist(r.pos, fs.pos) > r.radius + TUNING.outpostDeployGap + 40) continue;
-    if (!outpostBlock(state, r) && !unsafe(run, hz, r.pos)) return { t: 'deployOutpost', rockId: r.id };
+    if (!outpostBlock(state, r, fs) && !unsafe(run, hz, r.pos)) return { t: 'deployOutpost', rockId: r.id };
   }
   return null;
 }
