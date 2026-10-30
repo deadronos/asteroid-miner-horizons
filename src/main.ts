@@ -56,6 +56,7 @@ readOnlyBanner.textContent = 'This save is open in another tab — read-only her
 readOnlyBanner.hidden = true;
 document.body.append(readOnlyBanner);
 const session = new GameSession(settings, {
+  isPaused: () => manualPause,
   onAccess: (readOnly) => {
     readOnlyBanner.hidden = !readOnly;
   },
