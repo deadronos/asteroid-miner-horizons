@@ -21,6 +21,10 @@ export const TUNING = {
   dockRadius: 90,
   collisionCooldown: 0.5,
   collisionMinSpeed: 25,
+  /** Autopilot ships brake so they meet a rock slower than this share of `collisionMinSpeed` (#174). */
+  rockApproachCap: 0.8,
+  /** Share of a ship's acceleration the rock-approach brake plans with, leaving margin for drag and drift. */
+  rockBrakeMargin: 0.7,
   starHeatDps: 30,
   /** Clearance past the star's heat radius that autopilot routes keep (`pilot.arrive`). */
   starRoutePad: 120,

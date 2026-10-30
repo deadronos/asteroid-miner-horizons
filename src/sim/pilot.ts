@@ -73,6 +73,32 @@ function avoidance(
 }
 
 /**
+ * Rock-approach brake: bleeds off the part of the ship's velocity (relative to each nearby rock) that closes on the
+ * rock faster than `rockApproachCap` of the collision threshold, as late as the ship's acceleration allows. Open
+ * space is untouched; only a rock within stopping distance slows the ship. Comets are left to the dodge reflexes.
+ */
+function brakeForRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
+  const cap = TUNING.collisionMinSpeed * TUNING.rockApproachCap;
+  const decel = st.accel * TUNING.rockBrakeMargin;
+  const maxDv = st.accel * ctx.dt;
+  ctx.index.rockHash.query(ship.pos, st.size + 90, (r) => {
+    if (r.comet || !ctx.index.rockById.has(r.id)) return;
+    const rx = r.pos.x - ship.pos.x;
+    const rz = r.pos.z - ship.pos.z;
+    const d = hypot2(rx, rz) || 0.01;
+    const nx = rx / d;
+    const nz = rz / d;
+    const closing = (ship.vel.x - r.vel.x) * nx + (ship.vel.z - r.vel.z) * nz;
+    if (closing <= cap) return;
+    const gap = d - r.radius - st.size;
+    if (gap > (closing * closing - cap * cap) / (2 * decel) + 2) return;
+    const dv = Math.min(closing - cap, maxDv);
+    ship.vel.x -= nx * dv;
+    ship.vel.z -= nz * dv;
+  });
+}
+
+/**
  * Accelerate along a wish vector (length 0..1), capped at top speed.
  * `avoid` enables autopilot obstacle avoidance (off for manual WASD flight);
  * `ignoreId` exempts the rock being approached for mining.
@@ -108,6 +134,7 @@ export function steer(
     x += a.x * Math.max(want, 0.5);
     z += a.z * Math.max(want, 0.5);
     want *= 1 - 0.7 * danger; // ease off the throttle while threading a cluster
+    brakeForRocks(ctx, ship, st);
   }
   const l = hypot2(x, z);
   if (l > 1e-6) {

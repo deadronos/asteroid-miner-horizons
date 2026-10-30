@@ -230,6 +230,44 @@ const share = (part: number, whole: number): number => part / Math.max(1, whole)
  */
 const activeShare = (x: WarpStats): number => share(x.flagshipValue + x.contractValue, warpIncome(x));
 
+/**
+ * Baselines for the #174 collision row, taken from `npm run balance:ci` at commit 0e525b1 (before pilots braked for
+ * rocks): the collision metric below and the mid-game median value/min, both rounded to whole numbers.
+ */
+const COLLISION_BASELINE = 165;
+const VALUE_PER_MIN_BASELINE = 392;
+/** Collision damage must fall to this share of the baseline... */
+const COLLISION_TARGET_SHARE = 2 / 3;
+/** ...without mid-game value/min dropping below this share of its baseline (no buying safety with slow flight). */
+const VALUE_GUARD_SHARE = 0.95;
+
+/** Systems whose collision damage the #174 row compares against the baseline. */
+const COLLISION_FROM = 3;
+const COLLISION_TO = 10;
+
+/**
+ * Collision damage metric: the mean over systems COLLISION_FROM..COLLISION_TO of that system's median (across seeds)
+ * collision hull loss. Systems nobody reached are skipped.
+ */
+function collisionMetric(results: SeedResult[]): number {
+  const per: number[] = [];
+  for (let w = COLLISION_FROM - 1; w < COLLISION_TO; w++) {
+    const xs = results.flatMap((r) => (r.warps[w] ? [r.warps[w]!.hazard.hull.collision] : []));
+    if (xs.length) per.push(median(xs));
+  }
+  return per.length ? per.reduce((a, b) => a + b, 0) / per.length : 0;
+}
+
+/** Median value/min over every finished mid-game seed-warp (the same systems the active-play target uses). */
+function midValuePerMin(results: SeedResult[]): number {
+  const xs = results.flatMap((r) =>
+    r.warps
+      .slice(MID_GAME_START - 1, MID_GAME_END)
+      .flatMap((x, i) => (r.wall === MID_GAME_START - 1 + i ? [] : [(x.value / x.sec) * 60])),
+  );
+  return xs.length ? median(xs) : 0;
+}
+
 const dmg = (n: number): string => n.toFixed(n < 10 ? 1 : 0);
 const whole = (n: number): string => `${Math.round(n)}`;
 
@@ -489,6 +527,32 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     '',
     `- Defensive share, pooled over ${all.length} seed-warps (${dmg(raw)} raw damage): armor turned away **${pct(sum((h) => h.armor) / Math.max(1e-9, raw))}**, shields absorbed **${pct(sum((h) => h.shield) / Math.max(1e-9, raw))}**, the hull took **${pct(sum(hullTotal) / Math.max(1e-9, raw))}**.`,
     `- Ships lost: ${sum((h) => h.shipsLost)} in total; repair spend ${whole(sum((h) => h.repairOre))} ore in total.`,
+  );
+  const roles = ['flagship', 'drone', 'hauler'] as const;
+  const hitCount = sum((h) => h.hits);
+  const statusTotals = new Map<string, number>();
+  for (const h of all)
+    for (const [k, v] of Object.entries(h.collisionStatus)) statusTotals.set(k, (statusTotals.get(k) ?? 0) + v);
+  lines.push(
+    `- Collision hull loss by role (pooled): ${roles.map((r) => `${r} ${dmg(sum((h) => h.collisionRole[r]))}`).join(' · ')}.`,
+    `- Collision hull loss by what the ship was doing (pooled): ${[...statusTotals]
+      .toSorted((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1))
+      .map(([k, v]) => `${k} ${dmg(v)}`)
+      .join(' · ')}.`,
+    `- Damaging collisions: ${hitCount}, at a mean ${dmg(sum((h) => h.hitSpeed) / Math.max(1, hitCount))} speed before the tick.`,
+  );
+  const collisionNow = collisionMetric(results);
+  const valueNow = midValuePerMin(results);
+  const collisionOk = collisionNow <= COLLISION_BASELINE * COLLISION_TARGET_SHARE;
+  const valueOk = valueNow >= VALUE_PER_MIN_BASELINE * VALUE_GUARD_SHARE;
+  lines.push(
+    '',
+    `Collision damage is the mean over systems ${COLLISION_FROM}–${COLLISION_TO} of each system's median collision hull loss. Value/min is the median over mid-game seed-warps (systems ${MID_GAME_START}–${MID_GAME_END}). Baselines are from commit 0e525b1, before autopilot ships braked for rocks (#174).`,
+    '',
+    '| Check | Now | Baseline | Target | Verdict |',
+    '| --- | --- | --- | --- | --- |',
+    `| Collision damage vs baseline (#174) | ${dmg(collisionNow)} | ${COLLISION_BASELINE} | ≤ ${dmg(COLLISION_BASELINE * COLLISION_TARGET_SHARE)} (⅔) | **${collisionOk ? 'PASS' : 'FAIL'}** |`,
+    `| Mid-game value/min vs baseline (#174) | ${whole(valueNow)} | ${VALUE_PER_MIN_BASELINE} | ≥ ${whole(VALUE_PER_MIN_BASELINE * VALUE_GUARD_SHARE)} (95%) | **${valueOk ? 'PASS' : 'FAIL'}** |`,
   );
   lines.push(
     '',

@@ -453,3 +453,52 @@ describe('star detour', () => {
     expect(fs.hull).toBe(hull);
   });
 });
+
+/** Hull a drone loses collecting a pickup past a seeded scatter of rocks; deterministic per `k`. */
+function pickupRun(k: number): number {
+  let a = 12345 + k * 777;
+  const rnd = (): number => (a = (a * 1664525 + 1013904223) >>> 0) / 4294967296;
+  const { state, drone } = droneGame();
+  const ox = 600; // well clear of the star
+  flagship(state.run).pos = { x: ox, z: 150 };
+  drone.pos = { x: ox, z: 0 };
+  const spots: [number, number, number][] = [];
+  for (let i = 0; i < 14; i++) spots.push([60 + rnd() * 200, (rnd() - 0.5) * 200, 12 + rnd() * 25]);
+  const pk = { x: 150 + rnd() * 80, z: (rnd() - 0.5) * 100 };
+  for (const [x, z, r] of spots) {
+    if (Math.hypot(x, z) <= r + 30 || Math.hypot(x - pk.x, z - pk.z) <= r + 14) continue;
+    const rock = makeRock(state.run, 'ore', 0, { x: ox + x, z }, r, 0);
+    rock.hp = rock.maxHp = 1e9;
+    state.run.rocks.push(rock);
+  }
+  state.run.pickups.push({
+    id: 9999,
+    kind: 'ore',
+    amount: 1,
+    pos: { x: ox + pk.x, z: pk.z },
+    vel: { x: 0, z: 0 },
+    age: 0,
+  });
+  const hull = drone.hull;
+  runTicks(state, 600);
+  return hull - drone.hull;
+}
+
+describe('rock-approach brake (#174)', () => {
+  it('a drone sweeping a pickup through a rock scatter does not hit rocks above collisionMinSpeed', () => {
+    for (let k = 0; k < 40; k++) expect(pickupRun(k), `scatter ${k}`).toBe(0);
+  });
+
+  it('does not slow a drone crossing open space', () => {
+    const { state, drone } = droneGame();
+    drone.pos = { x: 600, z: 0 };
+    flagship(state.run).pos = { x: 600, z: 150 };
+    state.run.pickups.push({ id: 9999, kind: 'ore', amount: 1, pos: { x: 840, z: 0 }, vel: { x: 0, z: 0 }, age: 0 });
+    let top = 0;
+    for (let i = 0; i < 120; i++) {
+      runTicks(state, 1);
+      top = Math.max(top, Math.hypot(drone.vel.x, drone.vel.z));
+    }
+    expect(top).toBeGreaterThan(TUNING.collisionMinSpeed * 2);
+  });
+});

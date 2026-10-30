@@ -78,6 +78,19 @@ describe('hazard meter', () => {
     expect(hullTotal(t)).toBeCloseTo(t.hull[source], 9);
   });
 
+  it('splits a collision by the ship role and the speed it hit at (#174)', () => {
+    const s = bare(s0X());
+    const fs = flagship(s.run);
+    s.run.rocks.push(rockAt(9000, fs.pos.x + 30, 0, false));
+    fs.vel = { x: 400, z: 0 };
+    const t = metered(s, 2);
+    expect(t.hits).toBe(1);
+    expect(t.hitSpeed).toBeCloseTo(400, 0);
+    expect(t.collisionRole.flagship).toBeCloseTo(t.hull.collision, 9);
+    expect(t.collisionRole.drone + t.collisionRole.hauler).toBe(0);
+    expect(Object.values(t.collisionStatus).reduce((n, v) => n + v, 0)).toBeCloseTo(t.hull.collision, 9);
+  });
+
   it('counts losses and attributes a kill to other', () => {
     const s = bare(s0X());
     const fs = flagship(s.run);
