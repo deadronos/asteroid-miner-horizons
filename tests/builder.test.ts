@@ -250,6 +250,30 @@ describe('builder brain', () => {
     expect(s.run.bank).toEqual(bank);
   });
 
+  it('keeps a build order on a rock that turns unsafe, holds clear, then builds once it is safe', HEAVY, () => {
+    const { s, rocks, builder } = world([300]);
+    builder.autoBuild = false;
+    const st = s.run.system.station.pos;
+    // A comet flying east along the line through the rock: its path covers the rock for as long as it is there.
+    const comet = { ...rocks[0]!, id: 9999, size: 2 as const, radius: 20, comet: true as const };
+    comet.pos = { x: st.x - 3000, z: st.z };
+    comet.vel = { x: 60, z: 0 };
+    s.run.rocks.push(comet);
+    send(s, { t: 'mine', shipId: builder.id, rockId: rocks[0]!.id });
+    const bank = { ...s.run.bank };
+    s.out.log.length = 0;
+    runFor(s, 20);
+    expect(builder.order).toEqual({ kind: 'build', rockId: rocks[0]!.id });
+    expect(outpostAt(s, rocks[0]!.id)).toBeUndefined();
+    expect(s.run.bank).toEqual(bank);
+    expect(s.out.log.some((l) => l.level === 'warn')).toBe(false);
+    // The comet leaves; the order is still there and gets carried out.
+    s.run.rocks = s.run.rocks.filter((r) => r !== comet);
+    runFor(s, 40);
+    expect(outpostAt(s, rocks[0]!.id)).toBeDefined();
+    expect(builder.order).toBeNull();
+  });
+
   it('a build order with autoBuild on overrides the builder own pick once', () => {
     const { s, rocks, builder } = world([300, 450]);
     send(s, { t: 'mine', shipId: builder.id, rockId: rocks[1]!.id });

@@ -33,6 +33,7 @@ import type { PerkId } from '../src/data/perks';
 import { RECIPES } from '../src/data/refining';
 import { canAfford, pay, type Cost, type Wallet } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
+import { DEFAULT_FLEET_AUTO } from '../src/sim/assists';
 import type { Command } from '../src/sim/commands';
 import { hullBlock, isDocked, perkCost, refitBlock, repairCost, upgradeCost, warpCost } from '../src/sim/economy';
 import { outpostAt, outpostBlock } from '../src/sim/automation';
@@ -40,7 +41,16 @@ import { findRock } from '../src/sim/generate';
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
 import { richestRoute, warpRoutes } from '../src/sim/routes';
-import { flagship, isAlive, isFlagship, isHauler, isHoldFull, shipStats, type ShipStats } from '../src/sim/ships';
+import {
+  flagship,
+  isAlive,
+  isBuilder,
+  isFlagship,
+  isHauler,
+  isHoldFull,
+  shipStats,
+  type ShipStats,
+} from '../src/sim/ships';
 import { canMine } from '../src/sim/traits';
 import type { GameState, Rock, Run, Ship } from '../src/sim/types';
 
@@ -62,6 +72,8 @@ const INSTALL_ORDER: { comp: ComponentId; variant: VariantId }[] = [
 const UPGRADE_ORDER: ComponentId[] = ['laser', 'cargo', 'sensor', 'engine', 'armor', 'shield'];
 const PERK_ORDER: PerkId[] = ['yield', 'optics', 'furnace', 'bay', 'hopper', 'kit', 'thrust', 'warp'];
 const PICKUP_CHASE = 260;
+/** Builder reserve the sim's default fleet settings hold back (see `DEFAULT_FLEET_AUTO`). */
+const BUILDER_RESERVE = DEFAULT_FLEET_AUTO.builderReserve;
 /** Mining drones owned before the bot spends a fleet slot on a hauler. */
 export const HAULER_AFTER = 2;
 /** How far sideways the flagship is sent to leave a comet path. */
@@ -147,7 +159,18 @@ function purse(state: GameState, wc: number): Purse {
  */
 function nextOutpost(state: GameState, fs: Ship, wc: number): Command | null {
   const { run } = state;
-  if (!run.ships.some(isHauler) || run.automation.outposts.length >= TUNING.outpostMax) return null;
+  if (run.ships.some(isBuilder) && run.automation.outposts.length < TUNING.outpostMax) {
+    // A construction drone builds only above its reserve, so keep the alloy for the outpost and that reserve smelted.
+    const need = {
+      ore: TUNING.outpostCost.ore + BUILDER_RESERVE,
+      alloy: (TUNING.outpostCost.alloy ?? 0) + BUILDER_RESERVE,
+    };
+    const { needsAlloy, smeltFor } = purse(state, wc);
+    return needsAlloy(need) ? smeltFor(need) : null;
+  }
+  // A construction drone, once bought, builds the outposts; until then the flagship leaves them to it unless it can't be bought.
+  if (!run.ships.some(isHauler) || !hullBlocked(state, 'constructionDrone')) return null;
+  if (run.automation.outposts.length >= TUNING.outpostMax) return null;
   const { ok, needsAlloy, smeltFor } = purse(state, wc);
   if (needsAlloy(TUNING.outpostCost)) return smeltFor(TUNING.outpostCost);
   if (!ok(TUNING.outpostCost)) return null;
@@ -316,20 +339,26 @@ function nextPurchase(state: GameState, wc: number): Command | null {
     return { t: 'repair', shipId: fs.id };
 
   // After the first drone, the flagship's tier-2 laser comes before any more hulls, as a player would buy it (#197).
-  const miners = run.ships.filter((x) => !isFlagship(x) && !isHauler(x)).length;
+  const miners = run.ships.filter((x) => !isFlagship(x) && !isHauler(x) && !isBuilder(x)).length;
   const laser = fs.slots.findIndex((f) => f?.type === 'laser');
   const laserCost = miners >= 1 && laser >= 0 && fs.slots[laser]!.tier < 2 ? upgradeCost(fs, laser) : null;
   if (laserCost && ok(laserCost)) return { t: 'upgrade', shipId: fs.id, slot: laser };
   const hulls = !laserCost;
 
-  // Once two drones mine, the next fleet slot is kept for one hauler rather than another drone.
-  const wantHauler = miners >= HAULER_AFTER && !run.ships.some(isHauler);
-  if (hulls && wantHauler && !hullBlocked(state, 'hauler')) {
-    if (ok(HULLS.hauler.cost)) return { t: 'buyHull', hullId: 'hauler' };
-    const refine = needsAlloy(HULLS.hauler.cost) ? smeltFor(HULLS.hauler.cost) : null;
+  // Once two drones mine, the next fleet slots are kept for one construction drone, then one hauler, rather than
+  // more drones. The builder comes first: it is cheap, and it hauls until it has a rock to build on.
+  const wantBuilder = miners >= HAULER_AFTER && !run.ships.some(isBuilder);
+  const wantHauler = miners >= HAULER_AFTER && !wantBuilder && !run.ships.some(isHauler);
+  for (const [want, hullId] of [
+    [wantBuilder, 'constructionDrone'],
+    [wantHauler, 'hauler'],
+  ] as const) {
+    if (!hulls || !want || hullBlocked(state, hullId)) continue;
+    if (ok(HULLS[hullId].cost)) return { t: 'buyHull', hullId };
+    const refine = needsAlloy(HULLS[hullId].cost) ? smeltFor(HULLS[hullId].cost) : null;
     if (refine) return refine;
   }
-  if (hulls && !wantHauler && !hullBlocked(state, 'drone') && ok(HULLS.drone.cost))
+  if (hulls && !wantHauler && !wantBuilder && !hullBlocked(state, 'drone') && ok(HULLS.drone.cost))
     return { t: 'buyHull', hullId: 'drone' };
 
   const docked = run.ships.filter((s) => !refitBlock(state, s));

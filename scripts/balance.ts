@@ -48,6 +48,10 @@ const AUTOMATION_TARGET_SHARE = 0.5;
 const FLEET_FROM = 4;
 /** Median drones in the fleet at warp time required in each system from `FLEET_FROM` to the end of the mid-game. */
 const FLEET_AT_WARP_TARGET = 4;
+/** Systems whose outposts the builder row counts, and the share of them construction drones must place (#174). */
+const BUILDER_FROM = 4;
+const BUILDER_TO = 6;
+const BUILDER_OUTPOST_TARGET = 0.5;
 /** Share of seeds that must reach the opening target before the first warp (#197). */
 const OPENING_TARGET_SHARE = 0.8;
 /** Hazard level the report plays at unless --hazards says otherwise; matches the game's settings default. */
@@ -63,6 +67,10 @@ interface WarpStats {
   haulerValue: number;
   /** Units outposts extracted this warp. */
   outpostUnits: number;
+  /** Outposts placed this warp by a construction drone. */
+  builderOutposts: number;
+  /** Outposts placed this warp by the flagship's own deploy command. */
+  flagshipOutposts: number;
   /** walletValue of contract rewards paid this warp. */
   contractValue: number;
   /** Contracts completed this warp. */
@@ -132,6 +140,8 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
       droneValue: 0,
       haulerValue: 0,
       outpostUnits: 0,
+      builderOutposts: 0,
+      flagshipOutposts: 0,
       contractValue: 0,
       contracts: 0,
       alloy: 0,
@@ -145,11 +155,17 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
       fleetAtWarp: 0,
       fleetCap: fleetCap(state.profile),
     };
+    // Outposts seen last tick, and the flagship deploy commands queued for the tick about to run.
+    let seenOutposts = state.run.automation.outposts.length;
+    let flagshipDeploys = 0;
     const meter = createHazardMeter(state, hazards);
     cur.hazard = meter.tally;
     const ran = runBot(state, {
       seconds: WARP_CAP_SEC,
       hazards,
+      commands: (cmds) => {
+        flagshipDeploys = cmds.filter((c) => c.t === 'deployOutpost').length;
+      },
       before: (s) => {
         meter.before(s);
         cargoBefore.clear();
@@ -182,6 +198,13 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
         cur.alloy = s.run.refinery.produced.alloy;
         cur.fuel = s.run.refinery.produced.fuel;
         cur.outpostUnits = s.run.automation.extracted;
+        // A new outpost is the flagship's when it queued a deploy this tick, else a construction drone's.
+        const placed = Math.max(0, s.run.automation.outposts.length - seenOutposts);
+        const byFlagship = Math.min(placed, flagshipDeploys);
+        cur.flagshipOutposts += byFlagship;
+        cur.builderOutposts += placed - byFlagship;
+        seenOutposts = s.run.automation.outposts.length;
+        flagshipDeploys = 0;
       },
     });
     cur.sec = ran;
@@ -465,6 +488,32 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     ),
     '',
     `- Overall (systems ${FLEET_FROM}–${MID_GAME_END}): **${fleetHit ? 'PASS' : 'FAIL'}**`,
+  );
+  // Acceptance check for #174: construction drones, not the flagship, should be placing the outposts by system 4.
+  const builderSum = (pick: (x: WarpStats) => number, w: number): number =>
+    results.reduce((n, r) => n + (r.warps[w] ? pick(r.warps[w]!) : 0), 0);
+  const builderRows = Array.from({ length: BUILDER_TO - BUILDER_FROM + 1 }, (_, i) => {
+    const w = BUILDER_FROM - 1 + i;
+    return { w, b: builderSum((x) => x.builderOutposts, w), f: builderSum((x) => x.flagshipOutposts, w) };
+  });
+  const builderTotal = builderRows.reduce((n, x) => n + x.b, 0);
+  const flagshipTotal = builderRows.reduce((n, x) => n + x.f, 0);
+  const builderShare = share(builderTotal, builderTotal + flagshipTotal);
+  const builderHit = builderTotal + flagshipTotal > 0 && builderShare >= BUILDER_OUTPOST_TARGET;
+  lines.push(
+    '',
+    '## Outposts by builder vs flagship (#174)',
+    '',
+    `A construction drone builds outposts on its own, so once the bot owns one the flagship stops deploying them. Target: **construction drones place ≥ ${pct(BUILDER_OUTPOST_TARGET)} of the outposts in systems ${BUILDER_FROM}–${BUILDER_TO}**. Counts are outposts placed across all seeds.`,
+    '',
+    '| System | By builders | By flagship | Builder share |',
+    '| --- | --- | --- | --- |',
+    ...builderRows.map(
+      (x) =>
+        `| ${x.w + 1} | ${Math.round(x.b)} | ${Math.round(x.f)} | ${x.b + x.f ? pct(share(x.b, x.b + x.f)) : '—'} |`,
+    ),
+    '',
+    `- Systems ${BUILDER_FROM}–${BUILDER_TO}: builders ${builderTotal} · flagship ${flagshipTotal} (${pct(builderShare)}) — **${builderHit ? 'PASS' : 'FAIL'}**`,
   );
   lines.push(
     '',

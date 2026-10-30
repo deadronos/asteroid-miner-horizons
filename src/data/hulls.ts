@@ -123,7 +123,7 @@ export const HULLS: Record<HullId, HullDef> = {
     cargo: 70,
     magnet: 50,
     size: 9,
-    cost: { ore: 110, ice: 15, alloy: 15 },
+    cost: { ore: 80, ice: 10, alloy: 10 },
     loadout: [],
     color: 0xffa86b,
   },

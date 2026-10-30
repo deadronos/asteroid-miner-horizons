@@ -102,21 +102,30 @@ It goes away after the first warp; × hides it for that save.
   up debris and return to unload when full. In **Assist** mode they work near the
   flagship; in **Auto** mode they work near the station. Select one to give it manual
   orders. The flagship can be refitted onto the 6-slot **Excavator** hull (expandable to 8).
-- **Autorepair & autoupgrade**: each drone and hauler row in the Fleet panel has **REPAIR**
+- **Autorepair & autoupgrade**: each drone, hauler and construction drone row in the Fleet panel has **REPAIR**
   and **UPGRADE** toggles (off by default). With REPAIR on, a ship below the hull threshold
   (Menu → Gameplay, default 50%) flies home and repairs. With UPGRADE on, a docked ship
   takes its cheapest next step every half second: fill an empty slot (drones: laser, cargo,
-  engine, armor, shield, sensor; haulers start with cargo), raise a part one tier, or buy a
+  engine, armor, shield, sensor; haulers and construction drones start with cargo), raise a part one tier, or buy a
   slot. It never removes a part you fitted, so a hand-fitted build is kept. Both spend only
   what the bank holds above the reserve (Menu → Gameplay, default 100 of each resource),
   and repair comes first.
 - **Automation**: a **Hauler** takes a fleet slot but never mines. It skims drones once
   their holds are 30% full and empties outposts, then unloads at the station, so drones
-  spend less time commuting. An **outpost** (120 ore · 30 ice · 15 alloy, up to 3) is
+  spend less time commuting. An **outpost** (80 ore · 10 ice · 10 alloy, up to 3) is
   deployed by flying the flagship next to a large asteroid and pressing **O** over it. It
   slowly taps a deep reserve (10× the rock's units) into a 100-unit store and stalls when
   full, so it needs a hauler to pay off. Drones leave outpost rocks alone, and outposts
   are left behind when you warp.
+- **Construction drones**: a **Construction Drone** (80 ore · 10 ice · 10 alloy, 2 slots,
+  expandable to 6) never mines. With **BUILD** on in its Fleet row (on by default) it picks
+  the nearest free large asteroid near the station, unloads any cargo, flies out and
+  deploys an outpost for you, so the flagship can stay at the rocks. Select it and click a
+  large asteroid to give it a **build order** for that rock (an order on a rock that is
+  unsafe for now waits until it clears); with BUILD off it builds only what you order.
+  It builds only with what the bank holds above the **Builder reserve** (Menu → Gameplay,
+  default 25 of each resource) and stops at the three-outpost limit. When it has nothing
+  to build it hauls like a hauler, and its Fleet row says why it is idle.
 - **Damage**: collisions above a speed threshold and star heat hit shields first, then
   hull. Armor reduces damage. A lost flagship is rebuilt at the station (its cargo is
   lost); lost drones are gone.
@@ -205,7 +214,7 @@ Each of these is tracked as an open issue; the umbrella for game scope is
 
 - Pirates and combat modules — [#175](https://github.com/deadronos/asteroid-miner-horizons/issues/175)
 - A station market and trade routes — [#176](https://github.com/deadronos/asteroid-miner-horizons/issues/176)
-- Fleet roles and specialised drones such as escorts — [#174](https://github.com/deadronos/asteroid-miner-horizons/issues/174)
+- More fleet roles, such as escorts — [#174](https://github.com/deadronos/asteroid-miner-horizons/issues/174)
 - Contract variety and faction reputation — [#173](https://github.com/deadronos/asteroid-miner-horizons/issues/173)
 - An endgame: the Horizon Gate and New Game+ — [#177](https://github.com/deadronos/asteroid-miner-horizons/issues/177)
 - Exploration: sensor ping, rich deposits and derelicts — [#38](https://github.com/deadronos/asteroid-miner-horizons/issues/38)

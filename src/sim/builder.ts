@@ -64,7 +64,7 @@ function release(ctx: TickCtx, ship: Ship): void {
  * Builder brain, used when a construction drone has no move or dock order: comet path or flare → get clear · inside a
  * breaking volatile rock's blast → back out · hull below the autorepair threshold → repair (#140) · a build order, else
  * (BUILD on, under `outpostMax`, bank above `builderReserve`) the nearest free large rock near the station → unload
- * any cargo, fly there and deploy · else haul like a hauler, with the build blocker as the status reason.
+ * any cargo, fly there and deploy (an order on a rock that is unsafe for now is kept, not dropped) · else haul like a hauler, with the build blocker as the status reason.
  */
 export function builderThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const { state, index } = ctx;
@@ -91,6 +91,7 @@ export function builderThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   }
 
   let rock: Rock | null = null;
+  let orderHeld = false;
   const order = ship.order?.kind === 'build' ? ship.order : null;
   if (order) {
     rock = index.rockById.get(order.rockId) ?? null;
@@ -105,6 +106,10 @@ export function builderThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
       out.log.push({ level: 'warn', text: `${ship.name} can't build there: ${flaw}` });
       ship.order = null;
       rock = null;
+    } else if (rock && (unsafe(ctx, rock.pos) || nearBlast(ctx, rock.pos, rock.id))) {
+      // The order stays; the builder keeps clear and carries it out once the rock is safe again.
+      rock = null;
+      orderHeld = true;
     }
   }
   const blocker: 'outpostLimit' | 'belowReserve' | null =
@@ -114,7 +119,7 @@ export function builderThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
         ? 'belowReserve'
         : null;
   let why: IdleReason | null = blocker;
-  if (!blocker && !rock && ship.autoBuild) {
+  if (!blocker && !rock && !orderHeld && ship.autoBuild) {
     const held = ship.aiTargetId != null ? index.rockById.get(ship.aiTargetId) : undefined;
     rock =
       held &&
