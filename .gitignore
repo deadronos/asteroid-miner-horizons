@@ -40,3 +40,6 @@ screenshots/
 
 # Local agent working space (plan pointers, review diffs, screenshots)
 .superpowers/
+
+# Agent session worktrees
+.claude/
