@@ -73,3 +73,13 @@ A save is `{ version, profile, run }`. Two files, one rule: **an old save must a
 
 Note the two shapes in play: `GameState` includes the transient `out`; the persisted and exported shape is
 `Pick<GameState, 'version' | 'profile' | 'run'>`.
+
+## Offline progress and save slots
+
+`GameSession` credits offline income for the time since a slot's `savedAt`, on load and when a hidden tab becomes
+visible. Decision (#220): **each save slot accrues offline income independently from its own `savedAt`, by design.**
+Only one slot can be played at a time, and since the per-slot lock (#211) a second tab on the same slot is read-only
+and earns nothing, so slots idling "in parallel" is not a way to multiply income. Do not add a profile-wide
+"last active" timestamp. `tests/offline.test.ts` pins this.
+
+Still undecided (open in #220): hidden-tab time currently counts while the player has manually paused.

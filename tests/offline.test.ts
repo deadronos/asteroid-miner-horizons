@@ -201,6 +201,28 @@ describe('GameSession offline progress', () => {
     expect(s.state.out.log.some((e) => e.text.startsWith('While you were away (1h 00m)'))).toBe(true);
   });
 
+  it('credits each slot for its own time since savedAt, not for time spent playing another slot', () => {
+    const a = withDrones(2, 2);
+    const b = withDrones(1, 3);
+    writeSlot(0, a);
+    writeSlot(1, b);
+    const s = new GameSession(settings());
+
+    // Two hours on slot A, then slot B wakes up with its own two hours.
+    vi.setSystemTime(T0 + 2 * HOUR * 1000);
+    s.load(1);
+    expect(walletTotal(s.state.run.bank) - walletTotal(b.run.bank)).toBeCloseTo(droneRate(b) * 2 * HOUR, 3);
+    // Slot A was saved at the switch, so it holds no credit for the time spent on B.
+    expect(readSlot(0)!.savedAt).toBe(T0 + 2 * HOUR * 1000);
+
+    // One more hour on B: A is credited that hour alone, not the three since it first loaded.
+    const aSaved = readSlot(0)!.state;
+    vi.setSystemTime(T0 + 3 * HOUR * 1000);
+    s.load(0);
+    expect(walletTotal(s.state.run.bank) - walletTotal(aSaved.run.bank)).toBeCloseTo(droneRate(a) * HOUR, 3);
+    expect(s.state.out.log.some((e) => e.text.startsWith('While you were away (1h 00m)'))).toBe(true);
+  });
+
   it('credits nothing when the setting is off', () => {
     const game = withDrones(2);
     writeSlot(0, game);
