@@ -22,6 +22,7 @@ npm run lint       # oxlint (warnings fail); npm run lint:fix auto-fixes
 npm run format     # oxfmt formats in place; format:check only verifies
 npm run check      # everything CI runs except the build
 npm run bench      # headless tick benchmark: mean/p95 ms per tick
+npm run bench:stress  # opt-in stress run: ~2,000 rocks, 50 ships, 1,000 pickups (budget: mean < 1 ms/tick)
 npm run balance    # bot plays 30 seeds × 10 warps → docs/balance.md
 ```
 

@@ -10,6 +10,7 @@
     "test": "vitest run",
     "bundle-size": "node scripts/bundle-size.mjs",
     "bench": "tsx scripts/bench.ts",
+    "bench:stress": "tsx --expose-gc scripts/bench.ts --stress",
     "balance": "tsx scripts/balance.ts",
     "balance:ci": "scripts/balance-ci.sh",
     "typecheck": "tsc --noEmit && tsc --noEmit -p scripts",
