@@ -59,13 +59,15 @@ After every task, before committing:
 
 ## Branches, commits, PRs
 
+- Start every branch from an up-to-date `main` (`git fetch && git switch -c ... origin/main`), and rebase on or
+  merge `origin/main` before opening or updating a PR.
 - Branch names are prefixed by intent: `feat/`, `fix/`, `perf/`, `balance/`, `refactor/`, `docs/`. Agent
   sessions run on the `claude/<topic>` worktree branch they were given; keep it rather than renaming. Always
   reference the issue number in the PR, whatever the branch is called.
 - Commit subjects are imperative and specific: "Bucket rocks by kind and shape so each kind uses its own pools
   (#20)". Reference the issue where there is one, and follow the file's own history for the local voice.
-- A pull request merges to `main` once CI is green. Keep the diff to what the plan describes; unrelated
-  refactoring belongs in its own change.
+- CI green is required, but a PR merges only after the owner approves it, and agents never merge on their own.
+  Keep the diff to what the plan describes; unrelated refactoring belongs in its own change.
 
 ## Releasing
 
