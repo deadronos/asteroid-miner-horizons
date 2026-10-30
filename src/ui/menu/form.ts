@@ -17,7 +17,8 @@ export type SelectKey =
   | 'colourVision'
   | 'hazards'
   | 'autoRepairAt'
-  | 'autoReserve';
+  | 'autoReserve'
+  | 'builderReserve';
 
 export function section(title: string): HTMLElement {
   return h('h3', { class: 'section', text: title });

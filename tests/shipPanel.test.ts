@@ -3,6 +3,8 @@ import { COMPONENTS, COMPONENT_IDS, variantDef, type ComponentId, type VariantId
 import { formatCost } from '../src/data/resources';
 import { newGame } from '../src/sim/create';
 import { halve, investedCost } from '../src/sim/economy';
+import { makeShip, flagship } from '../src/sim/ships';
+import { autoToggleCommand, fleetControls } from '../src/ui/panels/FleetPanel';
 import { installOptions, parseInstallValue, removeRefundTitle, shipPanelKey } from '../src/ui/panels/ShipPanel';
 
 // The refit panel's empty slot offers every (component, variant) pair; these
@@ -90,5 +92,23 @@ describe('removeRefundTitle', () => {
     );
     // A different variant is a different refund, so switching rebuilds the row.
     expect(removeRefundTitle(wide)).not.toBe(removeRefundTitle(focused));
+  });
+});
+
+describe('fleet row controls', () => {
+  const s = newGame(1);
+  const at = { x: 0, z: 0 };
+  const ship = (hull: 'drone' | 'hauler' | 'constructionDrone') => makeShip(s.run, s.profile, hull, 'X', at);
+
+  it('BUILD toggle shows only on construction drone rows and sends shipAuto build', () => {
+    expect(fleetControls(flagship(s.run))).toEqual([]);
+    expect(fleetControls(ship('drone'))).toEqual(['mode', 'repair', 'upgrade']);
+    expect(fleetControls(ship('hauler'))).toEqual(['repair', 'upgrade']);
+    const b = ship('constructionDrone');
+    expect(fleetControls(b)).toEqual(['repair', 'upgrade', 'build']);
+    expect(autoToggleCommand(b, 'build')).toEqual({ t: 'shipAuto', shipId: b.id, kind: 'build', on: !b.autoBuild });
+    b.autoBuild = false;
+    expect(autoToggleCommand(b, 'build')).toMatchObject({ kind: 'build', on: true });
+    expect(autoToggleCommand(b, 'repair')).toMatchObject({ kind: 'repair', on: !b.autoRepair });
   });
 });

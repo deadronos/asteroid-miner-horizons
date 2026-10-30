@@ -5,8 +5,9 @@ import { formatCost, walletTotal } from '../../data/resources';
 import { TUNING } from '../../data/tuning';
 import { outpostAt } from '../../sim/automation';
 import { hullBlock, isDocked } from '../../sim/economy';
-import { droneCount, findShip, fleetCap, isAlive, isFlagship, isHauler, shipStats } from '../../sim/ships';
+import { droneCount, findShip, fleetCap, isAlive, isBuilder, isFlagship, isHauler, shipStats } from '../../sim/ships';
 import type { IdleReason, ShipStatus } from '../../sim/status';
+import type { Command } from '../../sim/commands';
 import type { GameState, Ship } from '../../sim/types';
 import { Panel, bar, h, setBlocked, setText } from '../dom';
 import type { PanelCtx } from './context';
@@ -59,6 +60,24 @@ export function formatStatus(st: ShipStatus, holdShare: number): string {
   }
 }
 
+export type FleetControl = 'mode' | 'repair' | 'upgrade' | 'build';
+
+/** The control buttons a fleet row shows, in order: none for the flagship, no ASSIST/AUTO for haulers and builders. */
+export function fleetControls(ship: Ship): FleetControl[] {
+  if (isFlagship(ship)) return [];
+  const out: FleetControl[] = [];
+  if (!isHauler(ship) && !isBuilder(ship)) out.push('mode');
+  out.push('repair', 'upgrade');
+  if (isBuilder(ship)) out.push('build');
+  return out;
+}
+
+/** The command a REPAIR / UPGRADE / BUILD button sends: flips that flag on `ship`. */
+export function autoToggleCommand(ship: Ship, kind: 'repair' | 'upgrade' | 'build'): Command {
+  const cur = kind === 'repair' ? ship.autoRepair : kind === 'upgrade' ? ship.autoUpgrade : ship.autoBuild;
+  return { t: 'shipAuto', shipId: ship.id, kind, on: !cur };
+}
+
 function status(state: GameState, s: Ship): string {
   if (!isAlive(s)) return `Rebuilding ${Math.ceil(s.respawn)}s`;
   if (isDocked(state.run, s) && !s.order && isFlagship(s)) return 'Docked';
@@ -102,9 +121,11 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         let mode: HTMLButtonElement | null = null;
         let repair: HTMLButtonElement | null = null;
         let upgrade: HTMLButtonElement | null = null;
-        if (!isFlagship(ship)) {
+        let build: HTMLButtonElement | null = null;
+        const controls = fleetControls(ship);
+        if (controls.length) {
           const ctl = h('div', { class: 'ctl' });
-          if (!isHauler(ship)) {
+          if (controls.includes('mode')) {
             mode = h('button', {
               class: 'mode',
               onclick: (e) => {
@@ -116,20 +137,14 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             mode.dataset.title = 'Assist: work near the flagship · Auto: work near the station';
             ctl.append(mode);
           }
-          const toggle = (kind: 'repair' | 'upgrade', text: string, title: string): HTMLButtonElement => {
+          const toggle = (kind: 'repair' | 'upgrade' | 'build', text: string, title: string): HTMLButtonElement => {
             const btn = h('button', {
               class: 'mode auto',
               text,
               onclick: (e) => {
                 e.stopPropagation();
                 const cur = findShip(st().run, id);
-                if (cur)
-                  ctx.send({
-                    t: 'shipAuto',
-                    shipId: id,
-                    kind,
-                    on: !(kind === 'repair' ? cur.autoRepair : cur.autoUpgrade),
-                  });
+                if (cur) ctx.send(autoToggleCommand(cur, kind));
               },
             });
             btn.dataset.title = title;
@@ -146,6 +161,12 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             'UPGRADE',
             'Autoupgrade: while docked, spend the bank above the reserve on slots and tiers',
           );
+          if (controls.includes('build'))
+            build = toggle(
+              'build',
+              'BUILD',
+              'Autobuild: build outposts on large rocks near the station with the bank above the builder reserve (Menu → Gameplay). Click a large rock to send it there.',
+            );
           row.append(ctl);
         }
         bind(() => {
@@ -160,6 +181,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           if (mode) setText(mode, cur.aiMode === 'assist' ? 'ASSIST' : 'AUTO');
           repair?.classList.toggle('on', cur.autoRepair);
           upgrade?.classList.toggle('on', cur.autoUpgrade);
+          build?.classList.toggle('on', cur.autoBuild);
         });
         return row;
       });

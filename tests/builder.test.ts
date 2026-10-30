@@ -228,6 +228,39 @@ describe('builder brain', () => {
     expect(s.run.bank).toEqual(bank);
   });
 
+  it('a build order on a rock that breaks or gains an outpost is dropped with no payment', () => {
+    const { s, rocks, builder } = world([300, 450]);
+    builder.autoBuild = false;
+    send(s, { t: 'mine', shipId: builder.id, rockId: rocks[0]!.id });
+    expect(builder.order).toEqual({ kind: 'build', rockId: rocks[0]!.id });
+    const bank = { ...s.run.bank };
+    s.run.rocks = s.run.rocks.filter((r) => r !== rocks[0]);
+    s.out.log.length = 0;
+    runTicks(s, 2);
+    expect(builder.order).toBeNull();
+    expect(s.out.log.some((l) => l.level === 'warn')).toBe(true);
+    expect(s.run.bank).toEqual(bank);
+
+    send(s, { t: 'mine', shipId: builder.id, rockId: rocks[1]!.id });
+    s.run.automation.outposts.push(makeOutpost(rocks[1]!));
+    s.out.log.length = 0;
+    runTicks(s, 2);
+    expect(builder.order).toBeNull();
+    expect(s.out.log.some((l) => l.level === 'warn')).toBe(true);
+    expect(s.run.bank).toEqual(bank);
+  });
+
+  it('a build order with autoBuild on overrides the builder own pick once', () => {
+    const { s, rocks, builder } = world([300, 450]);
+    send(s, { t: 'mine', shipId: builder.id, rockId: rocks[1]!.id });
+    runFor(s, 1);
+    expect(builder.aiTargetId).toBe(rocks[1]!.id);
+    runFor(s, 30);
+    expect(builder.order).toBeNull();
+    expect(outpostAt(s, rocks[1]!.id)).toBeDefined();
+    expect(outpostAt(s, rocks[0]!.id)).toBeDefined(); // autoBuild resumed with its own pick
+  });
+
   it('deploys at most once per buildInterval', () => {
     const { s, builder } = world([200, 220, 240]);
     const index = new SimIndex();
