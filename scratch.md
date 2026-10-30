@@ -13,9 +13,9 @@ is the maintainer's notebook; agents do not edit it (see AGENTS.md).
 - **Delete merged remote branches.** 13 `claude/*` branches from PRs #225–#237 (and `fix/frozen-save-v13-215`
   from the closed #224) are still on origin.
 
-## 1. Small follow-ups from #174 (one issue, S)
+## 1. #239: small follow-ups from #174 (S)
 
-File these together; each is a few lines plus a test.
+Filed as #239; each is a few lines plus a test.
 
 - A build order that is waiting (unsafe rock, outpost limit, reserve) has no status of its own; it reads as
   hauling. Add a `buildWaiting` reason.
