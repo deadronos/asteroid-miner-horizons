@@ -67,7 +67,9 @@ A save is `{ version, profile, run }`. Two files, one rule: **an old save must a
    `fromData` in `save.ts` runs on every migrated save, so a malformed save is rejected with `{ ok: false }`
    instead of throwing mid-tick. `migrate()` already downgrades a throwing migration to a rejection.
 4. **`tests/migrations.test.ts`** — add a fixture under `tests/fixtures/save-vN.json` and assert the upgrade.
-   Existing fixtures are the regression net for old saves; do not delete them.
+   Existing fixtures are the regression net for old saves; do not delete them. One fixture exists for every
+   version from 2 through `SAVE_VERSION`, and the suite fails when the current version has none, so a bump
+   has to freeze a save of the version it introduces.
 
 Note the two shapes in play: `GameState` includes the transient `out`; the persisted and exported shape is
 `Pick<GameState, 'version' | 'profile' | 'run'>`.

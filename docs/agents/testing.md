@@ -21,19 +21,20 @@ All tests are `tests/*.test.ts`, named after the module or feature they cover (`
 `refining.test.ts`, `pause.test.ts`, ...), with co-located helpers that are not themselves test files. A few have
 special roles worth knowing before you change the code they guard:
 
-| File                 | Role                                                                         |
-| -------------------- | ---------------------------------------------------------------------------- |
-| `sim.test.ts`        | Determinism (same seed + commands → same serialised state), save round-trip  |
-| `commands.test.ts`   | Every command handler, including rejections                                  |
-| `migrations.test.ts` | Each save version step, against the fixtures in `tests/fixtures/`            |
-| `alloc.test.ts`      | Mean bytes allocated per tick with a full fleet, against a fixed budget      |
-| `inPlace.test.ts`    | `ships`, `rocks` and `pickups` are compacted in place, never reassigned      |
-| `stats.test.ts`      | Derived ship stats as a snapshot; update it only when the change is intended |
-| `bot.test.ts`        | The balance bot's decisions                                                  |
+| File                 | Role                                                                           |
+| -------------------- | ------------------------------------------------------------------------------ |
+| `sim.test.ts`        | Determinism (same seed + commands → same serialised state), save round-trip    |
+| `commands.test.ts`   | Every command handler, including rejections                                    |
+| `migrations.test.ts` | Each save version step, and a fixture for every version through `SAVE_VERSION` |
+| `alloc.test.ts`      | Mean bytes allocated per tick with a full fleet, against a fixed budget        |
+| `inPlace.test.ts`    | `ships`, `rocks` and `pickups` are compacted in place, never reassigned        |
+| `stats.test.ts`      | Derived ship stats as a snapshot; update it only when the change is intended   |
+| `bot.test.ts`        | The balance bot's decisions                                                    |
 
 Helpers: `tests/helpers.ts` drives the sim (`runTicks`, `runFor`, `send`, and the shared `DT`); `tests/memStorage.ts` is an in-memory `Storage` (save slots and settings read
-`globalThis.localStorage`, which tests swap in); `tests/fixtures/save-vN.json` are old saves for the migration
-tests; `tests/__snapshots__/` holds snapshots.
+`globalThis.localStorage`, which tests swap in); `tests/fixtures/save-vN.json` are frozen saves for the migration
+tests, one for every version from 2 through `SAVE_VERSION` (the suite fails when the current version has none);
+`tests/__snapshots__/` holds snapshots.
 
 ## Conventions
 
