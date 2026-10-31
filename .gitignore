@@ -37,6 +37,7 @@ Thumbs.db
 
 # Local screenshots / captures
 screenshots/
+.playwright-mcp/
 
 # Local agent working space (plan pointers, review diffs, screenshots)
 .superpowers/
