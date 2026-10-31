@@ -52,6 +52,11 @@ export const TUNING = {
   warpCostGrowth: 1.3,
   /** Horizon Data = floor(sqrt(runValue / dataDivisor)). */
   dataDivisor: 60,
+  /**
+   * Sim seconds at the start of each system (a new game, or just after a warp) during which a doctrine
+   * can be chosen, swapped or cleared. Menus that pause the sim freeze this clock.
+   */
+  doctrineWindow: 45,
 
   // Refinery.
   /** Jobs the station refinery queue can hold. */

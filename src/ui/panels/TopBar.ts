@@ -3,7 +3,7 @@
 import { MODIFIERS } from '../../data/modifiers';
 import { PERK_IDS } from '../../data/perks';
 import { RESOURCES, RESOURCE_INFO, type Resource } from '../../data/resources';
-import { dataGain, perkCost, warpCost } from '../../sim/economy';
+import { dataGain, doctrineWindowOpen, perkCost, warpCost } from '../../sim/economy';
 import { keyLabel } from '../../settings';
 import { describeModifier } from '../../sim/modifiers';
 import type { GameState } from '../../sim/types';
@@ -32,6 +32,13 @@ const RESOURCE_TAG: Record<Resource, string> = {
 /** Short, color-independent top-bar readout for one banked resource. */
 export const resourceReadout = (resource: Resource, amount: number): string =>
   `${RESOURCE_TAG[resource]} ${RESOURCE_INFO[resource].icon} ${fmt(amount)}`;
+
+/** Research button label. The respec window is named in the text, not by colour alone. */
+export function researchCue(windowOpen: boolean): { text: string; label: string } {
+  return windowOpen
+    ? { text: 'Research · respec', label: 'Research. Doctrine respec open.' }
+    : { text: 'Research', label: 'Research' };
+}
 
 /** Panel key: rebuilds on warp and when a loaded slot has the same system number but different modifiers. */
 export function topBarKey(state: GameState): string {
@@ -101,6 +108,9 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
           s.run.bank.fuel < cost,
           `Need ${cost} fuel in the station bank (have ${Math.floor(s.run.bank.fuel)}). Would earn +${gain} HD.`,
         );
+        const cue = researchCue(doctrineWindowOpen(s.run.time));
+        setText(researchBtn, cue.text);
+        if (researchBtn.getAttribute('aria-label') !== cue.label) researchBtn.setAttribute('aria-label', cue.label);
         researchBtn.classList.toggle(
           'glow',
           PERK_IDS.some((p) => (perkCost(s, p) ?? Infinity) <= s.profile.data),

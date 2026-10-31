@@ -6,6 +6,15 @@ import { removeItem } from '../core/array';
 import { v } from '../core/vec';
 import { COMPONENTS, isVariant, variantDef, type Tier } from '../data/components';
 import { HULLS } from '../data/hulls';
+import {
+  DOCTRINE_PAIR_IDS,
+  DOCTRINE_PAIRS,
+  DOCTRINE_SIDES,
+  isDoctrineSide,
+  sideCost,
+  sideBonus,
+  type DoctrinePairId,
+} from '../data/doctrines';
 import { PERKS } from '../data/perks';
 import { credit, emptyWallet, formatCost, formatWallet, pay } from '../data/resources';
 import { TUNING } from '../data/tuning';
@@ -17,6 +26,8 @@ import {
   dataGain,
   halve,
   hullBlock,
+  doctrineRespecNotice,
+  doctrineWindowOpen,
   perkCost,
   refitBlock,
   repairCost,
@@ -96,6 +107,38 @@ export const handlers: Handlers = {
     for (const s of run.ships) clampToStats(state, s);
   },
 
+  chooseDoctrine: (state, cmd) => {
+    const { profile, out } = state;
+    if (!(DOCTRINE_PAIR_IDS as readonly string[]).includes(cmd.pair)) return fail(state, 'Unknown doctrine.');
+    const pair = cmd.pair as DoctrinePairId;
+    if (cmd.side !== null && !isDoctrineSide(pair, cmd.side))
+      return fail(state, 'That choice is not part of this doctrine.');
+    const current = profile.doctrines[pair];
+    // Re-affirming the current side is a keep, including after the window has closed.
+    if (cmd.side === current) return;
+    if (!doctrineWindowOpen(state.run.time)) {
+      if (current && cmd.side && isDoctrineSide(pair, cmd.side)) {
+        return fail(
+          state,
+          `${DOCTRINE_SIDES[cmd.side].name} is locked: ${DOCTRINE_SIDES[current].name} is chosen. Respec at warp.`,
+        );
+      }
+      return fail(state, 'Doctrines are locked until you warp.');
+    }
+    profile.doctrines[pair] = cmd.side;
+    const def = DOCTRINE_PAIRS[pair];
+    out.log.push(
+      cmd.side
+        ? {
+            level: 'major',
+            text: `${current ? 'Swapped to' : 'Chose'} ${DOCTRINE_SIDES[cmd.side].name}: ${sideBonus(DOCTRINE_SIDES[cmd.side])}, ${sideCost(DOCTRINE_SIDES[cmd.side])}.`,
+            event: 'research',
+          }
+        : { level: 'major', text: `Cleared ${def.name}.`, event: 'research' },
+    );
+    for (const s of state.run.ships) clampToStats(state, s);
+  },
+
   warp: (state, cmd) => {
     const { run, profile, out } = state;
     if (!isRoute(cmd.route)) return fail(state, 'Unknown warp route.');
@@ -115,6 +158,7 @@ export const handlers: Handlers = {
       level: 'major',
       text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.`,
     });
+    out.log.push({ level: 'info', text: doctrineRespecNotice() });
     const mods = state.run.system.modifiers;
     if (mods.length > 0) out.log.push({ level: 'major', text: `System modifiers: ${describeModifiers(mods)}.` });
     if (dropped) out.log.push({ level: 'warn', text: `Contract left behind: ${describeContract(dropped)}.` });

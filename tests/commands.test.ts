@@ -336,7 +336,8 @@ describe('command handlers', () => {
     const i = s.out.log.findIndex((l) => l.text.startsWith('Warp complete'));
     expect(i).toBeGreaterThanOrEqual(0);
     expect(s.run.system.modifiers.length).toBeGreaterThan(0);
-    expect(s.out.log[i + 1]!.text).toBe(`System modifiers: ${describeModifiers(s.run.system.modifiers)}.`);
+    expect(s.out.log[i + 1]!.text).toBe(`Doctrine respec open for ${TUNING.doctrineWindow}s (Research).`);
+    expect(s.out.log[i + 2]!.text).toBe(`System modifiers: ${describeModifiers(s.run.system.modifiers)}.`);
   });
   it('warp into system 2 logs no modifier line', () => {
     const s = newGame(1);
@@ -524,7 +525,7 @@ describe('command handlers', () => {
     s.run.selectedId = 0;
     handlers.select(s, { t: 'select', shipId: fs.id });
     expect(s.run.selectedId).toBe(fs.id);
-    expect(Object.keys(handlers)).toHaveLength(22);
+    expect(Object.keys(handlers)).toHaveLength(23);
   });
 
   it('warp leaves outposts behind with a warning', () => {

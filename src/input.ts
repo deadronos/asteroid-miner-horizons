@@ -167,6 +167,11 @@ export class Input {
       return;
     }
     if (this.hud.menu.open) return; // the menu owns the keyboard while open
+    // Research owns Tab, arrows and Space so they move the dialog instead of the ship.
+    if (this.hud.researchOpen) {
+      if (!e.repeat && actionFor(this.settings.value.keys, e.code) === 'research') this.runAction('research');
+      return;
+    }
     const action = actionFor(this.settings.value.keys, e.code);
     if (action || e.code.startsWith('Arrow') || e.code === 'Space') e.preventDefault();
     this.held.add(e.code);

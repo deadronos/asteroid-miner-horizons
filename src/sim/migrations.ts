@@ -127,6 +127,11 @@ export const migrations: Record<number, Migration> = {
     for (const ship of d.run.ships) ship.autoBuild = false;
     return d;
   },
+  // v15 added doctrine pairs (#50). Nobody has chosen a side yet.
+  14: (d) => {
+    d.profile.doctrines = { fleet: null, haul: null, focus: null };
+    return d;
+  },
 };
 
 export interface MigrateOptions {

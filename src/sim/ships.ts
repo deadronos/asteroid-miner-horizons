@@ -3,6 +3,7 @@
 import { removeItem } from '../core/array';
 import { v, type Vec2 } from '../core/vec';
 import { variantDef, type ShipStatKey } from '../data/components';
+import { DOCTRINE_PAIR_IDS, DOCTRINE_SIDES, type DoctrineChoice } from '../data/doctrines';
 import { HULLS, type HullId } from '../data/hulls';
 import { emptyWallet, walletTotal } from '../data/resources';
 import { TUNING } from '../data/tuning';
@@ -63,7 +64,52 @@ export function writeShipStats(out: ShipStats, ship: Ship, profile: Profile): Sh
   out.speed *= thrust;
   out.accel *= thrust;
   out.dps *= 1 + 0.12 * profile.perks.optics;
+  const role = h.role;
+  applyDoctrines(out, role === 'flagship' ? 'flagship' : role === 'drone' ? 'drone' : 'other', profile.doctrines);
   return out;
+}
+
+/**
+ * Folds the profile's doctrines into `out`. A speed effect scales acceleration too,
+ * the same way the thrust perk does. No allocation: the hot path calls this per ship.
+ */
+function applyDoctrines(out: ShipStats, who: 'flagship' | 'drone' | 'other', choice: DoctrineChoice): void {
+  let dps = 1;
+  let speed = 1;
+  let cargo = 1;
+  let magnet = 1;
+  for (let i = 0; i < DOCTRINE_PAIR_IDS.length; i++) {
+    const sideId = choice[DOCTRINE_PAIR_IDS[i]!];
+    if (sideId == null) continue;
+    const effects = DOCTRINE_SIDES[sideId].effects;
+    for (let j = 0; j < effects.length; j++) {
+      const e = effects[j]!;
+      if (e.stat === 'fleet') continue;
+      if (e.who === 'flagship' && who !== 'flagship') continue;
+      if (e.who === 'drone' && who !== 'drone') continue;
+      if (e.stat === 'dps') dps *= e.mul;
+      else if (e.stat === 'speed') speed *= e.mul;
+      else if (e.stat === 'cargo') cargo *= e.mul;
+      else magnet *= e.mul;
+    }
+  }
+  out.dps *= dps;
+  out.speed *= speed;
+  out.accel *= speed;
+  out.cargoCap *= cargo;
+  out.magnet *= magnet;
+}
+
+/** Fleet-capacity bonus from the chosen doctrines. */
+function doctrineFleet(choice: DoctrineChoice): number {
+  let n = 0;
+  for (let i = 0; i < DOCTRINE_PAIR_IDS.length; i++) {
+    const sideId = choice[DOCTRINE_PAIR_IDS[i]!];
+    if (sideId == null) continue;
+    const effects = DOCTRINE_SIDES[sideId].effects;
+    for (let j = 0; j < effects.length; j++) if (effects[j]!.stat === 'fleet') n += effects[j]!.add;
+  }
+  return n;
 }
 
 export function shipStats(ship: Ship, profile: Profile): ShipStats {
@@ -117,7 +163,7 @@ export function makeShip(run: Run, profile: Profile, hullId: HullId, name: strin
 }
 
 export function fleetCap(profile: Profile): number {
-  return TUNING.baseFleetCap + profile.perks.bay;
+  return TUNING.baseFleetCap + profile.perks.bay + doctrineFleet(profile.doctrines);
 }
 
 export const droneCount = (run: Run): number => run.ships.filter((s) => !isFlagship(s)).length;

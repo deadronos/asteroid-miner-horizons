@@ -9,6 +9,7 @@ import type { ComponentId, Tier, VariantId } from '../data/components';
 import type { ContractKind } from '../data/contracts';
 import type { HullId } from '../data/hulls';
 import type { ModifierId } from '../data/modifiers';
+import type { DoctrineChoice } from '../data/doctrines';
 import type { PerkId } from '../data/perks';
 import type { RecipeId } from '../data/refining';
 import type { Cost, RawResource, Wallet } from '../data/resources';
@@ -254,6 +255,11 @@ export interface Profile {
   data: number;
   dataEarned: number;
   perks: Record<PerkId, number>;
+  /**
+   * The chosen side of each doctrine pair, or null. Survives warps. One slot per pair:
+   * the other side is excluded until the next warp's respec window.
+   */
+  doctrines: DoctrineChoice;
   /** Lifetime counters for this save; they survive warps. */
   stats: LifetimeStats;
   /** Unlocked achievements, in unlock order. */

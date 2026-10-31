@@ -6,6 +6,7 @@ import { COMPONENTS, isVariant, type ComponentId } from '../data/components';
 import { CONTRACTS } from '../data/contracts';
 import { HULLS } from '../data/hulls';
 import { MODIFIERS } from '../data/modifiers';
+import { DOCTRINE_PAIR_IDS, isDoctrineSide } from '../data/doctrines';
 import { PERK_IDS } from '../data/perks';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
 import { RAW_RESOURCES, RESOURCES } from '../data/resources';
@@ -193,13 +194,28 @@ function isLifetime(p: Profile): boolean {
   );
 }
 
-/** True when `p` has a seed, a warp count, data totals, a finite level for every perk, well-formed lifetime stats and a first-steps flag. */
+/**
+ * True when `d` stores exactly one side (or null) for every doctrine pair, and that side belongs to the pair.
+ * One slot per pair is what keeps the two sides exclusive.
+ */
+function isDoctrines(d: unknown): boolean {
+  if (!isObj(d) || Array.isArray(d)) return false;
+  if (Object.keys(d).length !== DOCTRINE_PAIR_IDS.length) return false;
+  return DOCTRINE_PAIR_IDS.every((pair) => {
+    const side = d[pair];
+    return side === null || isDoctrineSide(pair, side);
+  });
+}
+
+/** True when `p` has a seed, a warp count, data totals, a finite level for every perk, one side per doctrine, well-formed lifetime stats and a first-steps flag. */
 function isProfile(p: Profile | undefined): p is Profile {
   if (!p || !finite(p.seed) || !isObj(p.perks)) return false;
   // The next warp numbers its system from the warp count, and research spends data.
   if (!Number.isInteger(p.warps) || p.warps < 0 || !finite(p.data) || !finite(p.dataEarned)) return false;
   // Stats, costs and the refinery read every perk level, so each must be a finite number.
   if (!PERK_IDS.every((k) => finite(p.perks[k]))) return false;
+  // The tick reads every pair. A side from another pair would apply the wrong trade-off.
+  if (!isDoctrines(p.doctrines)) return false;
   // The HUD reads the first-steps flag on every refresh.
   if (typeof p.goalsDismissed !== 'boolean') return false;
   // The tick adds to every stat and the Stats tab looks up every unlocked achievement.

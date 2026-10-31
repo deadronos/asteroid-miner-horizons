@@ -138,6 +138,14 @@ It goes away after the first warp; × hides it for that save.
   **Horizon Data** = ⌊√(value delivered this run / 60)⌋. Research spends it on permanent
   perks: yield, laser damage, speed, fleet capacity, a starter kit, cheaper warps, a faster
   refinery (Catalytic Furnace) and more batches per refinery cycle (Bulk Hoppers).
+  The same panel also offers three exclusive doctrine pairs. Each side is a bonus and a
+  cost, and taking one locks the other out. They cost no Horizon Data. You can choose,
+  swap or clear a pair only during the first 45 seconds of a system (a new game, and again
+  right after each warp); after that it stays until the next warp. The pairs are Fleet
+  (Swarm Doctrine: +1 fleet capacity, −10% drone damage; or Ace Pilot: +25% flagship damage,
+  −8% flagship speed), Hold (Bulk Freighter: +25% cargo, −10% speed; or Courier: +12% speed,
+  −15% cargo) and Beam (Survey Array: +25% pickup radius, −10% laser damage; or Brawler:
+  +15% laser damage, −20% pickup radius).
 - **Stats & achievements**: each save keeps lifetime stats that survive warps (time played,
   asteroids broken, units mined, warps, contracts, refined units, outposts, launches,
   flagship unloads, mining drones bought, components installed by hand, research, comets and ships lost) and 21 achievements unlocked from them. An unlock shows
