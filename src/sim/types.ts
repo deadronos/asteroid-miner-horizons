@@ -216,6 +216,7 @@ export interface Run {
   refinery: Refinery;
   hazards: Hazards;
   automation: Automation;
+  exploration: Exploration;
 }
 
 export interface CometWarning {
@@ -247,6 +248,22 @@ export interface Hazards {
   /** Comets and flares this run (balance metrics, HUD). */
   comets: number;
   flares: number;
+}
+
+/** A hidden point of interest; derived from `exploration.seed`, never persisted itself. */
+export type Anomaly =
+  | { id: number; kind: 'rich'; pos: Vec2; resource: RawResource }
+  | { id: number; kind: 'derelict'; pos: Vec2; salvage: number };
+
+export interface Exploration {
+  /** Seed the anomaly list is derived from; mixed from profile seed, system and warp route. */
+  seed: number;
+  /** Seconds until the sensor ping is ready. */
+  pingCd: number;
+  /** Ids of anomalies a ping has revealed. */
+  revealed: number[];
+  /** Ids of derelicts whose salvage has been paid. */
+  claimed: number[];
 }
 
 export interface Profile {

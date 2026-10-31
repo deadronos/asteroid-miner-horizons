@@ -165,6 +165,20 @@ export const TUNING = {
   /** Units an outpost can hold before it stalls waiting for pickup. */
   outpostCapacity: 100,
 
+  // Exploration (#38).
+  /** Seconds between sensor pings. */
+  pingCooldown: 20,
+  /** World units a sensor ping reveals anomalies within. */
+  pingRange: 650,
+  /** World units from a derelict within which a ship claims its salvage. */
+  derelictClaimRadius: 60,
+  /** Rich deposits rolled per system, inclusive. */
+  richAnomalies: [2, 3],
+  /** Derelicts rolled per system, inclusive. */
+  derelictAnomalies: [1, 2],
+  /** Yield multiplier on a rich deposit's mining rock. */
+  richYieldMul: 3,
+
   // Offline progress (#41).
   /** Longest absence credited, in seconds. */
   offlineCapSec: 8 * 60 * 60,

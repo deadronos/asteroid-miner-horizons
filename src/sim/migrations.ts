@@ -9,6 +9,7 @@ import { newStats } from './achievements';
 import { newAutomation } from './automation';
 import { newBoard } from './contracts';
 import { SAVE_VERSION } from './create';
+import { newExploration } from './exploration';
 import { newHazards } from './hazards';
 import { newRefinery } from './refining';
 import type { GameState, Ship } from './types';
@@ -130,6 +131,12 @@ export const migrations: Record<number, Migration> = {
   // v15 added doctrine pairs (#50). Nobody has chosen a side yet.
   14: (d) => {
     d.profile.doctrines = { fleet: null, haul: null, focus: null };
+    return d;
+  },
+  // v16 added `run.exploration` (#38). Old saves did not record their warp route,
+  // so the anomaly seed uses route 0; nothing is revealed or claimed yet.
+  15: (d) => {
+    if (!d.run.exploration) d.run.exploration = newExploration(d.profile.seed, d.run.system.number);
     return d;
   },
 };

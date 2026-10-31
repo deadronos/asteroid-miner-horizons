@@ -10,13 +10,14 @@ import { newStats } from './achievements';
 import { newAutomation } from './automation';
 import { fillBoard, newBoard } from './contracts';
 import { doctrineRespecNotice } from './economy';
+import { newExploration } from './exploration';
 import { newHazards } from './hazards';
 import { generateSystem, populateBelts } from './generate';
 import { newRefinery } from './refining';
 import { makeShip } from './ships';
 import type { GameState, Profile, Run } from './types';
 
-export const SAVE_VERSION = 15;
+export const SAVE_VERSION = 16;
 
 export function newProfile(seed: number): Profile {
   return {
@@ -59,6 +60,7 @@ export function newRun(profile: Profile, route = 0): Run {
     refinery: newRefinery(),
     hazards: newHazards(profile.seed, number),
     automation: newAutomation(),
+    exploration: newExploration(profile.seed, number, route),
   };
   populateBelts(run, profile.seed);
 
