@@ -7,6 +7,7 @@ import { CONTRACTS } from '../data/contracts';
 import { HULLS } from '../data/hulls';
 import { MODIFIERS } from '../data/modifiers';
 import { DOCTRINE_PAIR_IDS, isDoctrineSide } from '../data/doctrines';
+import { GATE_STAGES, stageMet, type GateCost } from '../data/gate';
 import { PERK_IDS } from '../data/perks';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
 import { RAW_RESOURCES, RESOURCES } from '../data/resources';
@@ -208,6 +209,47 @@ function isDoctrines(d: unknown): boolean {
   });
 }
 
+const COST_KEYS = ['data', ...RESOURCES] as const;
+
+/** True when `c` has a finite, non-negative number for Horizon Data and every resource. */
+function isGateCost(c: unknown): c is GateCost {
+  if (!isObj(c)) return false;
+  return COST_KEYS.every((k) => finite(c[k]) && c[k] >= 0);
+}
+
+/**
+ * True when the gate is a stage index the HUD can render, the paid columns fit that stage,
+ * and a finished gate carries exactly one summary. A fully paid stage that never advanced
+ * would open the gate twice, so it is rejected.
+ */
+const GATE_FIELDS = ['acknowledged', 'paid', 'stage', 'summary'] as const;
+
+function isGate(g: unknown): boolean {
+  if (!isObj(g) || Array.isArray(g)) return false;
+  const keys = Object.keys(g);
+  if (keys.length !== GATE_FIELDS.length || GATE_FIELDS.some((k) => !Object.hasOwn(g, k))) return false;
+  if (typeof g.stage !== 'number' || !Number.isInteger(g.stage)) return false;
+  if (g.stage < 0 || g.stage > GATE_STAGES.length) return false;
+  if (!isGateCost(g.paid) || typeof g.acknowledged !== 'boolean') return false;
+  const paid = g.paid;
+  const open = g.stage === GATE_STAGES.length;
+  if (open) {
+    if (paid.data !== 0 || RESOURCES.some((r) => paid[r] !== 0) || !isObj(g.summary)) return false;
+    const s = g.summary;
+    if (typeof s.warps !== 'number' || !Number.isInteger(s.warps) || s.warps < 0) return false;
+    if (!finite(s.time) || s.time < 0 || !finite(s.rocksBroken) || s.rocksBroken < 0) return false;
+    if (!finite(s.unitsMined) || s.unitsMined < 0 || !finite(s.contracts) || s.contracts < 0) return false;
+    if (!finite(s.refined) || s.refined < 0 || !finite(s.dataEarned) || s.dataEarned < 0) return false;
+    return isDoctrines(s.doctrines);
+  }
+  if (g.summary !== null || g.acknowledged) return false;
+  const cost = GATE_STAGES[g.stage]!.cost;
+  const over = (key: keyof GateCost): boolean => paid[key] > cost[key] + 1e-6;
+  // A column above its bill, or a stage that is already fully paid, never leaves the handler.
+  if (over('data') || RESOURCES.some((r) => over(r))) return false;
+  return !stageMet(paid, cost);
+}
+
 /** True when `p` has a seed, a warp count, data totals, a finite level for every perk, one side per doctrine, well-formed lifetime stats and a first-steps flag. */
 function isProfile(p: Profile | undefined): p is Profile {
   if (!p || !finite(p.seed) || !isObj(p.perks)) return false;
@@ -217,8 +259,8 @@ function isProfile(p: Profile | undefined): p is Profile {
   if (!PERK_IDS.every((k) => finite(p.perks[k]))) return false;
   // The tick reads every pair. A side from another pair would apply the wrong trade-off.
   if (!isDoctrines(p.doctrines)) return false;
-  // The HUD reads the first-steps flag on every refresh.
-  if (typeof p.goalsDismissed !== 'boolean') return false;
+  // The HUD reads the first-steps flag and the gate on every refresh.
+  if (typeof p.goalsDismissed !== 'boolean' || !isGate(p.gate)) return false;
   // The tick adds to every stat and the Stats tab looks up every unlocked achievement.
   return isLifetime(p);
 }

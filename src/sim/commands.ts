@@ -31,6 +31,9 @@ export type Command =
   | { t: 'scrap'; shipId: number }
   | { t: 'buyPerk'; perk: PerkId }
   | { t: 'chooseDoctrine'; pair: DoctrinePairId; side: DoctrineSideId | null }
+  | { t: 'fundGate'; data?: boolean }
+  | { t: 'newGamePlus' }
+  | { t: 'dismissGate' }
   | { t: 'warp'; route: number }
   | { t: 'refine'; recipe: RecipeId; count: number }
   | { t: 'cancelRefine'; jobId: number }

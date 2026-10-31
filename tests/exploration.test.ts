@@ -19,14 +19,14 @@ import { migrate, migrations, type SaveData } from '../src/sim/migrations';
 import { deserialize, serialize } from '../src/sim/save';
 import { flagship } from '../src/sim/ships';
 import V15_FIXTURE from './fixtures/save-v15.json?raw';
-import V16_FIXTURE from './fixtures/save-v16.json?raw';
+import V17_FIXTURE from './fixtures/save-v17.json?raw';
 import { bankDelta, runFor, runTicks, send } from './helpers';
 
 const systemFor = (seed = 4242, number = 1, route = 0) => generateSystem(seed, number, route);
 
 const v15State = (): SaveData => JSON.parse(V15_FIXTURE).state as SaveData;
 
-/** The v15 fixture after its v16 migration, which every validator case starts from. */
+/** The v15 fixture after its v17 migration, which every validator case starts from. */
 const current = (): SaveData => {
   const state = migrate(v15State());
   if (!state) throw new Error('expected the v15 fixture to migrate');
@@ -123,36 +123,36 @@ describe('newExploration', () => {
   });
 });
 
-describe('exploration migration to v16', () => {
+describe('exploration migration to v17', () => {
   it('adds an empty exploration seeded from the saved profile and system', () => {
     const state = current();
     expect(state.version).toBe(SAVE_VERSION);
-    expect(state.version).toBe(16);
+    expect(state.version).toBe(17);
     expect(state.run.exploration).toEqual(newExploration(state.profile.seed, state.run.system.number));
     expect(state.run.exploration.revealed).toEqual([]);
     expect(state.run.exploration.claimed).toEqual([]);
   });
 
   it('is idempotent', () => {
-    const once = migrations[15]!(v15State());
-    const twice = migrations[15]!(JSON.parse(JSON.stringify(once)));
+    const once = migrations[16]!(v15State());
+    const twice = migrations[16]!(JSON.parse(JSON.stringify(once)));
     expect(twice).toEqual(once);
 
     const revealed = { ...once.run.exploration, pingCd: 7, revealed: [1] };
     once.run.exploration = revealed;
-    const again = migrations[15]!(JSON.parse(JSON.stringify(once)));
+    const again = migrations[16]!(JSON.parse(JSON.stringify(once)));
     expect(again.run.exploration).toEqual(revealed);
   });
 });
 
 describe('exploration validation', () => {
-  it('accepts a v16 save with revealed and claimed ids', () => {
+  it('accepts a v17 save with revealed and claimed ids', () => {
     const exploration = { ...current().run.exploration, pingCd: 3, revealed: [0, 2], claimed: [1] };
     const state = deserialize(saveWith(exploration));
     expect(state?.run.exploration).toEqual(exploration);
   });
 
-  it('rejects a v16 save without exploration', () => {
+  it('rejects a v17 save without exploration', () => {
     const state = current();
     const { exploration: _omit, ...run } = state.run;
     expect(deserialize(JSON.stringify({ ...state, run }))).toBeNull();
@@ -195,14 +195,14 @@ describe('exploration validation', () => {
   });
 });
 
-describe('frozen v16 fixture', () => {
+describe('frozen v17 fixture', () => {
   it('loads, keeps its exploration and round-trips through save', () => {
-    const frozen = JSON.parse(V16_FIXTURE).state as SaveData;
-    expect(frozen.version).toBe(16);
+    const frozen = JSON.parse(V17_FIXTURE).state as SaveData;
+    expect(frozen.version).toBe(17);
     expect(frozen.run.exploration).toEqual(newExploration(frozen.profile.seed, frozen.run.system.number));
 
     const state = deserialize(JSON.stringify(frozen));
-    if (!state) throw new Error('expected the v16 fixture to load');
+    if (!state) throw new Error('expected the v17 fixture to load');
     expect(state.version).toBe(SAVE_VERSION);
     expect(state.run.exploration).toEqual(frozen.run.exploration);
     const again = deserialize(serialize(state));

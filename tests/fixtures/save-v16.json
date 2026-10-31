@@ -37,10 +37,24 @@
         "installs": 8,
         "perks": 4,
         "comets": 1,
-        "shipsLost": 0
+        "shipsLost": 0,
+        "gates": 0
       },
       "achievements": ["firstCrack", "prospector", "contractor", "wingman", "firstJump", "smelter"],
-      "goalsDismissed": false
+      "goalsDismissed": false,
+      "gate": {
+        "stage": 0,
+        "paid": {
+          "data": 0,
+          "ore": 40,
+          "ice": 15,
+          "crystal": 0,
+          "alloy": 0,
+          "fuel": 0
+        },
+        "summary": null,
+        "acknowledged": false
+      }
     },
     "run": {
       "system": {
@@ -225,7 +239,7 @@
           "autoUpgrade": false,
           "autoBuild": false,
           "beamOn": false,
-          "beamTargetId": null,
+          "beamTargetId": 592,
           "aiTargetId": null,
           "thrusting": true,
           "collisionCd": 0,
@@ -267,8 +281,8 @@
           "autoUpgrade": false,
           "autoBuild": false,
           "beamOn": true,
-          "beamTargetId": null,
-          "aiTargetId": null,
+          "beamTargetId": 198,
+          "aiTargetId": 198,
           "thrusting": false,
           "collisionCd": 0,
           "respawn": 0
@@ -781,12 +795,6 @@
       "automation": {
         "outposts": [],
         "extracted": 0
-      },
-      "exploration": {
-        "seed": 1336526536,
-        "pingCd": 0,
-        "revealed": [],
-        "claimed": []
       }
     }
   }

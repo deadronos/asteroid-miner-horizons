@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { emptyDoctrines } from '../src/data/doctrines';
+import { freshGate } from '../src/data/gate';
 import { newStats } from '../src/sim/achievements';
 import { newAutomation } from '../src/sim/automation';
 import { defaultVariant } from '../src/data/components';
@@ -16,7 +17,7 @@ import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
 import { validateState } from '../src/sim/validate';
 import { goalDone, type GoalId } from '../src/ui/goals';
-// Real saves frozen at versions 2 to 15 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 17 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
@@ -33,6 +34,7 @@ import V13_FIXTURE from './fixtures/save-v13.json?raw';
 import V14_FIXTURE from './fixtures/save-v14.json?raw';
 import V15_FIXTURE from './fixtures/save-v15.json?raw';
 import V16_FIXTURE from './fixtures/save-v16.json?raw';
+import V17_FIXTURE from './fixtures/save-v17.json?raw';
 
 // The root tsconfig has `types: []`; referencing @types/node here would leak Node globals into src/.
 interface Fs {
@@ -105,11 +107,18 @@ const sansAutoBuild = <R extends { ships: object[] }>(run: R): R => ({
 /** `profile` without the v15 doctrine map. toEqual treats an undefined field as absent. */
 const sansDoctrines = <P extends object>(profile: P): P => ({ ...profile, doctrines: undefined }) as P;
 
-/** `run` without the v16 exploration state. toEqual treats an undefined field as absent. */
+/** `run` without the v17 exploration state. toEqual treats an undefined field as absent. */
 const sansExploration = <R extends { exploration?: unknown }>(run: R): R => ({
   ...run,
   exploration: undefined,
 });
+
+/** `profile` without the v16 gate and the `gates` stat. */
+const sansGate = <P extends { stats?: object }>(profile: P): P => {
+  if (!profile.stats) return { ...profile, gate: undefined } as P;
+  const { gates: _gates, ...stats } = profile.stats as Record<string, unknown>;
+  return { ...profile, gate: undefined, stats } as P;
+};
 
 /** `profile` without the v13 fields: the `installs`, `unloads` and `miningDrones` stats and the first-steps flag. */
 const sansGoals = <P extends { stats: object }>(profile: P): P => {
@@ -127,6 +136,7 @@ const saveCurrent = (run: Record<string, unknown> = {}): SaveData => {
     achievements: [],
     goalsDismissed: false,
     doctrines: emptyDoctrines(),
+    gate: freshGate(),
   };
   return { ...fixture, profile, version: SAVE_VERSION, run: { ...currentRun(), ...run } } as unknown as SaveData;
 };
@@ -938,7 +948,9 @@ describe('lifetime stats migration to v11', () => {
     const loaded = loadFrozen(V10_FIXTURE);
     // toEqual treats an undefined field as absent, so this compares everything else.
     expect(
-      sansDoctrines({ ...loaded.profile, stats: undefined, achievements: undefined, goalsDismissed: undefined }),
+      sansGate(
+        sansDoctrines({ ...loaded.profile, stats: undefined, achievements: undefined, goalsDismissed: undefined }),
+      ),
     ).toEqual(before.profile);
     expect(sansExploration(sansShipAuto(loaded.run))).toEqual(before.run);
   });
@@ -986,7 +998,7 @@ describe('ship automation migration to v12', () => {
   it('keeps the v11 fixture otherwise unchanged', () => {
     const before = JSON.parse(V11_FIXTURE).state;
     const loaded = loadFrozen(V11_FIXTURE);
-    expect(sansDoctrines(sansGoals(loaded.profile))).toEqual(before.profile);
+    expect(sansGate(sansDoctrines(sansGoals(loaded.profile)))).toEqual(before.profile);
     expect(sansExploration(sansShipAuto(loaded.run))).toEqual(before.run);
   });
 
@@ -1044,7 +1056,7 @@ describe('first-steps migration to v13', () => {
   it('keeps the v12 fixture otherwise unchanged', () => {
     const before = JSON.parse(V12_FIXTURE).state;
     const loaded = loadFrozen(V12_FIXTURE);
-    expect(sansDoctrines(sansGoals(loaded.profile))).toEqual(before.profile);
+    expect(sansGate(sansDoctrines(sansGoals(loaded.profile)))).toEqual(before.profile);
     expect(sansExploration(sansAutoBuild(loaded.run))).toEqual(before.run);
   });
 
@@ -1088,12 +1100,12 @@ describe('frozen save fixtures', () => {
     expect(migrated.version).toBe(SAVE_VERSION);
     const validated = validateState(migrated);
     if (!validated) throw new Error('validate rejected the v13 fixture');
-    expect(sansDoctrines(validated.profile)).toEqual(frozen.profile);
+    expect(sansGate(sansDoctrines(validated.profile))).toEqual(frozen.profile);
     expect(sansExploration(sansAutoBuild(validated.run))).toEqual(frozen.run);
 
     const state = loadFrozen(V13_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
-    expect(sansDoctrines(state.profile)).toEqual(frozen.profile);
+    expect(sansGate(sansDoctrines(state.profile))).toEqual(frozen.profile);
     expect(sansExploration(sansAutoBuild(state.run))).toEqual(frozen.run);
   });
 
@@ -1104,8 +1116,33 @@ describe('frozen save fixtures', () => {
     expect(frozen.run.ships.length).toBeGreaterThan(1);
     const state = loadFrozen(V14_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
-    expect(state.profile).toEqual({ ...frozen.profile, doctrines: emptyDoctrines() });
+    expect(sansGate(state.profile)).toEqual({ ...frozen.profile, doctrines: emptyDoctrines() });
     expect(sansExploration(state.run)).toEqual(frozen.run);
+  });
+});
+
+describe('horizon gate migration to v16', () => {
+  it('v15 fixture migrates with the gate not started', () => {
+    const state = loadFrozen(V15_FIXTURE);
+    expect(state.profile.gate).toEqual(freshGate());
+    expect(state.profile.stats.gates).toBe(0);
+  });
+
+  // Seed 4242, hazards on, stopped once system 2 had a second ship. Belt trimmed to eight rocks.
+  // The bot had already delivered Anchor's ore and ice on the way out of system 1; the Horizon Data is still unpaid.
+  it('save-v16 fixture round-trips through fromData', () => {
+    const frozen = JSON.parse(V16_FIXTURE).state as SaveData;
+    expect(frozen.version).toBe(16);
+    expect(frozen.profile.gate.stage).toBe(0);
+    expect(frozen.profile.gate.paid).toMatchObject({ data: 0, ore: 40, ice: 15 });
+    expect(frozen.profile.gate.summary).toBeNull();
+    expect(frozen.run.ships.length).toBeGreaterThan(1);
+    const state = loadFrozen(V16_FIXTURE);
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.profile).toEqual(frozen.profile);
+    expect(sansExploration(state.run)).toEqual(frozen.run);
+    const again = deserialize(serialize(state));
+    expect(again && serialize(again)).toBe(serialize(state));
   });
 });
 
@@ -1123,22 +1160,32 @@ describe('doctrine migration to v15', () => {
     expect(frozen.run.ships.length).toBeGreaterThan(1);
     const state = loadFrozen(V15_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
-    expect(state.profile).toEqual(frozen.profile);
+    expect(state.profile).toEqual({
+      ...frozen.profile,
+      stats: { ...frozen.profile.stats, gates: 0 },
+      gate: freshGate(),
+    });
     expect(sansExploration(state.run)).toEqual(frozen.run);
     const again = deserialize(serialize(state));
     expect(again && serialize(again)).toBe(serialize(state));
   });
 });
 
-describe('exploration migration to v16', () => {
-  // Seed 4242, hazards on, stopped once system 2 had a second ship. The v15 fixture
-  // plus the empty exploration state its migration adds. Belt trimmed to eight rocks.
-  it('save-v16 fixture round-trips through fromData', () => {
-    const frozen = JSON.parse(V16_FIXTURE).state as SaveData;
-    expect(frozen.version).toBe(16);
-    expect(frozen.run.exploration).toEqual(newExploration(frozen.profile.seed, frozen.run.system.number));
+describe('exploration migration to v17', () => {
+  it('v16 fixture migrates with nothing revealed or claimed', () => {
     const state = loadFrozen(V16_FIXTURE);
+    expect(state.run.exploration).toEqual(newExploration(state.profile.seed, state.run.system.number));
+  });
+
+  // Seed 4242, hazards on, stopped once system 2 had a second ship. The v16 fixture
+  // plus the empty exploration state its migration adds. Belt trimmed to eight rocks.
+  it('save-v17 fixture round-trips through fromData', () => {
+    const frozen = JSON.parse(V17_FIXTURE).state as SaveData;
+    expect(frozen.version).toBe(17);
+    expect(frozen.run.exploration).toEqual(newExploration(frozen.profile.seed, frozen.run.system.number));
+    const state = loadFrozen(V17_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
+    expect(state.profile).toEqual(frozen.profile);
     expect(state.run).toEqual(frozen.run);
     const again = deserialize(serialize(state));
     expect(again && serialize(again)).toBe(serialize(state));

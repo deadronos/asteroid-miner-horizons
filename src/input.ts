@@ -167,6 +167,8 @@ export class Input {
       return;
     }
     if (this.hud.menu.open) return; // the menu owns the keyboard while open
+    // The run summary owns the keyboard; Esc already closed it above.
+    if (this.hud.gateOpen) return;
     // Research owns Tab, arrows and Space so they move the dialog instead of the ship.
     if (this.hud.researchOpen) {
       if (!e.repeat && actionFor(this.settings.value.keys, e.code) === 'research') this.runAction('research');

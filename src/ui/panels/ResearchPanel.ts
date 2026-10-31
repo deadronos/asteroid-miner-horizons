@@ -4,8 +4,10 @@ import { DOCTRINE_PAIR_IDS, DOCTRINE_PAIRS } from '../../data/doctrines';
 import { PERKS, PERK_IDS } from '../../data/perks';
 import { dataGain, perkCost } from '../../sim/economy';
 import { doctrinePanel } from '../doctrines';
-import { Panel, h, setDisabled, setText, slotRow } from '../dom';
-import { FOCUSABLE, nextFocusIndex } from '../focus';
+import { gatePanel } from '../gateView';
+import { Panel, bar, h, setDisabled, setText, slotRow } from '../dom';
+import { FOCUSABLE } from '../focus';
+import { previousFocus, trapModalTab } from '../modalKey';
 import type { PanelCtx } from './context';
 
 export class ResearchPanel {
@@ -28,6 +30,16 @@ export class ResearchPanel {
         const box = h('div', { class: 'hud box' });
         const head = h('h2', { text: 'Horizon Research' });
         const intro = h('p', { class: 'dim' });
+        const gateStatus = h('p');
+        const gateNext = h('p', { class: 'dim' });
+        const gateBar = bar('gate');
+        gateBar.el.setAttribute('role', 'img');
+        const gateSummary = h('dl');
+        const gateRule = h('p', { class: 'dim' });
+        const deliver = h('button', { onclick: () => ctx.send({ t: 'fundGate' }) });
+        deliver.type = 'button';
+        const newGame = h('button', { onclick: () => ctx.send({ t: 'newGamePlus' }) });
+        newGame.type = 'button';
         const hint = h('p', { class: 'dim' });
         bind(() => {
           const s = st();
@@ -36,6 +48,23 @@ export class ResearchPanel {
             `Warping to a fresh system resets your bank, ships and components but keeps research. You have ✦ ${s.profile.data} Horizon Data (${s.profile.dataEarned} earned over ${s.profile.warps} warps). Warping now earns +${dataGain(s)} HD.`,
           );
           setText(hint, doctrinePanel(s.profile, s.run.time).hint);
+          const view = gatePanel(s);
+          setText(gateStatus, view.status);
+          setText(gateNext, view.next);
+          gateBar.set(view.fraction, view.bar);
+          gateBar.el.setAttribute('aria-label', view.bar);
+          setText(deliver, view.deliverLabel);
+          deliver.setAttribute('aria-label', `${view.deliverLabel}. ${view.next}`);
+          setDisabled(deliver, view.deliverBlocked != null, view.deliverBlocked ?? '');
+          gateSummary.replaceChildren(
+            ...(view.summary ?? []).flatMap((row) => [h('dt', { text: row.label }), h('dd', { text: row.value })]),
+          );
+          gateSummary.hidden = view.summary == null;
+          setText(gateRule, view.summary ? view.rule : '');
+          gateRule.hidden = view.summary == null;
+          newGame.hidden = view.summary == null;
+          setText(newGame, 'New Game+');
+          newGame.setAttribute('aria-label', `New Game+. ${view.rule}`);
         });
         const doctrines = DOCTRINE_PAIR_IDS.map((pid) => {
           const def = DOCTRINE_PAIRS[pid];
@@ -110,9 +139,23 @@ export class ResearchPanel {
         });
         const close = h('button', { text: 'Close', onclick: () => this.toggle(false) });
         close.type = 'button';
+        const gateBlock = h(
+          'div',
+          { class: 'gate' },
+          h('h3', { class: 'section', text: 'Horizon Gate' }),
+          gateStatus,
+          gateBar.el,
+          gateNext,
+          gateSummary,
+          gateRule,
+          h('div', { class: 'row end' }, deliver, newGame),
+        );
+        gateBlock.setAttribute('role', 'group');
+        gateBlock.setAttribute('aria-label', 'Horizon Gate');
         box.append(
           head,
           intro,
+          gateBlock,
           h('h3', { class: 'section', text: 'Doctrines' }),
           hint,
           ...doctrines,
@@ -129,18 +172,9 @@ export class ResearchPanel {
     window.addEventListener('keydown', this.onKey);
   }
 
-  /** Tab and arrows cycle the dialog. Gamepad uses the same focusable buttons. */
+  /** Tab and arrows cycle the dialog when it is the topmost modal. Gamepad uses the same buttons. */
   private onKey = (e: KeyboardEvent): void => {
-    if (!this.open || e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
-    const tab = e.key === 'Tab';
-    const arrows = e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight';
-    if (!tab && !arrows) return;
-    const items = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.getClientRects().length > 0);
-    const backward = e.key === 'Tab' ? e.shiftKey : e.key === 'ArrowUp' || e.key === 'ArrowLeft';
-    const at = items.indexOf(document.activeElement as HTMLElement);
-    const dest = items[nextFocusIndex(items.length, at, backward)];
-    e.preventDefault();
-    dest?.focus();
+    trapModalTab(this.el, e);
   };
 
   get open(): boolean {
@@ -150,10 +184,7 @@ export class ResearchPanel {
   toggle(force?: boolean): void {
     const open = force ?? !this.open;
     const was = this.open;
-    if (open && !was) {
-      const active = document.activeElement;
-      this.returnTo = active instanceof HTMLElement && active !== document.body ? active : null;
-    }
+    if (open && !was) this.returnTo = previousFocus(document.activeElement);
     this.el.classList.toggle('hidden', !open);
     if (open) {
       this.panel.refresh();
@@ -165,9 +196,11 @@ export class ResearchPanel {
     }
   }
 
+  /** A doctrine button, so opening the panel does not land on Deliver or a perk purchase. */
   private focusFirst(): void {
-    const first = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].find((n) => n.getClientRects().length > 0);
-    first?.focus();
+    const items = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.getClientRects().length > 0);
+    const doctrine = items.find((n) => n.closest('.doctrine'));
+    (doctrine ?? items[0])?.focus();
   }
 
   /** Refreshes only while visible. */

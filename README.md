@@ -138,6 +138,17 @@ It goes away after the first warp; × hides it for that save.
   **Horizon Data** = ⌊√(value delivered this run / 60)⌋. Research spends it on permanent
   perks: yield, laser damage, speed, fleet capacity, a starter kit, cheaper warps, a faster
   refinery (Catalytic Furnace) and more batches per refinery cycle (Bulk Hoppers).
+  The same panel lists the **Horizon Gate**, a three-stage project (Anchor, Ring, Aperture).
+  Each stage costs Horizon Data plus resources from the station bank. Delivering never spends
+  the fuel a warp needs. Ice the refinery would turn into fuel is not held back. Warping does
+  not require the gate: a player who ignores it keeps
+  jumping exactly as before. Progress and the next stage's cost are shown in the research panel
+  and on the top bar, in words. Finishing the last stage records the achievement **Beyond the Horizon**,
+  shows a summary (this run's warps, Horizon Data and doctrines, plus career totals for time, rocks, units, contracts and refined), and
+  offers **New Game+**. New Game+ keeps 3 perk levels in total, taken from your highest perks
+  (ties follow the perk list, Refined Assays first), and 1 doctrine pair: the first one you have
+  set, in Fleet, Hold, Beam order, copied by its side id. Warps, Horizon Data, the other perks
+  and doctrines, and the gate reset. Lifetime stats, achievements and the galaxy seed stay.
   The same panel also offers three exclusive doctrine pairs. Each side is a bonus and a
   cost, and taking one locks the other out. They cost no Horizon Data. You can choose,
   swap or clear a pair only during the first 45 seconds of a system (a new game, and again
@@ -148,7 +159,7 @@ It goes away after the first warp; × hides it for that save.
   +15% laser damage, −20% pickup radius).
 - **Stats & achievements**: each save keeps lifetime stats that survive warps (time played,
   asteroids broken, units mined, warps, contracts, refined units, outposts, launches,
-  flagship unloads, mining drones bought, components installed by hand, research, comets and ships lost) and 21 achievements unlocked from them. An unlock shows
+  flagship unloads, mining drones bought, components installed by hand, research, comets, ships lost and Horizon Gates opened) and 22 achievements unlocked from them. An unlock shows
   a toast and a log line; ⚙ → Stats lists the stats and each achievement's progress.
 - **Offline progress**: loading a save credits the fleet for the time it was closed, up to
   8 hours (absences under a minute are ignored). It is an estimate, not a replay: each
@@ -225,5 +236,4 @@ Each of these is tracked as an open issue; the umbrella for game scope is
 - A station market and trade routes — [#176](https://github.com/deadronos/asteroid-miner-horizons/issues/176)
 - More fleet roles, such as escorts — [#174](https://github.com/deadronos/asteroid-miner-horizons/issues/174)
 - Contract variety and faction reputation — [#173](https://github.com/deadronos/asteroid-miner-horizons/issues/173)
-- An endgame: the Horizon Gate and New Game+ — [#177](https://github.com/deadronos/asteroid-miner-horizons/issues/177)
 - Exploration: sensor ping, rich deposits and derelicts — [#38](https://github.com/deadronos/asteroid-miner-horizons/issues/38)

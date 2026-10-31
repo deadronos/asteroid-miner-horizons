@@ -20,6 +20,7 @@ import { createContractsPanel } from './panels/ContractsPanel';
 import { createFleetPanel } from './panels/FleetPanel';
 import { createGoalsPanel } from './panels/GoalsPanel';
 import { createRefineryPanel } from './panels/RefineryPanel';
+import { GateDialog } from './panels/GateDialog';
 import { ResearchPanel } from './panels/ResearchPanel';
 import { createShipPanel } from './panels/ShipPanel';
 import { createTopBar } from './panels/TopBar';
@@ -59,6 +60,7 @@ export class Hud {
   private getState: () => GameState;
   private panels: Panel[];
   private research: ResearchPanel;
+  private gate: GateDialog;
   private routes: WarpPanel;
   private log = h('div', { class: 'hud' }) as HTMLElement;
   private tooltip = h('div', { class: 'tooltip' });
@@ -134,6 +136,7 @@ export class Hud {
     this.log.id = 'log';
     left.append(this.log);
     this.research = new ResearchPanel(mk('research', 'modal hidden'), ctx);
+    this.gate = new GateDialog(mk('gate', 'modal hidden'), ctx);
     this.routes = new WarpPanel(mk('routes', 'modal hidden'), ctx);
 
     this.help = mk('help');
@@ -176,7 +179,7 @@ export class Hud {
       <b>Fleet</b> tap a ship or Ship ▸ to select · long-press orders without selecting<br>
       <b>Automation</b> Outpost, then tap a large asteroid<br>
       <b>View</b> pinch zoom · drag to pan · Follow · Map · Ping<br>
-      <b>Menus</b> Research · Pause · ? hides help · ⚙ saves & settings`
+      <b>Menus</b> Research and the Horizon Gate · Pause · ? hides help · ⚙ saves & settings`
       : `
       <b>Flight</b> ${k('up')} ${k('left')} ${k('down')} ${k('right')} · click space to move<br>
       <b>Mine</b> click an asteroid (laser auto-chains fragments)<br>
@@ -185,7 +188,7 @@ export class Hud {
       <b>Automation</b> ${k('outpost')} over a large asteroid deploys an outpost · haulers collect from it<br>
       <b>Sensors</b> ${k('ping')} ping · reveals nearby rich deposits and derelicts<br>
       <b>View</b> wheel zoom · drag to pan · ${k('follow')} follow · ${k('map')} map<br>
-      <b>Menus</b> ${k('research')} research · ${k('pause')} pause · ${k('help')} hide help · ⚙ saves & settings`;
+      <b>Menus</b> ${k('research')} research and the Horizon Gate · ${k('pause')} pause · ${k('help')} hide help · ⚙ saves & settings`;
     this.fps.classList.toggle('hidden', !s.showFps);
   }
 
@@ -289,6 +292,10 @@ export class Hud {
 
   /** Esc: close the topmost open overlay. Returns true if something closed. */
   escape(): boolean {
+    if (this.gate.open) {
+      this.gate.dismiss();
+      return true;
+    }
     if (this.menu.escape()) return true;
     if (this.research.open) {
       this.toggleResearch(false);
@@ -313,6 +320,10 @@ export class Hud {
     return this.research.open;
   }
 
+  get gateOpen(): boolean {
+    return this.gate.open;
+  }
+
   toggleResearch(force?: boolean): void {
     this.research.toggle(force);
   }
@@ -324,6 +335,7 @@ export class Hud {
     for (const p of this.panels) p.refresh();
     this.applyCollapse();
     this.research.refresh();
+    this.gate.refresh();
     this.routes.refresh();
     const banner = hazardBanner(state.run);
     this.hazard.classList.toggle('hidden', !banner);

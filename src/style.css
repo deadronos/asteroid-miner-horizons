@@ -294,7 +294,8 @@ select {
 .res.fuel {
   color: var(--fuel);
 }
-.res.data {
+.res.data,
+.res.gate {
   color: #ffe680;
 }
 button.warp {
@@ -458,6 +459,9 @@ button.buy small {
 .bar .fill {
   height: 100%;
   transition: width 0.15s linear;
+}
+.bar.gate .fill {
+  background: #ffe680;
 }
 .bar .label {
   position: absolute;
@@ -679,6 +683,24 @@ button.buy small {
 }
 #research button[aria-disabled='true'] {
   opacity: 0.55;
+}
+#research .gate dl,
+#gate dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+}
+#research .gate dt,
+#gate dt {
+  color: var(--dim, #9ab);
+}
+#research .gate dd,
+#gate dd {
+  margin: 0;
+}
+#gate .box {
+  width: min(560px, calc(100vw - 24px));
 }
 .modal p {
   margin: 0 0 10px;
