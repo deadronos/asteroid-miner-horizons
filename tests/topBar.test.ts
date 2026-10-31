@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../src/sim/create';
-import { resourceReadout, topBarKey } from '../src/ui/panels/TopBar';
+import { researchCue, resourceReadout, topBarKey } from '../src/ui/panels/TopBar';
 
 // The top bar rebuilds only when this key changes (warp, or a loaded slot with different modifiers).
 describe('topBarKey', () => {
@@ -32,6 +32,11 @@ describe('topBarKey', () => {
     const b = newGame(7);
     b.run.system.modifiers = ['nebula'];
     expect(topBarKey(a)).not.toBe(topBarKey(b));
+  });
+
+  it('names the doctrine respec on the Research button while the window is open', () => {
+    expect(researchCue(true)).toEqual({ text: 'Research · respec', label: 'Research. Doctrine respec open.' });
+    expect(researchCue(false)).toEqual({ text: 'Research', label: 'Research' });
   });
 
   it('differs for different system numbers', () => {

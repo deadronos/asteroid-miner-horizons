@@ -129,6 +129,17 @@ describe('chooseDoctrine', () => {
     expect(s.out.log.at(-1)?.text).toContain('−8% flagship speed');
   });
 
+  it('re-picking the current side after the window closes changes nothing and logs nothing', () => {
+    const s = newGame(1);
+    send(s, { t: 'chooseDoctrine', pair: 'fleet', side: 'swarm' });
+    s.run.time = TUNING.doctrineWindow;
+    s.out.log.length = 0;
+    const before = structuredClone(s.profile);
+    send(s, { t: 'chooseDoctrine', pair: 'fleet', side: 'swarm' });
+    expect(s.out.log).toEqual([]);
+    expect(s.profile).toEqual(before);
+  });
+
   it('rejects the other side once the window has closed and changes nothing', () => {
     const s = newGame(1);
     send(s, { t: 'chooseDoctrine', pair: 'fleet', side: 'swarm' });
@@ -176,6 +187,17 @@ describe('chooseDoctrine', () => {
     send(s, { t: 'chooseDoctrine', pair: 'focus', side: null });
     expect(s.profile.doctrines.focus).toBeNull();
     expect(s.out.log.at(-1)?.text).toBe('Cleared Beam.');
+  });
+
+  it('logs the respec window on a new game and again after a warp', () => {
+    const s = newGame(4);
+    const notice = `Doctrine respec open for ${TUNING.doctrineWindow}s (Research).`;
+    expect(s.out.log.some((l) => l.text === notice)).toBe(true);
+    s.run.bank.fuel = 1000;
+    s.out.log.length = 0;
+    send(s, { t: 'warp', route: 0 });
+    const i = s.out.log.findIndex((l) => l.text.startsWith('Warp complete'));
+    expect(s.out.log[i + 1]).toMatchObject({ level: 'info', text: notice });
   });
 
   it('round-trips a chosen doctrine through a save', () => {

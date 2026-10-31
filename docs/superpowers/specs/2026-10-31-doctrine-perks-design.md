@@ -25,7 +25,7 @@ Drone damage applies to the drone role only. Flagship effects apply to the flags
 
 ## Save
 
-`SAVE_VERSION` 15. `migrations[14]` sets every pair to null. A frozen `tests/fixtures/save-v15.json` is a seed-4242 hazards-on run stopped on the tick of the first warp, belt trimmed to eight rocks, same shape as `save-v14.json`.
+`SAVE_VERSION` 15. `migrations[14]` sets every pair to null. A frozen `tests/fixtures/save-v15.json` is a seed-4242 hazards-on run stopped about 128s into system 2, once that system had a second ship. Belt trimmed to eight rocks, same shape as `save-v14.json`.
 
 ## UI
 

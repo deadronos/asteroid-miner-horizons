@@ -336,7 +336,8 @@ describe('command handlers', () => {
     const i = s.out.log.findIndex((l) => l.text.startsWith('Warp complete'));
     expect(i).toBeGreaterThanOrEqual(0);
     expect(s.run.system.modifiers.length).toBeGreaterThan(0);
-    expect(s.out.log[i + 1]!.text).toBe(`System modifiers: ${describeModifiers(s.run.system.modifiers)}.`);
+    expect(s.out.log[i + 1]!.text).toBe(`Doctrine respec open for ${TUNING.doctrineWindow}s (Research).`);
+    expect(s.out.log[i + 2]!.text).toBe(`System modifiers: ${describeModifiers(s.run.system.modifiers)}.`);
   });
   it('warp into system 2 logs no modifier line', () => {
     const s = newGame(1);

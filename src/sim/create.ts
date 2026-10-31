@@ -9,6 +9,7 @@ import { TUNING } from '../data/tuning';
 import { newStats } from './achievements';
 import { newAutomation } from './automation';
 import { fillBoard, newBoard } from './contracts';
+import { doctrineRespecNotice } from './economy';
 import { newHazards } from './hazards';
 import { generateSystem, populateBelts } from './generate';
 import { newRefinery } from './refining';
@@ -83,5 +84,6 @@ export function newGame(seed = (Math.random() * 2 ** 32) >>> 0): GameState {
     level: 'major',
     text: `Welcome to ${state.run.system.name}. Click a rock to mine it, fly over debris to collect it, then dock at the station (click it) to unload.`,
   });
+  state.out.log.push({ level: 'info', text: doctrineRespecNotice() });
   return state;
 }

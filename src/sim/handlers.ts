@@ -26,6 +26,7 @@ import {
   dataGain,
   halve,
   hullBlock,
+  doctrineRespecNotice,
   doctrineWindowOpen,
   perkCost,
   refitBlock,
@@ -113,8 +114,10 @@ export const handlers: Handlers = {
     if (cmd.side !== null && !isDoctrineSide(pair, cmd.side))
       return fail(state, 'That choice is not part of this doctrine.');
     const current = profile.doctrines[pair];
+    // Re-affirming the current side is a keep, including after the window has closed.
+    if (cmd.side === current) return;
     if (!doctrineWindowOpen(state.run.time)) {
-      if (current && cmd.side && cmd.side !== current && isDoctrineSide(pair, cmd.side)) {
+      if (current && cmd.side && isDoctrineSide(pair, cmd.side)) {
         return fail(
           state,
           `${DOCTRINE_SIDES[cmd.side].name} is locked: ${DOCTRINE_SIDES[current].name} is chosen. Respec at warp.`,
@@ -122,7 +125,6 @@ export const handlers: Handlers = {
       }
       return fail(state, 'Doctrines are locked until you warp.');
     }
-    if (cmd.side === current) return;
     profile.doctrines[pair] = cmd.side;
     const def = DOCTRINE_PAIRS[pair];
     out.log.push(
@@ -156,6 +158,7 @@ export const handlers: Handlers = {
       level: 'major',
       text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.`,
     });
+    out.log.push({ level: 'info', text: doctrineRespecNotice() });
     const mods = state.run.system.modifiers;
     if (mods.length > 0) out.log.push({ level: 'major', text: `System modifiers: ${describeModifiers(mods)}.` });
     if (dropped) out.log.push({ level: 'warn', text: `Contract left behind: ${describeContract(dropped)}.` });

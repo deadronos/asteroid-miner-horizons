@@ -465,6 +465,8 @@ function report(results: SeedResult[], seeds: number, warps: number, seedStart: 
     `| Outpost output by system ${AUTOMATION_BY} | ${outpostSeeds}/${results.length} seeds | — | — |`,
     `| Both by system ${AUTOMATION_BY} | ${bothSeeds}/${results.length} seeds (${pct(share(bothSeeds, results.length))}) | ≥ ${pct(AUTOMATION_TARGET_SHARE)} of seeds | **${bothSeeds >= AUTOMATION_TARGET_SHARE * results.length ? 'PASS' : 'FAIL'}** |`,
     `| Median hauler share, systems ${AUTOMATION_BY}–${MID_GAME_END} | ${haulerMid.map((h) => `${h.w + 1}: ${pct(h.median)}`).join(' · ')} | > 0% in each | **${haulerHit ? 'PASS' : 'FAIL'}** |`,
+    '',
+    'Known miss (#50): stacking all three doctrine pairs drops "both by system 4" under the 50% line. The bot sets every pair from the seed (even: all first sides, odd: all second sides), and each side taxes damage, speed, or cargo, so fewer seeds have outpost output by the end of system 4. A one-pair-per-seed pick rule is a likely follow-up; the doctrine numbers are unchanged.',
   );
   // Acceptance check for #207: the fleet cap must not sit unused for most of a run.
   const fleetRows = Array.from({ length: warps }, (_, w) => {

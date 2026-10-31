@@ -18,6 +18,7 @@ export class ResearchPanel {
     ctx: PanelCtx,
   ) {
     el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
     el.setAttribute('aria-label', 'Horizon Research');
     const st = ctx.getState;
     this.panel = new Panel(
@@ -69,9 +70,11 @@ export class ResearchPanel {
             const view = doctrinePanel(st().profile, st().run.time).pairs.find((p) => p.id === pid)!;
             setText(clear, view.clear);
             clear.setAttribute('aria-label', `${def.name}. ${view.clear}`);
-            clear.setAttribute('aria-disabled', view.locked ? 'true' : 'false');
-            // Nothing to clear, and the window is open: skip it in the focus order.
-            clear.disabled = !view.locked && view.picked == null;
+            // Nothing chosen while the window is open: leave the tab order. Locked stays
+            // focusable, and both states set aria-disabled to match whether the click applies.
+            const skip = !view.locked && view.picked == null;
+            clear.disabled = skip;
+            clear.setAttribute('aria-disabled', view.locked || skip ? 'true' : 'false');
             clear.title = view.locked ? 'Respec at warp' : '';
           });
           const group = h(
