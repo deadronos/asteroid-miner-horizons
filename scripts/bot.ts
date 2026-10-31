@@ -22,9 +22,9 @@
 //   whichever resource the bank (or the active delivery contract) needs. The
 //   flagship also leaves the rock to dock when the bank can pay for a hull, and
 //   heads for a large rock when an outpost is affordable.
-//   The sensors ping whenever they are ready, alongside any other order. Until
-//   the first derelict is claimed, the flagship spends the opening of each
-//   system sweeping points around the belts, so its pings reach ground the
+//   The sensors ping whenever they are ready, alongside any other order. Once
+//   the opening purchases are done and until the first derelict is claimed, the
+//   flagship sweeps points around the belts, so its pings reach ground the
 //   station-side rocks never cover. A revealed, safe derelict outranks the
 //   sweep and mining, and the warp waits until it is claimed. Far from the
 //   station, rocks are scored from the station so the ship works its way home.
@@ -71,6 +71,7 @@ import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
 import { richestRoute, warpRoutes } from '../src/sim/routes';
 import {
+  droneCount,
   findShip,
   flagship,
   isAlive,
@@ -111,8 +112,8 @@ const COMET_STEP = 150;
 /** The free sensor ping and an empty order list, shared so a bot cycle allocates neither. */
 const PING_ORDER: readonly Command[] = [{ t: 'ping' }];
 const NO_COMMANDS: readonly Command[] = [];
-/** Seconds at the start of a system spent sweeping the belt with the sensors. */
-const SURVEY_SEC = 60;
+/** Seconds spent sweeping the belts with the sensors once the opening purchases are done. */
+const SURVEY_SEC = 80;
 /** Survey stops once it has visited this many points around the belt. */
 const SURVEY_POINTS = 8;
 /** Beyond this many units from the station, mining is scored from the station so the ship comes home. */
@@ -324,20 +325,46 @@ const SURVEY: Vec2 = { x: 0, z: 0 };
 
 /**
  * The current survey point, written into `SURVEY`. The sweep starts opposite
- * the station and steps around the belt, so the early pings reach anomalies
- * the station-side rocks never cover.
+ * the station and steps around the belt, so its pings reach anomalies the
+ * station-side rocks never cover.
  */
-function surveyPoint(run: Run): Vec2 {
+function surveyPoint(run: Run, elapsed: number): Vec2 {
   const st = run.system.station.pos;
   const belts = run.system.belts;
   const radius = belts.length ? (belts[0]!.inner + belts[belts.length - 1]!.outer) / 2 : 0;
   // Start opposite the station and step around the belt, so the sweep covers
   // both belts without ever aiming at a point the station-side pings reach.
-  const phase = Math.min(SURVEY_POINTS - 1, Math.floor(run.time / (SURVEY_SEC / SURVEY_POINTS)));
+  const phase = Math.min(SURVEY_POINTS - 1, Math.floor(elapsed / (SURVEY_SEC / SURVEY_POINTS)));
   const a = Math.atan2(st.z, st.x) + Math.PI + phase * (Math.PI / 4);
   SURVEY.x = Math.cos(a) * radius;
   SURVEY.z = Math.sin(a) * radius;
   return SURVEY;
+}
+
+/** True once a drone is in the fleet and the flagship's laser is tier 2, the opening purchases. */
+function openingDone(state: GameState): boolean {
+  const fs = flagship(state.run);
+  const laser = fs.slots.find((f) => f?.type === 'laser');
+  return droneCount(state.run) > 0 && (laser?.tier ?? 0) >= 2;
+}
+
+/** Seconds into the current survey, or -1 when the system gets no survey. One entry per run object. */
+const surveyStart = new WeakMap<Run, number>();
+
+/**
+ * The sensor sweep starts after the opening purchases and runs for `SURVEY_SEC`,
+ * so it never delays the opening targets. A claim ends it early.
+ */
+function sweepElapsed(state: GameState): number {
+  const { run } = state;
+  if (run.exploration.claimed.length > 0 || !openingDone(state)) return -1;
+  let start = surveyStart.get(run);
+  if (start == null) {
+    start = run.time;
+    surveyStart.set(run, start);
+  }
+  const elapsed = run.time - start;
+  return elapsed < SURVEY_SEC ? elapsed : -1;
 }
 
 /** True if `pos` lies in the flare zone or a comet path (see `sim/hazards`). */
@@ -388,10 +415,11 @@ function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number, wa
   const derelict = nearestDerelict(state, fs, hz);
   if (derelict && distSq(fs.pos, derelict.pos) > TUNING.derelictClaimRadius ** 2)
     return [{ t: 'move', shipId: fs.id, to: { ...derelict.pos } }];
-  // Before any derelict is claimed, hold the current survey point for a sweep:
-  // the station-side pings alone never reach anomalies out there.
-  if (run.time < SURVEY_SEC && run.exploration.claimed.length === 0) {
-    const p = surveyPoint(run);
+  // Once the opening purchases are done, hold the current survey point for a
+  // sweep: the station-side pings alone never reach anomalies out there.
+  const sweep = sweepElapsed(state);
+  if (sweep >= 0) {
+    const p = surveyPoint(run, sweep);
     return distSq(fs.pos, p) > 120 * 120 ? [{ t: 'move', shipId: fs.id, to: { x: p.x, z: p.z } }] : [];
   }
   // A mine order stands unless its rock has drifted into danger.
