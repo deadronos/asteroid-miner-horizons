@@ -11,16 +11,28 @@ export function previousFocus(active: Element | null): HTMLElement | null {
   return active as HTMLElement;
 }
 
-/** True when `el` is the last `.modal` in the document that is not `.hidden`. */
+/** The last `.modal` in the document that is not `.hidden`: the dialog on top, or null when none is open. */
+export function topModal(): HTMLElement | null {
+  const modals = [...document.querySelectorAll<HTMLElement>('.modal')];
+  for (let i = modals.length - 1; i >= 0; i--) if (!modals[i]!.classList.contains('hidden')) return modals[i]!;
+  return null;
+}
+
+/** True when `el` is the dialog on top, so Esc and the gamepad act on it rather than one underneath. */
 export function isTopModal(el: HTMLElement): boolean {
-  if (el.classList.contains('hidden')) return false;
-  const modals = [...el.ownerDocument.querySelectorAll('.modal')];
-  for (let i = modals.length - 1; i >= 0; i--) {
-    const node = modals[i]!;
-    if (node.classList.contains('hidden')) continue;
-    return node === el;
-  }
-  return false;
+  return !el.classList.contains('hidden') && topModal() === el;
+}
+
+/**
+ * Closes the topmost visible `.modal` when it is one of `dialogs`.
+ * Esc and the gamepad's B share this, so they close what is drawn on top.
+ */
+export function closeTopModal(dialogs: readonly { el: HTMLElement; close: () => void }[]): boolean {
+  const top = topModal();
+  const hit = top ? dialogs.find((d) => d.el === top) : undefined;
+  if (!hit) return false;
+  hit.close();
+  return true;
 }
 
 /**

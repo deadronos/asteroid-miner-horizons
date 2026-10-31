@@ -1,4 +1,4 @@
-// A tiny document, enough to build the research and gate dialogs and dispatch Tab.
+// A tiny document, enough to build the research, gate and warp dialogs and dispatch Tab.
 // The suite stays on the node environment, so this is not a DOM implementation.
 
 export interface FakeEl {
@@ -25,7 +25,7 @@ export interface FakeEl {
   getAttribute: (name: string) => string | null;
   hasAttribute: (name: string) => boolean;
   addEventListener: (type: string, fn: (e: Event) => void) => void;
-  append: (...nodes: FakeEl[]) => void;
+  append: (...nodes: (FakeEl | string)[]) => void;
   replaceChildren: (...nodes: FakeEl[]) => void;
   querySelectorAll: (selector: string) => FakeEl[];
   getClientRects: () => { length: number };
@@ -42,7 +42,7 @@ export interface FakeDoc {
   querySelectorAll: (selector: string) => FakeEl[];
 }
 
-const listeners: ((e: KeyboardEvent) => void)[] = [];
+const listeners: { type: string; fn: (e: KeyboardEvent) => void }[] = [];
 
 /** Drops elements and key listeners from the previous test. */
 export function resetDom(): void {
@@ -50,19 +50,20 @@ export function resetDom(): void {
   const doc = createDoc();
   const win = {
     document: doc,
-    addEventListener: (_type: string, fn: (e: KeyboardEvent) => void) => {
-      listeners.push(fn);
+    addEventListener: (type: string, fn: (e: KeyboardEvent) => void) => {
+      listeners.push({ type, fn });
     },
     removeEventListener: () => {},
   };
   Object.assign(globalThis, { document: doc, window: win });
 }
 
-/** Fires `key` on every window listener, in registration order. */
-export function pressKey(key: string, shift = false): void {
+/** Fires a `keydown` for `key` (its `code` defaults to the key) on every window listener, in order. */
+export function pressKey(key: string, shift = false, code = key): void {
   let prevented = false;
   const event = {
     key,
+    code,
     shiftKey: shift,
     ctrlKey: false,
     altKey: false,
@@ -74,7 +75,7 @@ export function pressKey(key: string, shift = false): void {
       prevented = true;
     },
   } as KeyboardEvent;
-  for (const fn of listeners) fn(event);
+  for (const l of listeners) if (l.type === 'keydown') l.fn(event);
 }
 
 function createDoc(): FakeDoc {
@@ -140,8 +141,9 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
     addEventListener: () => {},
     append(...nodes) {
       for (const n of nodes) {
-        n.parent = el;
-        el.childNodes.push(n);
+        const node = typeof n === 'string' ? textNode(doc, n) : n;
+        node.parent = el;
+        el.childNodes.push(node);
       }
     },
     replaceChildren(...nodes) {
@@ -182,6 +184,13 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
   return el;
 }
 
+/** A text node: only `parent`, `tag` and `textContent` matter to the walkers below. */
+function textNode(doc: FakeDoc, text: string): FakeEl {
+  const node = createEl(doc, '#text');
+  node.textContent = text;
+  return node;
+}
+
 function shown(el: FakeEl): boolean {
   let n: FakeEl | null = el;
   let connected = false;
@@ -212,6 +221,7 @@ function hit(el: FakeEl, selector: string): boolean {
   if (selector === '.doctrine button')
     return el.tag === 'button' && el.closest('.doctrine') !== el && !!el.closest('.doctrine');
   if (selector === 'button:not([disabled])') return el.tag === 'button' && !el.disabled;
+  if (selector === 'button.warp') return el.tag === 'button' && el.classList.contains('warp');
   if (selector === 'button') return el.tag === 'button';
   return false;
 }

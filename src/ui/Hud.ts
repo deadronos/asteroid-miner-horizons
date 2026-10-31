@@ -14,6 +14,7 @@ import { hazardBanner } from './hazardBanner';
 import { PALETTES } from '../data/palette';
 import { applyPaletteVars } from './paletteVars';
 import { helpVisible, isCollapsed, toggledCollapse, touchControlsShown } from './hudLayout';
+import { closeTopModal } from './modalKey';
 import { Menu } from './Menu';
 import type { PanelCtx } from './panels/context';
 import { createContractsPanel } from './panels/ContractsPanel';
@@ -292,20 +293,14 @@ export class Hud {
 
   /** Esc: close the topmost open overlay. Returns true if something closed. */
   escape(): boolean {
-    if (this.gate.open) {
-      this.gate.dismiss();
-      return true;
-    }
     if (this.menu.escape()) return true;
-    if (this.research.open) {
-      this.toggleResearch(false);
-      return true;
-    }
-    if (this.routes.open) {
-      this.toggleWarp(false);
-      return true;
-    }
-    return false;
+    // The gate, Research and the warp picker can stack in any order, so close whichever is on top;
+    // the gate's own dismiss is its "Keep playing" button.
+    return closeTopModal([
+      { el: this.gate.el, close: () => this.gate.dismiss() },
+      { el: this.research.el, close: () => this.research.toggle(false) },
+      { el: this.routes.el, close: () => this.routes.toggle(false) },
+    ]);
   }
 
   get warpOpen(): boolean {
