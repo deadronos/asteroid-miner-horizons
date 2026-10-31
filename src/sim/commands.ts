@@ -37,6 +37,7 @@ export type Command =
   | { t: 'acceptContract'; contractId: number }
   | { t: 'abandonContract' }
   | { t: 'deployOutpost'; rockId: number }
+  | { t: 'ping' }
   | { t: 'dismissGoals' };
 
 export function applyCommand(state: GameState, cmd: Command): void {

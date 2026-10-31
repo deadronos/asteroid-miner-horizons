@@ -6,7 +6,7 @@
 import { len, type Vec2 } from '../core/vec';
 import { flareExposure } from '../sim/hazards';
 import { isAlive, selectedShip, shipStats } from '../sim/ships';
-import type { Fx, LogEntry, LogEvent, Profile, Run } from '../sim/types';
+import type { Fx, LogEntry, Profile, Run } from '../sim/types';
 import type { ZzfxParams } from './zzfx';
 
 export type SoundId =
@@ -103,7 +103,8 @@ export class RateLimiter {
   }
 }
 
-export type CueKey = LogEvent | 'achievement';
+/** Events with a sound today; new sim events join this list when their audio lands. */
+export type CueKey = 'research' | 'contractDone' | 'contractFail' | 'outpost' | 'shipLoss' | 'achievement';
 
 /** Which preset each event identity plays. Its level is the preset's own volume (`PRESETS[id][0]`). */
 export const CUES: Readonly<Record<CueKey, SoundId>> = Object.freeze({
@@ -131,7 +132,8 @@ export function cueBatch(log: readonly LogEntry[]): { deny: boolean; cues: CueKe
   for (const l of log) {
     if (l.level === 'warn' && !l.event) deny = true;
     if (l.achievement) cues.add('achievement');
-    if (l.event) cues.add(l.event);
+    // Ping and salvage are visual-only for now; they get cues with the audio pass.
+    if (l.event && l.event !== 'ping' && l.event !== 'salvage') cues.add(l.event);
   }
   if (cues.has('achievement')) cues.delete('contractDone');
   return { deny, cues: [...cues] };
@@ -227,6 +229,9 @@ export function voiceFor(fx: Fx, view: View, streak: Streak, now: number): Voice
       return { id: 'impact', gain: g, pan, rate: jitter, cutoff };
     case 'explode':
       return { id: 'explode', gain: g, pan, rate: jitter, cutoff };
+    case 'ping':
+      // Visual-only for now; the audio pass will give it a cue.
+      return null;
   }
 }
 

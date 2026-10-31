@@ -1,6 +1,6 @@
 // The fixed-step simulation tick. Order of operations:
-// commands → orbits → rocks → hazards → outposts → ships (pilot, collide, heat, dock) → pickups → belt regrowth →
-// contracts → refinery → achievements.
+// commands → time and sensor cooldown → orbits → rocks → hazards → outposts → ships (pilot, collide, heat, dock) →
+// exploration (derelict salvage) → pickups → belt regrowth → contracts → refinery → achievements.
 
 import { range } from '../core/rng';
 import { damp, dist, integrate, len, type Vec2, hypot2 } from '../core/vec';
@@ -14,6 +14,7 @@ import { haulerThink, updateOutposts } from './automation';
 import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
+import { updateExploration } from './exploration';
 import { serviceDocked } from './fleetAuto';
 import { spawnBeltRock } from './generate';
 import { flareExposure, updateHazards } from './hazards';
@@ -49,6 +50,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   const { run } = state;
   run.time += dt;
   state.profile.stats.time += dt;
+  if (run.exploration.pingCd > 0) run.exploration.pingCd = Math.max(0, run.exploration.pingCd - dt);
 
   for (const p of run.system.planets) {
     p.angle += p.speed * dt;
@@ -100,6 +102,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     if (run.ships.length !== before) i = -1;
   }
 
+  updateExploration(state);
   updatePickups(state, index, dt);
   regrowBelts(state, dt);
   updateContracts(state, dt);

@@ -34,6 +34,8 @@ export interface Rock {
   trait?: RockTrait;
   /** Set on a live comet, which flies straight instead of settling into orbit. Absent on every other rock. */
   comet?: true;
+  /** A rich deposit's rock: a large rock with `richYieldMul` times the usual units. Absent on every other rock. */
+  rich?: true;
 }
 
 export interface Pickup {
@@ -292,10 +294,11 @@ export type Fx =
   | { t: 'impact'; pos: Vec2 }
   | { t: 'explode'; pos: Vec2 }
   | { t: 'warp' }
-  | { t: 'hazard'; kind: 'comet' | 'flare'; phase: 'warn' | 'start'; pos?: Vec2 };
+  | { t: 'hazard'; kind: 'comet' | 'flare'; phase: 'warn' | 'start'; pos?: Vec2 }
+  | { t: 'ping'; pos: Vec2; range: number };
 
-/** Explicit event identities the audio layer keys on (details stay in `text`). */
-export type LogEvent = 'research' | 'contractDone' | 'contractFail' | 'outpost' | 'shipLoss';
+/** Explicit event identities the HUD and audio layer can key on (details stay in `text`). */
+export type LogEvent = 'research' | 'contractDone' | 'contractFail' | 'outpost' | 'shipLoss' | 'ping' | 'salvage';
 
 export interface LogEntry {
   /** info: routine · warn: rejected command / danger · major: milestones and losses */

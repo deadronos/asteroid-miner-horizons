@@ -128,7 +128,8 @@ function isRock(r: unknown): boolean {
     finite(r.hp) &&
     finite(r.maxHp) &&
     finite(r.units) &&
-    finite(r.belt)
+    finite(r.belt) &&
+    (r.rich === undefined || r.rich === true)
   );
 }
 
