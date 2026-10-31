@@ -369,7 +369,8 @@ function isExploration(e: unknown): boolean {
     finite(e.seed) &&
     finite(e.pingCd) &&
     isAnomalyIds(e.revealed) &&
-    isAnomalyIds(e.claimed)
+    isAnomalyIds(e.claimed) &&
+    (e.claimed as number[]).every((id) => (e.revealed as number[]).includes(id))
   );
 }
 

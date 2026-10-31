@@ -90,6 +90,22 @@ describe('collectBlips', () => {
     expect(collectBlips(run, out)).toBe(base);
   });
 
+  it('marks rich deposits at the live rock and drops them when mined', () => {
+    const { run } = newGame(5);
+    const out: Blip[] = [];
+    const rich = run.rocks[0]!;
+    rich.rich = true;
+    rich.pos = { x: 123, z: -456 };
+    const base = collectBlips(run, out);
+    expect(out.slice(0, base)).toContainEqual({ kind: 'rich', x: 123, z: -456 });
+    rich.pos = { x: 200, z: 300 };
+    collectBlips(run, out);
+    expect(out.slice(0, base)).toContainEqual({ kind: 'rich', x: 200, z: 300 });
+    run.rocks.splice(0, 1);
+    const after = collectBlips(run, out);
+    expect(out.slice(0, after).some((b) => b.kind === 'rich')).toBe(false);
+  });
+
   it('reuses blip objects between calls', () => {
     const { run } = newGame(5);
     const out: Blip[] = [];

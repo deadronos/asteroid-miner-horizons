@@ -18,7 +18,7 @@ import {
 } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { ROCK_RADII, rockHp } from './generate';
-import { isAlive } from './ships';
+import { clampToStats, isAlive } from './ships';
 import type { Anomaly, Belt, Exploration, GameState, Rock, Run, Ship, StarSystem } from './types';
 
 /**
@@ -78,13 +78,13 @@ export function rollAnomalies(seed: number, system: StarSystem): Anomaly[] {
 }
 
 /** One cached roll per seed; the list is read-only and only the system it was rolled for is valid. */
-const anomalyCache = new Map<number, { system: StarSystem; list: Anomaly[] }>();
+const anomalyCache = new Map<number, { system: StarSystem; list: readonly Anomaly[] }>();
 
 /**
  * The run's hidden anomalies, rolled once per seed and cached. Treat the result
  * as read-only: the sim copies positions out of it and never edits an entry.
  */
-export function anomalies(run: Run): Anomaly[] {
+export function anomalies(run: Run): readonly Anomaly[] {
   const { seed } = run.exploration;
   const hit = anomalyCache.get(seed);
   if (hit && hit.system === run.system) return hit.list;
@@ -171,7 +171,7 @@ function rewardText(reward: Cost): string {
 export function updateExploration(state: GameState): void {
   const { run } = state;
   const { exploration } = run;
-  if (exploration.revealed.length === 0 || exploration.revealed.length === exploration.claimed.length) return;
+  if (exploration.revealed.length === 0) return;
   const list = anomalies(run);
   for (let i = 0; i < exploration.revealed.length; i++) {
     const id = exploration.revealed[i]!;
@@ -194,6 +194,7 @@ export function updateExploration(state: GameState): void {
       const slot = claimer.slots.indexOf(null);
       if (slot >= 0) {
         claimer.slots[slot] = { type: drop, variant, tier: 1 };
+        clampToStats(state, claimer);
         tail = ` + ${COMPONENTS[drop].name}`;
       } else {
         const cost = variantDef(drop, variant).cost(1);

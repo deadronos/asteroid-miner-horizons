@@ -10,10 +10,10 @@ import type { ShipStats } from './ships';
 import type { Belt, StarSystem } from './types';
 
 export interface SystemEffects {
-  beltCount: number;
-  mix: Record<RawResource, number>;
-  magnet: number;
-  regrowInterval: number;
+  readonly beltCount: number;
+  readonly mix: Readonly<Record<RawResource, number>>;
+  readonly magnet: number;
+  readonly regrowInterval: number;
 }
 
 const KINDS: readonly RawResource[] = ['ore', 'ice', 'crystal'];
@@ -40,14 +40,18 @@ let fxValue: SystemEffects | null = null;
 /** The product of every modifier's multipliers; 1 where a modifier says nothing. Cached per modifiers array. */
 export function systemEffects(mods: readonly ModifierId[]): SystemEffects {
   if (mods === fxMods && fxValue) return fxValue;
-  const fx: SystemEffects = { beltCount: 1, mix: { ore: 1, ice: 1, crystal: 1 }, magnet: 1, regrowInterval: 1 };
+  const mix = { ore: 1, ice: 1, crystal: 1 };
+  let beltCount = 1;
+  let magnet = 1;
+  let regrowInterval = 1;
   for (const id of mods) {
     const m = MODIFIERS[id];
-    fx.beltCount *= m.beltCount ?? 1;
-    fx.magnet *= m.magnet ?? 1;
-    fx.regrowInterval *= m.regrowInterval ?? 1;
-    for (const k of KINDS) fx.mix[k] *= m.mix?.[k] ?? 1;
+    beltCount *= m.beltCount ?? 1;
+    magnet *= m.magnet ?? 1;
+    regrowInterval *= m.regrowInterval ?? 1;
+    for (const k of KINDS) mix[k] *= m.mix?.[k] ?? 1;
   }
+  const fx: SystemEffects = Object.freeze({ beltCount, mix: Object.freeze(mix), magnet, regrowInterval });
   fxMods = mods;
   fxValue = fx;
   return fx;

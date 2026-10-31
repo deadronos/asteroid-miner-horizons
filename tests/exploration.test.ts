@@ -147,7 +147,7 @@ describe('exploration migration to v17', () => {
 
 describe('exploration validation', () => {
   it('accepts a v17 save with revealed and claimed ids', () => {
-    const exploration = { ...current().run.exploration, pingCd: 3, revealed: [0, 2], claimed: [1] };
+    const exploration = { ...current().run.exploration, pingCd: 3, revealed: [0, 2], claimed: [0] };
     const state = deserialize(saveWith(exploration));
     expect(state?.run.exploration).toEqual(exploration);
   });
@@ -156,6 +156,11 @@ describe('exploration validation', () => {
     const state = current();
     const { exploration: _omit, ...run } = state.run;
     expect(deserialize(JSON.stringify({ ...state, run }))).toBeNull();
+  });
+
+  it('rejects a claimed id that was never revealed', () => {
+    const state = current();
+    expect(deserialize(saveWith({ ...state.run.exploration, revealed: [], claimed: [0] }))).toBeNull();
   });
 
   it('rejects malformed exploration', () => {
@@ -180,6 +185,7 @@ describe('exploration validation', () => {
       { ...good, claimed: [0, 0] },
       { ...good, claimed: [-2] },
       { ...good, claimed: [null] },
+      { ...good, claimed: [0] },
     ];
     expect(deserialize(saveWith(good))).not.toBeNull();
     for (const exploration of bad) expect(deserialize(saveWith(exploration))).toBeNull();

@@ -56,11 +56,20 @@ export function collectBlips(run: Run, out: Blip[]): number {
     push(s.id === run.selectedId ? 'selected' : 'ship', s.pos.x, s.pos.z);
   }
   for (const o of run.automation.outposts) push('outpost', o.pos.x, o.pos.z);
+  // Rich deposits follow the live rock: it orbits and disappears when mined.
+  const rocks = run.rocks;
+  for (let i = 0; i < rocks.length; i++) {
+    const r = rocks[i]!;
+    if (r.rich) push('rich', r.pos.x, r.pos.z);
+  }
+  // Derelicts stay at their anomaly position until their salvage is claimed.
   const anomalyList = anomalies(run);
-  for (const id of run.exploration.revealed) {
+  const revealed = run.exploration.revealed;
+  for (let i = 0; i < revealed.length; i++) {
+    const id = revealed[i]!;
     if (isClaimed(run, id)) continue;
     const a = anomalyList[id];
-    if (a && a.id === id) push(a.kind, a.pos.x, a.pos.z);
+    if (a?.id === id && a.kind === 'derelict') push('derelict', a.pos.x, a.pos.z);
   }
   const c = run.hazards.comet;
   if (c) push('comet', c.from.x, c.from.z);

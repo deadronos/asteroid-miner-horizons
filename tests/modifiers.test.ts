@@ -124,6 +124,14 @@ describe('systemEffects', () => {
     expect(systemEffects(['dense', 'nebula'])).toMatchObject({ beltCount: 1.4, magnet: 0.85, regrowInterval: 0.3 });
     expect(systemEffects(['metalRich', 'icePoor']).mix).toEqual({ ore: 1.3, ice: 0.7, crystal: 1 });
   });
+
+  it('returns a frozen cached object', () => {
+    const mods: ModifierId[] = ['metalRich'];
+    const fx = systemEffects(mods);
+    expect(Object.isFrozen(fx)).toBe(true);
+    expect(Object.isFrozen(fx.mix)).toBe(true);
+    expect(systemEffects(mods)).toBe(fx);
+  });
 });
 
 const belts = (): Belt[] => [

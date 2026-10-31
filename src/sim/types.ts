@@ -254,9 +254,10 @@ export interface Hazards {
 }
 
 /** A hidden point of interest; derived from `exploration.seed`, never persisted itself. */
+/** Read-only: the anomaly cache is process-global and shared between callers. */
 export type Anomaly =
-  | { id: number; kind: 'rich'; pos: Vec2; resource: RawResource }
-  | { id: number; kind: 'derelict'; pos: Vec2; salvage: number };
+  | { readonly id: number; readonly kind: 'rich'; readonly pos: Vec2; readonly resource: RawResource }
+  | { readonly id: number; readonly kind: 'derelict'; readonly pos: Vec2; readonly salvage: number };
 
 export interface Exploration {
   /** Seed the anomaly list is derived from; mixed from profile seed, system and warp route. */

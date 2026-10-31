@@ -43,7 +43,17 @@ import { applyDismissGate, applyFundGate, applyNewGamePlus } from './gate';
 import { describeModifiers } from './modifiers';
 import { batchCost, cancelRefine, jobLabel, queueRefine } from './refining';
 import { isRoute } from './routes';
-import { droneCount, findShip, flagship, isAlive, isBuilder, isFlagship, makeShip, shipStats } from './ships';
+import {
+  clampToStats,
+  droneCount,
+  findShip,
+  flagship,
+  isAlive,
+  isBuilder,
+  isFlagship,
+  makeShip,
+  shipStats,
+} from './ships';
 import { canMine } from './traits';
 import type { Fitted, GameState, Ship } from './types';
 
@@ -55,13 +65,6 @@ function fail(state: GameState, msg: string): void {
 }
 
 const refundFitted = (state: GameState, f: Fitted): void => credit(state.run.bank, scrapValue(f));
-
-/** Keeps hull/shield within new maxima after a refit, preserving damage taken. */
-function clampToStats(state: GameState, ship: Ship): void {
-  const st = shipStats(ship, state.profile);
-  ship.hull = Math.min(ship.hull, st.maxHull);
-  ship.shield = Math.min(ship.shield, st.maxShield);
-}
 
 /** The eleven ship-scoped variants (everything with a shipId). */
 type ShipCommand = Extract<Command, { shipId: number }>;
