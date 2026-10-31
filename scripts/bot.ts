@@ -9,7 +9,11 @@
 //   no Horizon Data, and never clears a pair. Time 0 is skipped so the
 //   decision that warps (the old system's clock) is not also a respec; the
 //   next decision lands inside the new system's window.
-//   buy affordable perks → warp once the bank has the fuel (to the route
+//   buy affordable perks → on the tick the bank can warp, deliver spare
+//   resources to the Horizon Gate (warp fuel is left untouched). Spare
+//   Horizon Data is included only from system 7 on (profile.warps >= 6), so
+//   the delivery does not delay the perks the mid-game targets measure.
+//   Then warp (to the route
 //   with the most rock value, lower hazard on a tie) → accept a
 //   serviceable contract → dock when the hold is full → while docked,
 //   repair / buy one thing (after the first drone, the flagship's tier-2
@@ -53,6 +57,7 @@ import {
   upgradeCost,
   warpCost,
 } from '../src/sim/economy';
+import { gatePayment } from '../src/sim/gate';
 import { outpostAt, outpostBlock } from '../src/sim/automation';
 import { findRock } from '../src/sim/generate';
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
@@ -134,8 +139,18 @@ function pilotCommands(state: GameState, opts: BotOptions): Command[] {
   if (perk) return [{ t: 'buyPerk', perk }];
 
   const wc = warpCost(state);
-  if (opts.warp !== false && run.bank.fuel >= wc)
-    return [{ t: 'warp', route: opts.route === 'first' ? 0 : chooseRoute(state) }];
+  if (opts.warp !== false && run.bank.fuel >= wc) {
+    const route = opts.route === 'first' ? 0 : chooseRoute(state);
+    // Spare resources would be abandoned at the jump. Horizon Data joins them
+    // only once the measured mid-game is over. Warp fuel is reserved either way.
+    const data = profile.warps >= 6;
+    return gatePayment(state, { data })
+      ? [
+          { t: 'fundGate', data },
+          { t: 'warp', route },
+        ]
+      : [{ t: 'warp', route }];
+  }
 
   if (!isAlive(fs)) return [];
 

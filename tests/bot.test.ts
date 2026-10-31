@@ -48,13 +48,19 @@ describe('balance bot route choice', () => {
     for (let seed = 1; seed <= 10; seed++) {
       const s = ready(seed);
       const values = warpRoutes(s.profile).map(routeValue);
-      expect(botCommands(s)).toEqual([{ t: 'warp', route: values.indexOf(Math.max(...values)) }]);
+      expect(botCommands(s)).toEqual([
+        { t: 'fundGate', data: false },
+        { t: 'warp', route: values.indexOf(Math.max(...values)) },
+      ]);
       expect(chooseRoute(s)).toBe(values.indexOf(Math.max(...values)));
     }
   });
 
   it('takes route 0 under the first policy', () => {
-    expect(botCommands(ready(4), { route: 'first' })).toEqual([{ t: 'warp', route: 0 }]);
+    expect(botCommands(ready(4), { route: 'first' })).toEqual([
+      { t: 'fundGate', data: false },
+      { t: 'warp', route: 0 },
+    ]);
   });
 });
 

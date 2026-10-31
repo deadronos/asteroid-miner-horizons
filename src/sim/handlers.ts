@@ -37,6 +37,7 @@ import {
   warpCost,
 } from './economy';
 import { findRock } from './generate';
+import { applyDismissGate, applyFundGate, applyNewGamePlus } from './gate';
 import { describeModifiers } from './modifiers';
 import { batchCost, cancelRefine, jobLabel, queueRefine } from './refining';
 import { isRoute } from './routes';
@@ -137,6 +138,18 @@ export const handlers: Handlers = {
         : { level: 'major', text: `Cleared ${def.name}.`, event: 'research' },
     );
     for (const s of state.run.ships) clampToStats(state, s);
+  },
+
+  fundGate: (state, cmd) => {
+    applyFundGate(state, { data: cmd.data });
+  },
+
+  newGamePlus: (state) => {
+    applyNewGamePlus(state);
+  },
+
+  dismissGate: (state) => {
+    applyDismissGate(state);
   },
 
   warp: (state, cmd) => {

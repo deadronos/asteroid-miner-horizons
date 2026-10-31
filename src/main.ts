@@ -165,7 +165,7 @@ function step(now: number): void {
         pauseInMenus: s.pauseInMenus,
         pauseUnfocused: s.pauseUnfocused,
         menuOpen: hud.menu.open,
-        researchOpen: hud.researchOpen,
+        researchOpen: hud.researchOpen || hud.gateOpen,
         warpOpen: hud.warpOpen,
         focused: document.hasFocus(),
       });

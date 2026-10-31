@@ -114,6 +114,7 @@ const REQUIRED_PATHS = [
   'profile.seed',
   'profile.warps',
   'profile.doctrines',
+  'profile.gate',
   'run',
   'run.rng',
   'run.rng.s',

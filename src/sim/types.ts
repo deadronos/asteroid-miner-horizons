@@ -10,6 +10,7 @@ import type { ContractKind } from '../data/contracts';
 import type { HullId } from '../data/hulls';
 import type { ModifierId } from '../data/modifiers';
 import type { DoctrineChoice } from '../data/doctrines';
+import type { GateProject } from '../data/gate';
 import type { PerkId } from '../data/perks';
 import type { RecipeId } from '../data/refining';
 import type { Cost, RawResource, Wallet } from '../data/resources';
@@ -266,6 +267,8 @@ export interface Profile {
   achievements: AchievementId[];
   /** The player closed the first-steps checklist (#171); it stays hidden for this save. */
   goalsDismissed: boolean;
+  /** Horizon Gate progress. Survives warps; New Game+ clears it. */
+  gate: GateProject;
 }
 
 export type Fx =

@@ -35,8 +35,14 @@ describe('topBarKey', () => {
   });
 
   it('names the doctrine respec on the Research button while the window is open', () => {
-    expect(researchCue(true)).toEqual({ text: 'Research · respec', label: 'Research. Doctrine respec open.' });
-    expect(researchCue(false)).toEqual({ text: 'Research', label: 'Research' });
+    expect(researchCue(true, 'Horizon Gate, stage 1 of 3: Anchor.')).toEqual({
+      text: 'Research · respec',
+      label: 'Research. Doctrine respec open. Horizon Gate, stage 1 of 3: Anchor.',
+    });
+    expect(researchCue(false, 'Horizon Gate open.')).toEqual({
+      text: 'Research',
+      label: 'Research. Horizon Gate open.',
+    });
   });
 
   it('differs for different system numbers', () => {

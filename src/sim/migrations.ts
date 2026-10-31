@@ -4,6 +4,7 @@
 // replaying the entries in order instead of being rejected outright.
 
 import { defaultVariant } from '../data/components';
+import { freshGate } from '../data/gate';
 import { HULLS } from '../data/hulls';
 import { newStats } from './achievements';
 import { newAutomation } from './automation';
@@ -130,6 +131,12 @@ export const migrations: Record<number, Migration> = {
   // v15 added doctrine pairs (#50). Nobody has chosen a side yet.
   14: (d) => {
     d.profile.doctrines = { fleet: null, haul: null, focus: null };
+    return d;
+  },
+  // v16 added the Horizon Gate (#177). Old saves have not started it.
+  15: (d) => {
+    d.profile.gate = freshGate();
+    d.profile.stats.gates = 0;
     return d;
   },
 };
