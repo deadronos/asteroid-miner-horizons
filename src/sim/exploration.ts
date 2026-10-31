@@ -171,7 +171,7 @@ function rewardText(reward: Cost): string {
 export function updateExploration(state: GameState): void {
   const { run } = state;
   const { exploration } = run;
-  if (exploration.revealed.length === 0) return;
+  if (exploration.revealed.length === 0 || exploration.revealed.length === exploration.claimed.length) return;
   const list = anomalies(run);
   for (let i = 0; i < exploration.revealed.length; i++) {
     const id = exploration.revealed[i]!;

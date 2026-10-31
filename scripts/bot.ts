@@ -71,7 +71,6 @@ import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
 import { richestRoute, warpRoutes } from '../src/sim/routes';
 import {
-  droneCount,
   findShip,
   flagship,
   isAlive,
@@ -253,7 +252,7 @@ function nextOutpost(state: GameState, fs: Ship, wc: number): Command | null {
   const { ok, needsAlloy, smeltFor } = purse(state, wc);
   if (needsAlloy(TUNING.outpostCost)) return smeltFor(TUNING.outpostCost);
   if (!ok(TUNING.outpostCost)) return null;
-  const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
+  const hz = refreshComets(WARP_HAZARD, run);
   for (const r of run.rocks) {
     if (r.size !== 0 || dist(r.pos, fs.pos) > r.radius + TUNING.outpostDeployGap + 40) continue;
     if (!outpostBlock(state, r, fs) && !unsafe(run, hz, r.pos)) return { t: 'deployOutpost', rockId: r.id };
@@ -311,13 +310,14 @@ interface Hazard {
 const WARP_HAZARD: Hazard = { comets: [], out: { x: 0, z: 0 } };
 
 /** Refills `hz.comets` in place with the run's live comets. */
-function refreshComets(hz: Hazard, run: Run): void {
+function refreshComets(hz: Hazard, run: Run): Hazard {
   const comets = hz.comets;
   comets.length = 0;
   for (let i = 0; i < run.rocks.length; i++) {
     const r = run.rocks[i]!;
     if (r.comet) comets.push(r);
   }
+  return hz;
 }
 
 /** Reused survey target, so scoring a rock allocates no vectors. */
@@ -343,28 +343,49 @@ function surveyPoint(run: Run, elapsed: number): Vec2 {
 
 /** True once a drone is in the fleet and the flagship's laser is tier 2, the opening purchases. */
 function openingDone(state: GameState): boolean {
-  const fs = flagship(state.run);
-  const laser = fs.slots.find((f) => f?.type === 'laser');
-  return droneCount(state.run) > 0 && (laser?.tier ?? 0) >= 2;
+  const { run } = state;
+  let drone = false;
+  for (let i = 0; i < run.ships.length; i++) if (!isFlagship(run.ships[i]!)) drone = true;
+  if (!drone) return false;
+  const slots = flagship(run).slots;
+  for (let i = 0; i < slots.length; i++) {
+    const f = slots[i];
+    if (f?.type === 'laser') return f.tier >= 2;
+  }
+  return false;
 }
 
-/** Seconds into the current survey, or -1 when the system gets no survey. One entry per run object. */
+/**
+ * Seconds into the current survey, or -1 when the system gets no survey. One
+ * entry per run object: its start time, or `NO_SURVEY` once it is over.
+ */
+const NO_SURVEY = -1;
 const surveyStart = new WeakMap<Run, number>();
 
 /**
  * The sensor sweep starts after the opening purchases and runs for `SURVEY_SEC`,
- * so it never delays the opening targets. A claim ends it early.
+ * so it never delays the opening targets. A claim or the end of the sweep marks
+ * it done, so later bot cycles skip the opening check.
  */
 function sweepElapsed(state: GameState): number {
   const { run } = state;
-  if (run.exploration.claimed.length > 0 || !openingDone(state)) return -1;
-  let start = surveyStart.get(run);
+  const start = surveyStart.get(run);
+  if (start === NO_SURVEY) return -1;
+  if (run.exploration.claimed.length > 0) {
+    surveyStart.set(run, NO_SURVEY);
+    return -1;
+  }
   if (start == null) {
-    start = run.time;
-    surveyStart.set(run, start);
+    if (!openingDone(state)) return -1;
+    surveyStart.set(run, run.time);
+    return 0;
   }
   const elapsed = run.time - start;
-  return elapsed < SURVEY_SEC ? elapsed : -1;
+  if (elapsed >= SURVEY_SEC) {
+    surveyStart.set(run, NO_SURVEY);
+    return -1;
+  }
+  return elapsed;
 }
 
 /** True if `pos` lies in the flare zone or a comet path (see `sim/hazards`). */
@@ -392,7 +413,7 @@ function nearestDerelict(state: GameState, fs: Ship, hz: Hazard): Anomaly | null
 /** The flagship's non-purchase order this cycle: get clear of a hazard, dock, chase debris, or mine. */
 function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number, want: Command | null): Command[] {
   const { run } = state;
-  const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
+  const hz = refreshComets(WARP_HAZARD, run);
   const full = isHoldFull(fs, st);
 
   if (cometPathEscape(run, hz.comets, fs.pos, TUNING.cometDodgePad + st.size, hz.out)) {

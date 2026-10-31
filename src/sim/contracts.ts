@@ -84,7 +84,8 @@ export function updateContracts(state: GameState, dt: number): void {
   const { run, profile } = state;
   const board = run.contracts;
   let expired = false;
-  for (const o of board.offers) {
+  for (let i = 0; i < board.offers.length; i++) {
+    const o = board.offers[i]!;
     o.timeLeft -= dt;
     if (o.timeLeft <= 0) expired = true;
   }
