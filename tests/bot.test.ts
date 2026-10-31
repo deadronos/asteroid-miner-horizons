@@ -262,9 +262,9 @@ describe('balance bot', () => {
 
   it('buys an ice-priced upgrade before the refine that would spend its ice', () => {
     const s = docked(1, 1);
-    // 35 ice worth of fuel still to crack: after the refine pays its 175 ice the
-    // laser's 50-ice price no longer fits the bank, though it does now. The refine
-    // was sized before the purchase, so it is left for a later cycle to re-size.
+    // 35 ice worth of fuel still to crack: a 175-ice refine would leave the laser's
+    // 50-ice price unaffordable, so the refine keeps that ice back (here, too little
+    // is left above the reserve to refine at all).
     s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
     const cmds = botCommands(s, { warp: false });
     expect(cmds).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
@@ -275,17 +275,30 @@ describe('balance bot', () => {
     expect(s.out.log.filter((l) => l.level === 'warn')).toEqual([]);
   });
 
-  it('accepts a contract and buys in the same dock visit', () => {
+  it('leaves an affordable upgrade its ice when refining on the approach', () => {
+    const s = docked(1, 1);
+    const fs = flagship(s.run);
+    const st = s.run.system.station.pos;
+    fs.pos = { x: st.x + 400, z: st.z };
+    s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
+    for (const c of botCommands(s, { warp: false })) send(s, c);
+    // Docking a tick later, the laser is still affordable.
+    fs.pos = { ...st };
+    expect(botCommands(s, { warp: false })).toContainEqual({ t: 'upgrade', shipId: fs.id, slot: 0 });
+  });
+
+  it('keeps an affordable upgrade its ice through a contract accept', () => {
     const s = docked(1, 1);
     s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
     const { reward, data } = contractReward('deliverIce', 6);
     s.run.contracts.offers = [
       { id: 9, kind: 'deliverIce', target: 6, progress: 0, timeLimit: 360, timeLeft: 100, reward, data },
     ];
-    expect(botCommands(s, { warp: false })).toEqual([
-      { t: 'acceptContract', contractId: 9 },
-      { t: 'upgrade', shipId: flagship(s.run).id, slot: 0 },
-    ]);
+    const cmds = botCommands(s, { warp: false });
+    expect(cmds).toEqual([{ t: 'acceptContract', contractId: 9 }]);
+    for (const c of cmds) send(s, c);
+    // The contract takes this cycle; the laser is still affordable on the next.
+    expect(botCommands(s, { warp: false })).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
   });
 });
 
