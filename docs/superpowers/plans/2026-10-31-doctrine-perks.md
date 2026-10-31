@@ -40,5 +40,5 @@ Do not touch `scratch.md`. Do not implement #177 or #38.
 **Files:** `src/ui/doctrines.ts`, `src/ui/panels/ResearchPanel.ts`, `src/input.ts`, `src/style.css`,
 `scripts/bot.ts`, `scripts/balance.ts`, `README.md`, `docs/balance.md`, `tests/alloc.test.ts`
 **Build:** panel shows pairs, picked/locked, and the respec hint; Tab and arrows cycle real buttons; the bot
-takes each pair's side from the save seed (even: first side, odd: second) inside the window.
+picks one pair per seed (`seed % 3` chooses the pair, seed parity the side) inside the window.
 **Done when:** - [x] `npm run check`, build, and the bundle budget pass, and the balance report is regenerated.

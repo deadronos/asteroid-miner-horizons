@@ -507,27 +507,29 @@ function maxCheapPerks(s: GameState): void {
 }
 
 describe('balance bot doctrines', () => {
-  it('picks a side from the seed once the respec window is underway', () => {
-    const odd = newGame(1);
-    expect(botCommands(odd).some((c) => c.t === 'chooseDoctrine')).toBe(false);
-    odd.run.time = 1;
-    expect(botCommands(odd).filter((c) => c.t === 'chooseDoctrine')).toEqual([
-      { t: 'chooseDoctrine', pair: 'fleet', side: 'ace' },
+  it('picks one doctrine pair from the seed once the respec window is underway', () => {
+    const haul = newGame(1); // 1 % 3 = haul, odd → courier
+    expect(botCommands(haul).some((c) => c.t === 'chooseDoctrine')).toBe(false);
+    haul.run.time = 1;
+    haul.profile.doctrines.fleet = 'swarm';
+    expect(botCommands(haul).filter((c) => c.t === 'chooseDoctrine')).toEqual([
       { t: 'chooseDoctrine', pair: 'haul', side: 'courier' },
-      { t: 'chooseDoctrine', pair: 'focus', side: 'brawler' },
     ]);
-    const even = newGame(2);
-    even.run.time = 1;
-    expect(botCommands(even).filter((c) => c.t === 'chooseDoctrine')).toEqual([
-      { t: 'chooseDoctrine', pair: 'fleet', side: 'swarm' },
-      { t: 'chooseDoctrine', pair: 'haul', side: 'freighter' },
+    const focus = newGame(2); // 2 % 3 = focus, even → survey
+    focus.run.time = 1;
+    expect(botCommands(focus).filter((c) => c.t === 'chooseDoctrine')).toEqual([
       { t: 'chooseDoctrine', pair: 'focus', side: 'survey' },
     ]);
-    even.profile.doctrines = { fleet: 'swarm', haul: 'freighter', focus: 'survey' };
-    expect(botCommands(even).some((c) => c.t === 'chooseDoctrine')).toBe(false);
-    even.run.time = TUNING.doctrineWindow;
-    even.profile.doctrines = { fleet: null, haul: null, focus: null };
-    expect(botCommands(even).some((c) => c.t === 'chooseDoctrine')).toBe(false);
+    const fleet = newGame(6); // 6 % 3 = fleet, even → swarm
+    fleet.run.time = 1;
+    expect(botCommands(fleet).filter((c) => c.t === 'chooseDoctrine')).toEqual([
+      { t: 'chooseDoctrine', pair: 'fleet', side: 'swarm' },
+    ]);
+    fleet.profile.doctrines.fleet = 'swarm';
+    expect(botCommands(fleet).some((c) => c.t === 'chooseDoctrine')).toBe(false);
+    fleet.run.time = TUNING.doctrineWindow;
+    fleet.profile.doctrines.fleet = null;
+    expect(botCommands(fleet).some((c) => c.t === 'chooseDoctrine')).toBe(false);
   });
 });
 

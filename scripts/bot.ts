@@ -2,13 +2,13 @@
 // purely through sim Commands, like the UI would; drones keep their own AI.
 //
 // Each call looks at the state and returns the commands for the next tick:
-//   While 0 < run time < the doctrine window, also set each doctrine pair from
-//   the save seed: an even seed takes every pair's first side (Swarm Doctrine,
-//   Bulk Freighter, Survey Array) and an odd seed takes the second (Ace Pilot,
-//   Courier, Brawler). That rides along with the decision below, costs no
-//   Horizon Data, and never clears a pair. Time 0 is skipped so the decision
-//   that warps (the old system's clock) is not also a respec; the next
-//   decision lands inside the new system's window.
+//   While 0 < run time < the doctrine window, also pick one doctrine pair from
+//   the save seed: seed % 3 chooses the pair (fleet, haul, focus) and seed
+//   parity chooses the side (even: the first side, odd: the second). The other
+//   two pairs stay unpicked. That rides along with the decision below, costs
+//   no Horizon Data, and never clears a pair. Time 0 is skipped so the
+//   decision that warps (the old system's clock) is not also a respec; the
+//   next decision lands inside the new system's window.
 //   buy affordable perks → warp once the bank has the fuel (to the route
 //   with the most rock value, lower hazard on a tie) → accept a
 //   serviceable contract → dock when the hold is full → while docked,
@@ -114,18 +114,16 @@ export function botCommands(state: GameState, opts: BotOptions = {}): Command[] 
 }
 
 /**
- * Side index from the save seed, while the respec window is open and the clock
- * has started. Already-matching pairs are left alone (keep). See the file header.
+ * One pair per save, while the respec window is open and the clock has started.
+ * `seed % 3` selects the pair and seed parity selects its side. The other pairs
+ * are left as they are (null on a fresh profile). A pair already on that side
+ * is kept. See the file header.
  */
 function doctrinePicks(state: GameState): Command[] {
   if (!(state.run.time > 0 && doctrineWindowOpen(state.run.time))) return [];
-  const index = state.profile.seed % 2 === 0 ? 0 : 1;
-  const cmds: Command[] = [];
-  for (const id of DOCTRINE_PAIR_IDS) {
-    const want = DOCTRINE_PAIRS[id].sides[index].id;
-    if (state.profile.doctrines[id] !== want) cmds.push({ t: 'chooseDoctrine', pair: id, side: want });
-  }
-  return cmds;
+  const pair = DOCTRINE_PAIR_IDS[state.profile.seed % DOCTRINE_PAIR_IDS.length]!;
+  const want = DOCTRINE_PAIRS[pair].sides[state.profile.seed % 2 === 0 ? 0 : 1].id;
+  return state.profile.doctrines[pair] === want ? [] : [{ t: 'chooseDoctrine', pair, side: want }];
 }
 
 function pilotCommands(state: GameState, opts: BotOptions): Command[] {

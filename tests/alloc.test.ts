@@ -9,8 +9,8 @@ import { newGame } from '../src/sim/create';
 import { droneCount, fleetCap, makeShip } from '../src/sim/ships';
 
 /**
- * Mean bytes allocated per tick: ~22 KB measured on Node 24 (seed 12345 takes the odd doctrine: Ace Pilot,
- * Courier and Brawler; ~11 ships, ~250 rocks). Stable to about 2%. The headroom (#217) catches a per-rock
+ * Mean bytes allocated per tick: ~22 KB measured on Node 24 (seed 12345 picks one doctrine, Ace Pilot;
+ * ~11 ships, ~250 rocks). Stable to about 2%. The headroom (#217) catches a per-rock
  * or per-ship allocation, not a single array copy. If a deliberate change moves the baseline, log `mean`
  * below to re-measure and keep roughly 25% headroom.
  */
