@@ -6,7 +6,7 @@
 import { len, type Vec2 } from '../core/vec';
 import { flareExposure } from '../sim/hazards';
 import { isAlive, selectedShip, shipStats } from '../sim/ships';
-import type { Fx, LogEntry, Profile, Run } from '../sim/types';
+import type { Fx, LogEntry, LogEvent, Profile, Run } from '../sim/types';
 import type { ZzfxParams } from './zzfx';
 
 export type SoundId =
@@ -24,7 +24,9 @@ export type SoundId =
   | 'contractDone'
   | 'contractFail'
   | 'outpost'
-  | 'loss';
+  | 'loss'
+  | 'ping'
+  | 'salvage';
 
 /** ZzFX presets. Randomness is 0 so each renders once and is cached; variety comes from `rate`. */
 export const PRESETS: Record<SoundId, ZzfxParams> = {
@@ -58,6 +60,10 @@ export const PRESETS: Record<SoundId, ZzfxParams> = {
   outpost: [0.55, 0, 130, 0.005, 0.03, 0.22, 0, 1.5, -2, 0, 260, 0.07, 0, 0.35],
   // Low mourning tone layered under the positional explosion.
   loss: [0.7, 0, 90, 0.02, 0.12, 0.55, 0, 1, -1.1, 0, 45, 0.16, 0, 0.12, 0, 0.04],
+  // Sonar ping: a clean high note dropping once, with a short echo.
+  ping: [0.5, 0, 980, 0.005, 0.04, 0.42, 0, 1.1, 0, 0, -240, 0.09, 0.16, 0, 0, 0, 0.1, 0.55],
+  // Salvage chime: a rising two-note reward, warmer than the contract fanfare.
+  salvage: [0.65, 0, 520, 0.005, 0.07, 0.5, 0, 1.2, 0, 0, 220, 0.08, 0.14, 0, 0, 0, 0.14, 0.75],
 };
 
 /** Minimum seconds between two plays of the same sound. */
@@ -78,6 +84,8 @@ const MIN_GAP: Record<SoundId, number> = {
   contractFail: 0.3,
   outpost: 0.3,
   loss: 0.4,
+  ping: 0.4,
+  salvage: 0.4,
 };
 
 export const MAX_VOICES = 12;
@@ -103,8 +111,8 @@ export class RateLimiter {
   }
 }
 
-/** Events with a sound today; new sim events join this list when their audio lands. */
-export type CueKey = 'research' | 'contractDone' | 'contractFail' | 'outpost' | 'shipLoss' | 'achievement';
+/** Every log event identity plus the achievement unlock, which is not a `LogEvent`. */
+export type CueKey = LogEvent | 'achievement';
 
 /** Which preset each event identity plays. Its level is the preset's own volume (`PRESETS[id][0]`). */
 export const CUES: Readonly<Record<CueKey, SoundId>> = Object.freeze({
@@ -114,6 +122,8 @@ export const CUES: Readonly<Record<CueKey, SoundId>> = Object.freeze({
   contractFail: 'contractFail',
   outpost: 'outpost',
   shipLoss: 'loss',
+  ping: 'ping',
+  salvage: 'salvage',
 });
 
 /** A cue's voice: dead centre at gain 1, like the other non-positional sounds, so the level is applied once. */
@@ -132,8 +142,7 @@ export function cueBatch(log: readonly LogEntry[]): { deny: boolean; cues: CueKe
   for (const l of log) {
     if (l.level === 'warn' && !l.event) deny = true;
     if (l.achievement) cues.add('achievement');
-    // Ping and salvage are visual-only for now; they get cues with the audio pass.
-    if (l.event && l.event !== 'ping' && l.event !== 'salvage') cues.add(l.event);
+    if (l.event) cues.add(l.event);
   }
   if (cues.has('achievement')) cues.delete('contractDone');
   return { deny, cues: [...cues] };
@@ -230,7 +239,7 @@ export function voiceFor(fx: Fx, view: View, streak: Streak, now: number): Voice
     case 'explode':
       return { id: 'explode', gain: g, pan, rate: jitter, cutoff };
     case 'ping':
-      // Visual-only for now; the audio pass will give it a cue.
+      // The ping log event carries the cue, so the sweep does not sound twice.
       return null;
   }
 }

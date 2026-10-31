@@ -8,13 +8,14 @@ import type { KeyAction } from '../settings';
 import { h, setText } from './dom';
 
 /** Strip actions that run the same code as their key. */
-export type TouchAction = Extract<KeyAction, 'map' | 'follow' | 'cycleShip' | 'research' | 'pause'>;
+export type TouchAction = Extract<KeyAction, 'map' | 'follow' | 'cycleShip' | 'research' | 'pause' | 'ping'>;
 
 const BUTTONS: { action: TouchAction; text: string; label: string }[] = [
   { action: 'map', text: 'Map', label: 'System map' },
   { action: 'follow', text: 'Follow', label: 'Follow selected ship' },
   { action: 'cycleShip', text: 'Ship ▸', label: 'Select next ship' },
   { action: 'research', text: 'Research', label: 'Research panel' },
+  { action: 'ping', text: 'Ping', label: 'Sensor ping' },
   { action: 'pause', text: 'Pause', label: 'Pause' },
 ];
 

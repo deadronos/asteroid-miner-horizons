@@ -2,6 +2,7 @@
 // the buttons pressed since the last read. Mapping onto game actions lives in Input; the maths is in core/gamepad.
 
 import { buttonEdges } from './core/gamepad';
+import type { Command } from './sim/commands';
 
 /** Standard-mapping button indices. */
 export const PAD = {
@@ -11,6 +12,7 @@ export const PAD = {
   Y: 3,
   LB: 4,
   RB: 5,
+  RT: 7,
   SELECT: 8,
   START: 9,
   UP: 12,
@@ -18,6 +20,14 @@ export const PAD = {
   LEFT: 14,
   RIGHT: 15,
 } as const;
+
+/**
+ * The command a one-shot pad button edge sends when it needs no local state. `Input` handles the stateful
+ * buttons itself and sends this first, so a button never does both.
+ */
+export function padCommand(button: number): Command | null {
+  return button === PAD.RT ? { t: 'ping' } : null;
+}
 
 export interface PadFrame {
   /** Left stick, then right stick (each −1..1, down = +). */

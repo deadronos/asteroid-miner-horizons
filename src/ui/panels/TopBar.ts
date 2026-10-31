@@ -40,6 +40,14 @@ export function researchCue(windowOpen: boolean): { text: string; label: string 
     : { text: 'Research', label: 'Research' };
 }
 
+/** Sensor-ping button copy while the cooldown runs (seconds rounded up) or when ready. */
+export function pingCue(pingCd: number): { text: string; label: string; disabled: boolean; seconds: number } {
+  const seconds = Math.max(0, Math.ceil(pingCd));
+  return seconds > 0
+    ? { text: `Ping ${seconds}s`, label: `Sensor ping recharging, ${seconds} seconds`, disabled: true, seconds }
+    : { text: 'Ping ◉', label: 'Sensor ping ready', disabled: false, seconds: 0 };
+}
+
 /** Panel key: rebuilds on warp and when a loaded slot has the same system number but different modifiers. */
 export function topBarKey(state: GameState): string {
   const { number, modifiers } = state.run.system;
@@ -80,6 +88,7 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
       const warp = h('button', { class: 'warp', onclick: hooks.openWarp });
       warp.dataset.title =
         'Choose a fresh system to jump to. Resets your fleet and bank; keeps research. Grants Horizon Data based on value delivered this run.';
+      const ping = h('button', { text: 'Ping ◉', onclick: () => ctx.send({ t: 'ping' }) });
       const researchBtn = h('button', { text: 'Research', onclick: hooks.toggleResearch });
       const help = h('button', { class: 'icon help-btn', text: '?', onclick: hooks.toggleHelp });
       help.setAttribute('aria-label', 'Help');
@@ -108,6 +117,19 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
           s.run.bank.fuel < cost,
           `Need ${cost} fuel in the station bank (have ${Math.floor(s.run.bank.fuel)}). Would earn +${gain} HD.`,
         );
+        const pingKey = ctx.settings.value.keys.ping.find(Boolean);
+        const pingName = pingKey ? keyLabel(pingKey) : 'unbound';
+        const pc = pingCue(s.run.exploration.pingCd);
+        setText(ping, pc.text);
+        const pingTip = pc.disabled
+          ? `Sensors recharging (${pc.seconds}s) — ${pingName}`
+          : `Sensor ping: reveal nearby rich deposits and derelicts (${pingName})`;
+        ping.dataset.title = pingTip;
+        setDisabled(ping, pc.disabled, pingTip);
+        if (!pc.disabled) ping.title = pingTip;
+        const pingLabel = `${pc.label} (${pingName})`;
+        if (ping.getAttribute('aria-label') !== pingLabel) ping.setAttribute('aria-label', pingLabel);
+        ping.setAttribute('aria-disabled', String(pc.disabled));
         const cue = researchCue(doctrineWindowOpen(s.run.time));
         setText(researchBtn, cue.text);
         if (researchBtn.getAttribute('aria-label') !== cue.label) researchBtn.setAttribute('aria-label', cue.label);
@@ -122,6 +144,7 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
         ...res,
         data,
         warp,
+        ping,
         researchBtn,
         help,
         menu,

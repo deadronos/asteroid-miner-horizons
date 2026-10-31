@@ -10,6 +10,7 @@ import type { GameState } from '../sim/types';
 import { Debris } from './debris';
 import { FloatingText } from './floatingText';
 import { Particles } from './particles';
+import { PingRing } from './pingView';
 import { ROCK_TINT } from './rocks';
 import type { ShipView } from './shipView';
 import { palette } from './activePalette';
@@ -20,6 +21,7 @@ export type BeamHit = { x: number; z: number; ship: { id: number; thrusting: boo
 export class FxView {
   readonly particles = new Particles();
   readonly debris = new Debris();
+  readonly ping = new PingRing();
   private floaters: FloatingText;
   /** Camera shake in CSS pixels before scaling; decays each frame. */
   shake = 0;
@@ -35,6 +37,16 @@ export class FxView {
   set density(d: number) {
     this.particles.density = d;
     this.debris.density = d;
+  }
+
+  /** Ping ring detail from the quality preset (Low: coarser and no additive glow). */
+  setQuality(low: boolean): void {
+    this.ping.setQuality(low);
+  }
+
+  /** True while the ping pulse is still fading. */
+  get busy(): boolean {
+    return this.ping.busy;
   }
 
   /** Lets the shake settle; call once per frame before reading `shake`. */
@@ -78,6 +90,9 @@ export class FxView {
           P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffffff), 40, 120, 0.6);
           this.shake = 16;
           break;
+        case 'ping':
+          this.ping.trigger(fx.pos, fx.range);
+          break;
         case 'warp':
           warped = true;
           break;
@@ -120,10 +135,11 @@ export class FxView {
     return warped;
   }
 
-  /** Advances particles and debris. */
-  update(dt: number): void {
+  /** Advances particles, debris and the ping pulse. */
+  update(dt: number, reducedMotion = false): void {
     this.particles.update(dt);
     this.debris.update(dt);
+    this.ping.update(dt, reducedMotion);
   }
 
   /** Moves floating pickup text; `anchor` gives a live ship's position (null once it is gone). */
@@ -133,5 +149,6 @@ export class FxView {
 
   setVisible(on: boolean): void {
     this.particles.points.visible = this.debris.mesh.visible = on;
+    this.ping.setVisible(on);
   }
 }
