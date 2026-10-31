@@ -15,10 +15,10 @@
 //   path, and dock (staying docked) or flee past the reach of a pending or
 //   burning flare; targets in either are skipped. A fuel refine rides
 //   alongside the flagship's order rather than replacing it, so refining never
-//   costs the pilot a decision cycle; while docked the purchase is priced
-//   against the bank the refine leaves behind, so a price is not checked
-//   against ice the refine is about to spend and the ship still buys before it
-//   undocks.
+//   costs the pilot a decision cycle. The refine leaves the ice of the purchase
+//   the bank can afford alone, so refining (docked or on the approach) never
+//   prices it out; while docked the purchase is issued alongside the refine, so
+//   the ship still buys before it undocks.
 //
 // Ice reserve: any ice-priced purchase must leave at least ICE_RESERVE × warp
 // cost worth of ice (counting fuel as its ice equivalent), otherwise
@@ -42,6 +42,7 @@ import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
 import { richestRoute, warpRoutes } from '../src/sim/routes';
 import {
+  findShip,
   flagship,
   isAlive,
   isBuilder,
@@ -102,26 +103,29 @@ export function botCommands(state: GameState, opts: BotOptions = {}): Command[] 
 
   if (!isAlive(fs)) return [];
 
+  // What the bank would buy now. The refine leaves that purchase's ice alone:
+  // queueing a refine pays its ice up front and refining is one-way, so a refine
+  // queued while docked, or on the approach, would otherwise price it out (#241).
+  const want = nextPurchase(state, wc);
   // The refinery is station-side, so its command rides alongside the flagship's
   // order instead of consuming this decision cycle.
-  const fuel = refineFuel(state, wc);
-
+  const fuel = refineFuel(state, wc, want ? iceOf(state, want) : 0);
   const contract = nextContract(state);
+
   if (contract) return fuel ? [fuel, contract] : [contract];
 
   const st = shipStats(fs, profile);
   if (isDocked(run, fs)) {
     // Price the purchase against the bank the refine leaves behind, then issue
-    // both: refining first keeps the fuel schedule, and the purchase still
-    // happens before the ship undocks (a skipped cycle would lose the visit).
-    const buy = nextPurchase(fuel ? projectedState(state, fuel) : state, wc);
+    // both, so the purchase still happens before the ship undocks.
+    const buy = fuel ? nextPurchase(projectedState(state, fuel), wc) : want;
     if (buy) return fuel ? [fuel, buy] : [buy];
   }
 
   const outpost = nextOutpost(state, fs, wc);
   if (outpost) return fuel ? [fuel, outpost] : [outpost];
 
-  const order = flagshipOrder(state, fs, st, wc);
+  const order = flagshipOrder(state, fs, st, wc, want);
   return fuel ? [fuel, ...order] : order;
 }
 
@@ -182,6 +186,20 @@ function nextOutpost(state: GameState, fs: Ship, wc: number): Command | null {
   return null;
 }
 
+/** Ice a purchase decision spends (a smelt or repair spends none). */
+function iceOf(state: GameState, cmd: Command): number {
+  const ship = cmd.t === 'upgrade' ? findShip(state.run, cmd.shipId) : undefined;
+  const cost: Cost | null =
+    cmd.t === 'buyHull'
+      ? HULLS[cmd.hullId].cost
+      : cmd.t === 'install'
+        ? variantDef(cmd.comp, cmd.variant).cost(1)
+        : cmd.t === 'upgrade' && ship
+          ? upgradeCost(ship, cmd.slot)
+          : null;
+  return cost?.ice ?? 0;
+}
+
 /**
  * A shallow copy of `state` as the sim will see it once `refine` has run: its
  * inputs are already paid and its output already queued, so a purchase can be
@@ -219,7 +237,7 @@ const unsafe = (run: Run, hz: Hazard, pos: Vec2): boolean =>
   inFlareZone(run, pos) || cometPathEscape(run, hz.comets, pos, TUNING.cometDodgePad, hz.out);
 
 /** The flagship's non-purchase order this cycle: get clear of a hazard, dock, chase debris, or mine. */
-function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number): Command[] {
+function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number, want: Command | null): Command[] {
   const { run } = state;
   const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
   const full = isHoldFull(fs, st);
@@ -236,7 +254,7 @@ function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number): C
   }
 
   // A hull the bank can already pay for is worth the trip home, as a player would dock for it (#206, #207).
-  const affordsHull = nextPurchase(state, wc)?.t === 'buyHull';
+  const affordsHull = want?.t === 'buyHull';
   if (full || affordsHull) return fs.order?.kind === 'dock' ? [] : [{ t: 'dock', shipId: fs.id }];
   const o = fs.order;
   if (o?.kind === 'dock') return [];
@@ -293,17 +311,18 @@ const iceReserve = (wc: number): number => ICE_RESERVE * ICE_PER_FUEL * wc;
 
 /**
  * Queues enough fuel for the next warp, keeping ICE_RESERVE of the warp's ice
- * worth back. Issues nothing when the warp is already covered or the queue and
- * bank can't take a batch.
+ * worth back, from the ice left after `keepIce` (a pending purchase's). Issues
+ * nothing when the warp is already covered or the queue and bank can't take a batch.
  */
-function refineFuel(state: GameState, wc: number): Command | null {
+function refineFuel(state: GameState, wc: number, keepIce: number): Command | null {
   const { run } = state;
   const fuelHave = run.bank.fuel + queuedOutput(run, 'fuel');
   if (fuelHave >= wc) return null;
+  const ice = run.bank.ice - keepIce;
   let want = wc - fuelHave;
-  if (run.bank.ice < ICE_PER_FUEL * want) {
+  if (ice < ICE_PER_FUEL * want) {
     // Short of a full warp's ice: bank fuel up to the reserve instead.
-    want = Math.min(wc * ICE_RESERVE - fuelHave, Math.floor(run.bank.ice / ICE_PER_FUEL));
+    want = Math.min(wc * ICE_RESERVE - fuelHave, Math.floor(ice / ICE_PER_FUEL));
   }
   if (want < 1) return null;
   const block = refineBlock(run, 'fuel', want);

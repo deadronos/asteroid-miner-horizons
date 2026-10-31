@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botCommands, chooseRoute, HAULER_AFTER, ICE_RESERVE } from '../scripts/bot';
 import { runBot } from '../scripts/harness';
+import { send } from './helpers';
 import { contractReward } from '../src/sim/contracts';
 import { isVariant, type Tier } from '../src/data/components';
 import { HULLS } from '../src/data/hulls';
@@ -257,6 +258,47 @@ describe('balance bot', () => {
       { t: 'refine', recipe: 'fuel', count: reserve },
       { t: 'buyHull', hullId: 'drone' },
     ]);
+  });
+
+  it('buys an ice-priced upgrade before the refine that would spend its ice', () => {
+    const s = docked(1, 1);
+    // 35 ice worth of fuel still to crack: a 175-ice refine would leave the laser's
+    // 50-ice price unaffordable, so the refine keeps that ice back (here, too little
+    // is left above the reserve to refine at all).
+    s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
+    const cmds = botCommands(s, { warp: false });
+    expect(cmds).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
+    // Applied, this cycle and the next few go through without a rejected command.
+    for (const c of cmds) send(s, c);
+    expect(flagship(s.run).slots[0]?.tier).toBe(2);
+    for (let i = 0; i < 4; i++) for (const c of botCommands(s, { warp: false })) send(s, c);
+    expect(s.out.log.filter((l) => l.level === 'warn')).toEqual([]);
+  });
+
+  it('leaves an affordable upgrade its ice when refining on the approach', () => {
+    const s = docked(1, 1);
+    const fs = flagship(s.run);
+    const st = s.run.system.station.pos;
+    fs.pos = { x: st.x + 400, z: st.z };
+    s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
+    for (const c of botCommands(s, { warp: false })) send(s, c);
+    // Docking a tick later, the laser is still affordable.
+    fs.pos = { ...st };
+    expect(botCommands(s, { warp: false })).toContainEqual({ t: 'upgrade', shipId: fs.id, slot: 0 });
+  });
+
+  it('keeps an affordable upgrade its ice through a contract accept', () => {
+    const s = docked(1, 1);
+    s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
+    const { reward, data } = contractReward('deliverIce', 6);
+    s.run.contracts.offers = [
+      { id: 9, kind: 'deliverIce', target: 6, progress: 0, timeLimit: 360, timeLeft: 100, reward, data },
+    ];
+    const cmds = botCommands(s, { warp: false });
+    expect(cmds).toEqual([{ t: 'acceptContract', contractId: 9 }]);
+    for (const c of cmds) send(s, c);
+    // The contract takes this cycle; the laser is still affordable on the next.
+    expect(botCommands(s, { warp: false })).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
   });
 });
 
