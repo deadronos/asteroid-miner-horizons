@@ -121,6 +121,12 @@ body {
 .map-blip[data-kind='outpost'] {
   color: var(--accent);
 }
+.map-blip[data-kind='rich'] {
+  color: var(--warn);
+}
+.map-blip[data-kind='derelict'] {
+  color: var(--accent);
+}
 .map-blip[data-kind='comet'],
 .map-blip[data-kind='flare'] {
   color: var(--hazard);
@@ -134,6 +140,32 @@ body {
 .map-labels.pulse .map-blip[data-kind='comet'],
 .map-labels.pulse .map-blip[data-kind='flare'] {
   animation: map-blip-pulse 1s ease-in-out infinite;
+}
+
+/* Play-zoom labels for revealed anomalies and rich rocks. The glyph in the text is the non-colour cue. */
+.world-labels {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+.world-label {
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-size: calc(11px * var(--hud-scale, 1));
+  letter-spacing: 0.04em;
+  color: var(--txt);
+  white-space: nowrap;
+  text-shadow:
+    0 0 6px rgba(0, 0, 0, 0.95),
+    0 1px 2px #000;
+}
+.world-label[data-kind='rich'] {
+  color: var(--warn);
+}
+.world-label[data-kind='derelict'] {
+  color: var(--accent);
 }
 
 .hidden {

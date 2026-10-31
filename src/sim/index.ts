@@ -71,21 +71,26 @@ export class SimIndex {
     const byId = this.rockById;
     this.comets.length = 0;
     this.volatileDanger.length = 0;
-    for (const r of run.rocks) {
+    const rocks = run.rocks;
+    for (let i = 0; i < rocks.length; i++) {
+      const r = rocks[i]!;
       byId.set(r.id, r);
       if (r.comet) this.comets.push(r);
       if (r.trait === 'volatile' && r.hp < r.maxHp * TUNING.volatileWarnHp) this.volatileDanger.push(r);
     }
     if (byId.size !== run.rocks.length) {
       byId.clear();
-      for (const r of run.rocks) byId.set(r.id, r);
+      for (let i = 0; i < rocks.length; i++) byId.set(rocks[i]!.id, rocks[i]!);
     }
     this.outpostRocks.clear();
-    for (const o of run.automation.outposts) this.outpostRocks.add(o.rockId);
+    const outposts = run.automation.outposts;
+    for (let i = 0; i < outposts.length; i++) this.outpostRocks.add(outposts[i]!.rockId);
 
     const fx = systemEffects(run.system.modifiers); // once per tick, not per ship
     this.liveShipIds.clear();
-    for (const s of run.ships) {
+    const ships = run.ships;
+    for (let i = 0; i < ships.length; i++) {
+      const s = ships[i]!;
       this.liveShipIds.add(s.id);
       let st = this.stats.get(s.id);
       if (!st) this.stats.set(s.id, (st = emptyStats()));

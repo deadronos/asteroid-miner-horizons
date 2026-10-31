@@ -21,6 +21,7 @@ import { CameraRig } from './camera';
 import { type WarmKey, claimWarm, composerWarmKey, warmComposer } from './composerWarmup';
 import { watchContextLoss } from './contextLoss';
 import type { ViewRect } from './cull';
+import { ExplorationView } from './explorationView';
 import { FxView } from './fxView';
 import { HazardView } from './hazardView';
 import { type Box, MapLabels } from './labels';
@@ -68,6 +69,7 @@ export class Renderer {
   private ships = new ShipView();
   private hazardView = new HazardView();
   private outpostView = new OutpostView();
+  private explorationView = new ExplorationView();
   /** The run being drawn this frame, read by the hoisted callbacks below so `render` allocates no closures. */
   private curRun: Run | null = null;
   private readonly rockOf = (id: number): Rock | undefined => (this.curRun ? findRock(this.curRun, id) : undefined);
@@ -144,10 +146,12 @@ export class Renderer {
       this.system.group,
       this.rocks.group,
       this.outpostView.group,
+      this.explorationView.group,
       this.ships.group,
       this.hazardView.line,
       this.fx.particles.points,
       this.fx.debris.mesh,
+      this.fx.ping.mesh,
       this.streaks.lines,
     );
 
@@ -201,6 +205,7 @@ export class Renderer {
     this.shakeScale = SHAKE_SCALE[s.shake];
     this.alwaysBars = s.alwaysShowBars;
     this.lowQuality = quality === 'low';
+    this.fx.setQuality(this.lowQuality);
     this.syncMapPulse();
   }
 
@@ -330,12 +335,13 @@ export class Renderer {
     this.rocks.update(run.rocks, run.pickups, run.time, v);
     this.curRun = run;
     this.outpostView.update(run.automation.outposts, this.rockOf, run.time);
+    this.explorationView.update(run);
     const wpp = this.wpp;
     const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars, motionK);
     this.hazardView.update(run.hazards, run.time, wpp);
 
     if (this.fx.consume(state, hits, dt, this.onScreen)) this.follow = true;
-    this.fx.update(dt);
+    this.fx.update(dt, this.reducedMotion);
     this.updateMarkers(state, moveMark, wpp);
     this.setPlayfieldVisible(!w.hidden);
     this.labels.update(run, w.hidden ? 0 : this.cam.halfH, this.wpp, dt, this.toScreen);
@@ -377,7 +383,7 @@ export class Renderer {
    * or the canvas needs redrawing after a resize, so a paused frame loop must render this frame.
    */
   get busy(): boolean {
-    return this.dirty || this.warpT < WARP_TOTAL || this.warmup || this.cam.moving || this.fx.shake > 0;
+    return this.dirty || this.warpT < WARP_TOTAL || this.warmup || this.cam.moving || this.fx.shake > 0 || this.fx.busy;
   }
 
   /** 0..1 white-out intensity during the warp transition, for the HUD overlay. */
@@ -392,6 +398,7 @@ export class Renderer {
   private setPlayfieldVisible(on: boolean): void {
     this.system.group.visible = this.rocks.group.visible = this.ships.group.visible = on;
     this.outpostView.group.visible = on;
+    this.explorationView.group.visible = on;
     this.fx.setVisible(on);
     if (!on) this.hazardView.line.visible = this.hoverRing.visible = this.moveMarker.visible = false;
   }

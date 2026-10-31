@@ -116,6 +116,13 @@ export function shipStats(ship: Ship, profile: Profile): ShipStats {
   return writeShipStats(emptyStats(), ship, profile);
 }
 
+/** Keeps hull/shield within new maxima after a refit, preserving damage taken. */
+export function clampToStats(state: GameState, ship: Ship): void {
+  const st = shipStats(ship, state.profile);
+  ship.hull = Math.min(ship.hull, st.maxHull);
+  ship.shield = Math.min(ship.shield, st.maxShield);
+}
+
 export const isFlagship = (ship: Ship): boolean => HULLS[ship.hullId].role === 'flagship';
 export const isDrone = (ship: Ship): boolean => HULLS[ship.hullId].role === 'drone';
 export const isHauler = (ship: Ship): boolean => HULLS[ship.hullId].role === 'hauler';

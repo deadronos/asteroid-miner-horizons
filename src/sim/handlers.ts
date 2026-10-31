@@ -3,8 +3,9 @@
 // behaviour is unchanged; the map type makes a missing variant a compile error.
 
 import { removeItem } from '../core/array';
-import { v } from '../core/vec';
+import { distSq, v } from '../core/vec';
 import { COMPONENTS, isVariant, variantDef, type Tier } from '../data/components';
+import { DERELICT_SALVAGE } from '../data/exploration';
 import { HULLS } from '../data/hulls';
 import {
   DOCTRINE_PAIR_IDS,
@@ -36,12 +37,23 @@ import {
   upgradeCost,
   warpCost,
 } from './economy';
+import { anomalies, spawnRichRock } from './exploration';
 import { findRock } from './generate';
 import { applyDismissGate, applyFundGate, applyNewGamePlus } from './gate';
 import { describeModifiers } from './modifiers';
 import { batchCost, cancelRefine, jobLabel, queueRefine } from './refining';
 import { isRoute } from './routes';
-import { droneCount, findShip, flagship, isAlive, isBuilder, isFlagship, makeShip, shipStats } from './ships';
+import {
+  clampToStats,
+  droneCount,
+  findShip,
+  flagship,
+  isAlive,
+  isBuilder,
+  isFlagship,
+  makeShip,
+  shipStats,
+} from './ships';
 import { canMine } from './traits';
 import type { Fitted, GameState, Ship } from './types';
 
@@ -53,13 +65,6 @@ function fail(state: GameState, msg: string): void {
 }
 
 const refundFitted = (state: GameState, f: Fitted): void => credit(state.run.bank, scrapValue(f));
-
-/** Keeps hull/shield within new maxima after a refit, preserving damage taken. */
-function clampToStats(state: GameState, ship: Ship): void {
-  const st = shipStats(ship, state.profile);
-  ship.hull = Math.min(ship.hull, st.maxHull);
-  ship.shield = Math.min(ship.shield, st.maxShield);
-}
 
 /** The eleven ship-scoped variants (everything with a shipId). */
 type ShipCommand = Extract<Command, { shipId: number }>;
@@ -411,6 +416,36 @@ export const handlers: Handlers = {
     const block = outpostBlock(state, rock, flagship(run));
     if (block || !rock) return fail(state, block ?? 'That rock is gone.');
     deployOutpostAt(state, rock);
+  },
+
+  ping: (state) => {
+    const { run, out } = state;
+    const { exploration } = run;
+    const fs = run.ships.find(isFlagship);
+    if (!fs || !isAlive(fs)) return fail(state, 'The flagship is rebuilding at the station.');
+    if (exploration.pingCd > 0) return fail(state, `Sensors recharging (${Math.ceil(exploration.pingCd)}s).`);
+
+    exploration.pingCd = TUNING.pingCooldown;
+    out.fx.push({ t: 'ping', pos: { ...fs.pos }, range: TUNING.pingRange });
+    const rangeSq = TUNING.pingRange * TUNING.pingRange;
+    const list = anomalies(run);
+    let found = 0;
+    for (let i = 0; i < list.length; i++) {
+      const a = list[i]!;
+      if (exploration.revealed.includes(a.id) || distSq(a.pos, fs.pos) > rangeSq) continue;
+      exploration.revealed.push(a.id);
+      found += 1;
+      if (a.kind === 'rich') spawnRichRock(run, a);
+      else out.log.push({ level: 'info', text: `Sensor contact: ${DERELICT_SALVAGE[a.salvage]!.label} derelict.` });
+    }
+    out.log.push({
+      level: 'info',
+      text:
+        found === 0
+          ? 'Sensor ping: nothing in range.'
+          : `Sensor ping: ${found} anomal${found === 1 ? 'y' : 'ies'} found.`,
+      event: 'ping',
+    });
   },
 
   dismissGoals: (state) => {

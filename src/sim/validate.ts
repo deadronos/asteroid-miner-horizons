@@ -129,7 +129,8 @@ function isRock(r: unknown): boolean {
     finite(r.hp) &&
     finite(r.maxHp) &&
     finite(r.units) &&
-    finite(r.belt)
+    finite(r.belt) &&
+    (r.rich === undefined || r.rich === true)
   );
 }
 
@@ -351,6 +352,28 @@ function isModifierList(mods: unknown): boolean {
   );
 }
 
+/** True when `x` is an array of unique non-negative integer ids. */
+function isAnomalyIds(x: unknown): boolean {
+  if (!Array.isArray(x)) return false;
+  const ids = x as unknown[];
+  return (
+    ids.every((id) => typeof id === 'number' && Number.isInteger(id) && id >= 0) && new Set(ids).size === ids.length
+  );
+}
+
+/** True when `e` is the persisted exploration state: an anomaly seed, a cooldown and unique id lists. */
+function isExploration(e: unknown): boolean {
+  return (
+    isObj(e) &&
+    !Array.isArray(e) &&
+    finite(e.seed) &&
+    finite(e.pingCd) &&
+    isAnomalyIds(e.revealed) &&
+    isAnomalyIds(e.claimed) &&
+    (e.claimed as number[]).every((id) => (e.revealed as number[]).includes(id))
+  );
+}
+
 /** True when every item has a unique finite `id`. */
 function hasUniqueIds(items: unknown[]): boolean {
   const seen = new Set<number>();
@@ -383,5 +406,6 @@ export function validateState(data: SaveData): GameState | null {
   if (!isRefinery(run.refinery)) return null;
   if (!isHazards(run.hazards)) return null;
   if (!isAutomation(run.automation, run.rocks)) return null;
+  if (!isExploration(run.exploration)) return null;
   return { version: data.version, profile, run, out: { fx: [], log: [], status: new Map() } };
 }

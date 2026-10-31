@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newGame } from '../src/sim/create';
-import { researchCue, resourceReadout, topBarKey } from '../src/ui/panels/TopBar';
+import { pingCue, researchCue, resourceReadout, topBarKey } from '../src/ui/panels/TopBar';
 
 // The top bar rebuilds only when this key changes (warp, or a loaded slot with different modifiers).
 describe('topBarKey', () => {
@@ -43,6 +43,13 @@ describe('topBarKey', () => {
       text: 'Research',
       label: 'Research. Horizon Gate open.',
     });
+  });
+
+  it('shows the ping cooldown in whole seconds and re-enables only when ready', () => {
+    expect(pingCue(0)).toEqual({ text: 'Ping ◉', label: 'Sensor ping ready', disabled: false, seconds: 0 });
+    expect(pingCue(0.4)).toMatchObject({ text: 'Ping 1s', disabled: true, seconds: 1 });
+    expect(pingCue(12.2)).toMatchObject({ text: 'Ping 13s', disabled: true, seconds: 13 });
+    expect(pingCue(-3)).toMatchObject({ text: 'Ping ◉', disabled: false });
   });
 
   it('differs for different system numbers', () => {

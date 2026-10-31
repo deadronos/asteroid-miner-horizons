@@ -1,11 +1,13 @@
-// What the zoomed-out map marks besides the station and planets: the fleet, outposts, incoming hazards and
-// each belt's dominant resource. Pure, so the choice of blips and belt labels is testable without a DOM.
+// What the zoomed-out map marks besides the station and planets: the fleet, outposts, incoming hazards,
+// revealed anomalies and each belt's dominant resource. Pure, so the choice of blips is testable without a DOM.
 
+import { ANOMALY_INFO } from '../data/exploration';
 import { RAW_RESOURCES, RESOURCE_INFO, type RawResource } from '../data/resources';
+import { anomalies, isClaimed } from '../sim/exploration';
 import { isAlive } from '../sim/ships';
 import type { Belt, Run } from '../sim/types';
 
-export type BlipKind = 'selected' | 'ship' | 'outpost' | 'comet' | 'flare';
+export type BlipKind = 'selected' | 'ship' | 'outpost' | 'comet' | 'flare' | 'rich' | 'derelict';
 
 /** A map marker in world space. Objects are reused between calls, so read them before the next `collectBlips`. */
 export interface Blip {
@@ -21,6 +23,8 @@ export const BLIP_GLYPH: Record<BlipKind, string> = {
   outpost: '⌂',
   comet: '☄',
   flare: '✹',
+  rich: ANOMALY_INFO.rich.glyph,
+  derelict: ANOMALY_INFO.derelict.glyph,
 };
 
 /** The raw resource with the largest share of the belt's mix; ties go to the earlier kind in `RAW_RESOURCES`. */
@@ -52,6 +56,21 @@ export function collectBlips(run: Run, out: Blip[]): number {
     push(s.id === run.selectedId ? 'selected' : 'ship', s.pos.x, s.pos.z);
   }
   for (const o of run.automation.outposts) push('outpost', o.pos.x, o.pos.z);
+  // Rich deposits follow the live rock: it orbits and disappears when mined.
+  const rocks = run.rocks;
+  for (let i = 0; i < rocks.length; i++) {
+    const r = rocks[i]!;
+    if (r.rich) push('rich', r.pos.x, r.pos.z);
+  }
+  // Derelicts stay at their anomaly position until their salvage is claimed.
+  const anomalyList = anomalies(run);
+  const revealed = run.exploration.revealed;
+  for (let i = 0; i < revealed.length; i++) {
+    const id = revealed[i]!;
+    if (isClaimed(run, id)) continue;
+    const a = anomalyList[id];
+    if (a?.id === id && a.kind === 'derelict') push('derelict', a.pos.x, a.pos.z);
+  }
   const c = run.hazards.comet;
   if (c) push('comet', c.from.x, c.from.z);
   if (run.hazards.flare) push('flare', 0, 0);

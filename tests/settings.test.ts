@@ -173,6 +173,11 @@ describe('settings store', () => {
     expect(actionFor(a.value.keys, 'KeyW')).toBe('up');
   });
 
+  it('binds the sensor ping to Q by default', () => {
+    expect(DEFAULTS.keys.ping).toEqual(['KeyQ', null]);
+    expect(actionFor(DEFAULTS.keys, 'KeyQ')).toBe('ping');
+  });
+
   it('starts with defaults when storage is blocked', () => {
     const original = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
     Object.defineProperty(globalThis, 'localStorage', {
