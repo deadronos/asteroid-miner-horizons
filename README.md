@@ -39,26 +39,27 @@ Requires Node 22.12+. Built with TypeScript 7, Vite 8 and three r186.
 
 ## How to play
 
-| Input                      | Action                                                                                           |
-| -------------------------- | ------------------------------------------------------------------------------------------------ |
-| `WASD` / arrows            | Fly the selected ship directly (cancels its order)                                               |
-| Click empty space          | Move order (autopilot steers around rocks and brakes for them)                                   |
-| Click asteroid             | Mine: the ship closes to laser range and burns it; it automatically moves on to the fragments    |
-| Click station              | Dock and unload cargo into the station bank                                                      |
-| Click ship / `Tab` / `1–9` | Select a ship                                                                                    |
-| Right-click                | Order the selected ship without changing the selection                                           |
-| Mouse wheel                | Zoom (toward the cursor when not following)                                                      |
-| Drag                       | Pan (camera stops following) · `F` follows again                                                 |
-| `M`                        | System map toggle; the station and planets are labelled when zoomed out                          |
-| `O` over a large asteroid  | Deploy a mining outpost there (the flagship must be beside it)                                   |
-| `R`                        | Research (prestige) panel · `P` pause · `H` help (`?`) · `Esc` closes menus, else stops the ship |
-| ⚙ button                   | Menu: save slots, stats & achievements, settings, key rebinding                                  |
+| Input                      | Action                                                                                                                |
+| -------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `WASD` / arrows            | Fly the selected ship directly (cancels its order)                                                                    |
+| Click empty space          | Move order (autopilot steers around rocks and brakes for them)                                                        |
+| Click asteroid             | Mine: the ship closes to laser range and burns it; it automatically moves on to the fragments                         |
+| Click station              | Dock and unload cargo into the station bank                                                                           |
+| Click ship / `Tab` / `1–9` | Select a ship                                                                                                         |
+| Right-click                | Order the selected ship without changing the selection                                                                |
+| Mouse wheel                | Zoom (toward the cursor when not following)                                                                           |
+| Drag                       | Pan (camera stops following) · `F` follows again                                                                      |
+| `M`                        | System map toggle; the station and planets are labelled when zoomed out                                               |
+| `O` over a large asteroid  | Deploy a mining outpost there (the flagship must be beside it)                                                        |
+| `Q`                        | Sensor ping (20 s cooldown): reveal nearby rich deposits and derelicts (gamepad RT, or the top bar's **Ping** button) |
+| `R`                        | Research (prestige) panel · `P` pause · `H` help (`?`) · `Esc` closes menus, else stops the ship                      |
+| ⚙ button                   | Menu: save slots, stats & achievements, settings, key rebinding                                                       |
 
 All keys can be rebound in ⚙ → Controls.
 
 **On a phone or tablet** a tap is a click and a long-press is the right-click order; drag pans,
 pinch zooms and two fingers pan. A thrust stick and buttons for Map, Follow, next ship, Research,
-Pause and Outpost (arm it, then tap an asteroid) appear on touch screens; ⚙ → Interface → Touch
+Pause, Ping and Outpost (arm it, then tap an asteroid) appear on touch screens; ⚙ → Interface → Touch
 shows or hides them anywhere. On a phone-sized screen the side panels start folded and open one at
 a time.
 
@@ -89,6 +90,16 @@ It goes away after the first warp; × hides it for that save.
   Harsh (more often, hits harder). Drones without a manual order look after
   themselves: they step out of a comet's path, leave comets alone, and dock or fly
   clear when a flare builds.
+- **Exploration**: each system hides a few anomalies, seeded from the save seed, system
+  number and warp route; nothing appears until a **sensor ping** (`Q`, gamepad RT, the top
+  bar's **Ping** button, or the touch Ping button) reveals a site within 650 units. Pings
+  recharge over 20 s. **Rich deposits** (◆) are large rocks with 3× the usual yield.
+  **Derelicts** (⌖) pay a one-time salvage of resources when a ship comes within 60 units,
+  and may also yield a component (30–40% by wreck type). Revealed sites join the map as
+  glyph blips, and labels pair each glyph with its name so colour is never the only cue.
+  Reduced motion holds the ping ring at a fixed radius instead of sweeping it, and Low
+  quality draws it coarser without the glow. A sonar cue plays on every ping. Revealed
+  and claimed anomalies are saved.
 - **Hulls & slots**: every ship has a hull (base stats plus N generic slots). Each slot
   takes one component at tier 1–3: Mining Laser, Ion Engine, Deflector Shield,
   Composite Armor, Cargo Pod, or Sensor & Tractor Array. Mining Laser and Ion Engine
@@ -236,4 +247,3 @@ Each of these is tracked as an open issue; the umbrella for game scope is
 - A station market and trade routes — [#176](https://github.com/deadronos/asteroid-miner-horizons/issues/176)
 - More fleet roles, such as escorts — [#174](https://github.com/deadronos/asteroid-miner-horizons/issues/174)
 - Contract variety and faction reputation — [#173](https://github.com/deadronos/asteroid-miner-horizons/issues/173)
-- Exploration: sensor ping, rich deposits and derelicts — [#38](https://github.com/deadronos/asteroid-miner-horizons/issues/38)
