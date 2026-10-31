@@ -258,6 +258,31 @@ describe('balance bot', () => {
       { t: 'buyHull', hullId: 'drone' },
     ]);
   });
+
+  it('buys an ice-priced upgrade before the refine that would spend its ice', () => {
+    const s = docked(1, 1);
+    // 35 ice worth of fuel still to crack: after the refine pays its 175 ice the
+    // laser's 50-ice price no longer fits the bank, though it does now.
+    s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
+    expect(botCommands(s, { warp: false })).toEqual([
+      { t: 'upgrade', shipId: flagship(s.run).id, slot: 0 },
+      { t: 'refine', recipe: 'fuel', count: 35 },
+    ]);
+  });
+
+  it('accepts a contract and buys in the same dock visit', () => {
+    const s = docked(1, 1);
+    s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
+    const { reward, data } = contractReward('deliverIce', 6);
+    s.run.contracts.offers = [
+      { id: 9, kind: 'deliverIce', target: 6, progress: 0, timeLimit: 360, timeLeft: 100, reward, data },
+    ];
+    expect(botCommands(s, { warp: false })).toEqual([
+      { t: 'acceptContract', contractId: 9 },
+      { t: 'upgrade', shipId: flagship(s.run).id, slot: 0 },
+      { t: 'refine', recipe: 'fuel', count: 35 },
+    ]);
+  });
 });
 
 /** A game where the bot's only decision is the flagship's order: no offers, perks, fuel or affordable purchases. */
