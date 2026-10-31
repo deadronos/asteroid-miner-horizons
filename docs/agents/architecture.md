@@ -15,18 +15,20 @@ src/data  ──┼─▶ src/sim ──┬─▶ src/render  (three.js)
 
 - **`src/core`** — primitives with no project knowledge: seeded `rng`, `vec` helpers, `spatialHash`, `array`,
   `format`, and the touch `gesture` maths.
-- **`src/data`** — pure tables and values, no logic: resources, components, hulls, perks, refining recipes,
-  contracts, modifiers, hazards, rock traits, achievements, and the global `tuning.ts` knobs. The tables drive
-  both the sim and the HUD text, so one number here changes both.
+- **`src/data`** — pure data and derived helpers, no game rules: resources, components, hulls, perks, doctrines,
+  refining recipes, contracts, modifiers, hazards, rock traits, exploration salvage, gate costs, achievements, and
+  the global `tuning.ts` knobs. The tables drive both the sim and the HUD text, so one number here changes both.
 - **`src/sim`** — the deterministic game: state shapes, rules, generation and AI (drones, haulers, outposts),
-  hazards, warp routes, achievements, offline progress, and save validation. No DOM, no three.js.
+  hazards, exploration, the Horizon Gate, warp routes, achievements, offline progress, and save validation. No DOM,
+  no three.js.
 - **`src/render`** — three.js: camera/zoom/fx, instanced rocks, pickups and debris, ships and beams, particles,
   system scenery, parallax backdrop, adaptive quality and WebGL context-loss recovery.
 - **`src/ui`** — the DOM HUD, built once per structure change and refreshed in place. `Menu.ts` is the ⚙ modal;
   `menu/` holds its tabs, `panels/` holds the HUD panels. `TitleScreen.ts` is the boot screen and
   `TouchControls.ts` the on-screen controls for touch devices.
 - The top-level `src/*.ts` files are the wiring: `main.ts` (bootstrap and the frame loop), `input.ts`,
-  `settings.ts`, `pause.ts`, `session.ts`, `reloadGuard.ts`, `debugHook.ts` (whether `window.__amh` is attached).
+  `gamepad.ts` (pad mapping), `settings.ts`, `pause.ts`, `session.ts`, `slotLock.ts` (one writable tab per slot),
+  `reloadGuard.ts`, `debugHook.ts` (whether `window.__amh` is attached).
 
 `src/audio` sits beside the presentation layers: `sfx.ts` holds pure rules for turning sim state into sound,
 `music.ts` the pure per-star-class music rules, `AudioEngine.ts` owns the `AudioContext`, and `MusicPlayer.ts`
@@ -37,8 +39,8 @@ schedules the generative music into its music bus.
 `tick(state, dt, input, index)` in `src/sim/update.ts` runs at a fixed 60 Hz (`TUNING.simHz`) and is decoupled
 from the render frame rate by the accumulator loop in `main.ts`. Order of operations, from the module header:
 
-> commands → orbits → rocks → hazards → outposts → ships (pilot, collide, heat, dock) → pickups → belt regrowth →
-> contracts → refinery → achievements.
+> commands → time and sensor cooldown → orbits → rocks → hazards → outposts → ships (pilot, collide, heat, dock) →
+> exploration (derelict salvage) → pickups → belt regrowth → contracts → refinery → achievements.
 
 The frame loop also handles the paused case: while paused it still calls `applyCommands`, so purchases and
 refits in an open menu apply immediately.
@@ -62,7 +64,8 @@ refits in an open menu apply immediately.
 ## The two important boundaries
 
 - **`SimIndex`** (`src/sim/index.ts`) is per-session derived state: the rock spatial hash, a rock id map,
-  each ship's stats with the current system's modifiers applied, and scratch vectors. It is rebuilt every tick,
+  each ship's stats with the current system's modifiers applied, transient per-tick sets and maps for comets,
+  volatile rocks, outposts, repair/upgrade/builder timers and claims, plus scratch vectors. It is rebuilt every tick,
   never persisted, and its instances are reused to avoid per-tick allocation (there is a test for this).
 - **`GameState`** (`src/sim/types.ts`) is plain JSON-serialisable data — no classes, no `Map`s — so a save is
   `JSON.stringify` of `{ version, profile, run }`. Transient output lives in `out` and is not persisted. A

@@ -17,10 +17,11 @@ npm install
 npm run dev        # http://localhost:5173
 npm test           # headless sim tests (vitest)
 npm run build      # typecheck + production build into dist/
+npm run bundle-size  # gzipped JS vs the 240 kB CI budget (run after a build)
 npm run preview    # serve the production build
 npm run lint       # oxlint (warnings fail); npm run lint:fix auto-fixes
 npm run format     # oxfmt formats in place; format:check only verifies
-npm run check      # everything CI runs except the build
+npm run check      # format:check + lint + typecheck + tests (the CI correctness gate)
 npm run bench      # headless tick benchmark: mean/p95 ms per tick
 npm run bench:stress  # opt-in stress run: ~2,000 rocks, 50 ships, 1,000 pickups (budget: mean < 1 ms/tick)
 npm run balance    # bot plays 30 seeds × 10 warps → docs/balance.md
@@ -28,9 +29,10 @@ npm run balance    # bot plays 30 seeds × 10 warps → docs/balance.md
 
 Linting and formatting use the [Oxc](https://oxc.rs) toolchain: `oxlint` (config in
 `.oxlintrc.json`) and `oxfmt` (config in `.oxfmtrc.json`, Prettier-compatible options).
-GitHub Actions (`.github/workflows/ci.yml`) runs format check, lint, typecheck, tests and the
-build on every push to `main` and on every pull request. Releases are tag-driven: pushing a `v*`
-tag runs `.github/workflows/release.yml`, which repeats those checks, builds once, publishes that
+GitHub Actions (`.github/workflows/ci.yml`) runs the correctness gate, the build, the 240 kB
+bundle-size budget, a warn-only tick benchmark and a balance-report freshness check on every push
+to `main` and on every pull request. Releases are tag-driven: pushing a `v*` tag runs
+`.github/workflows/release.yml`, which repeats the correctness checks, builds once, publishes that
 build to GitHub Pages and cuts a GitHub Release with the build attached. Nothing else publishes —
 `main` is never live. For editor integration, install the Oxc extension (VS Code / Cursor). It
 picks up both config files.
@@ -141,7 +143,7 @@ It goes away after the first warp; × hides it for that save.
 - **Damage**: collisions above a speed threshold and star heat hit shields first, then
   hull. Armor reduces damage. A lost flagship is rebuilt at the station (its cargo is
   lost); lost drones are gone.
-- **Warp / prestige**: warping costs fuel from the bank, and the cost rises 35% per warp.
+- **Warp / prestige**: warping costs fuel from the bank, and the cost rises 30% per warp.
   It resets the bank, ships and components. Pressing WARP opens a route picker with three
   candidate systems, each previewing its star class, hazard level, belts, rock count,
   richness and modifiers; the one you pick is the next system. The candidates depend only
@@ -185,13 +187,14 @@ It goes away after the first warp; × hides it for that save.
   round positions and timers to six significant digits; the slots themselves keep full precision. The
   running slot can instead be restarted as a new game. Empty slots can start a new game,
   import a `.json` file, or take pasted save text. Imports are validated and give a
-  readable error. The ⚙ menu also has a Controls tab.
+  readable error. Only one tab can run a slot: a second tab on the same slot is read-only,
+  saves nothing and earns no offline progress. The ⚙ menu also has a Controls tab.
 - **Settings** (⚙ menu, stored separately from saves so they apply to every slot):
   - _Gameplay_: pause while menus are open or the window is unfocused (P pauses
     manually; menus keep working while paused), autosave interval, confirmations, offline
     progress, the hazard level (Off / Normal / Harsh), and the autopilot assists (rock
     avoidance and braking, drone auto-unload, fragment chaining).
-  - _Graphics_: Low/Medium/High quality (resolution cap, star and particle density),
+  - _Graphics_: Auto/Low/Medium/High quality (resolution cap, star and particle density),
     nebula, anti-aliasing (applies on reload), screen shake, FPS counter, and automatic
     reduced-motion support from your OS preference (disables shake and softens the beam pulse and warp dive).
   - _Interface_: HUD scale, compact HUD (tighter panels, shorter log), always-on ship bars,
@@ -233,8 +236,9 @@ Where to go next: [`AGENTS.md`](AGENTS.md) is the entry point for coding agents 
 anyone; [`docs/agents/architecture.md`](docs/agents/architecture.md) covers the layers, the tick and the design
 rules; [`docs/agents/repo-structure.md`](docs/agents/repo-structure.md) covers what lives where.
 
-`window.__amh` exposes `{ state(), send(cmd), settings, renderer, audio }` for console poking and automated
-checks. Dev builds always attach it; a production build does so only with `?debug` or
+`window.__amh` exposes
+`{ state(), send(cmd), settings, renderer, input, audio, autoQuality, info(), title }` for console poking and
+automated checks. Dev builds always attach it; a production build does so only with `?debug` or
 `localStorage['asteroid-miner-horizons/debug'] = '1'`. See
 [`docs/agents/architecture.md`](docs/agents/architecture.md#debug-hook).
 
@@ -245,5 +249,4 @@ Each of these is tracked as an open issue; the umbrella for game scope is
 
 - Pirates and combat modules — [#175](https://github.com/deadronos/asteroid-miner-horizons/issues/175)
 - A station market and trade routes — [#176](https://github.com/deadronos/asteroid-miner-horizons/issues/176)
-- More fleet roles, such as escorts — [#174](https://github.com/deadronos/asteroid-miner-horizons/issues/174)
 - Contract variety and faction reputation — [#173](https://github.com/deadronos/asteroid-miner-horizons/issues/173)
