@@ -79,7 +79,16 @@ describe('rate limiter', () => {
 });
 
 describe('event cues', () => {
-  const keys = ['research', 'achievement', 'contractDone', 'contractFail', 'outpost', 'shipLoss'] as CueKey[];
+  const keys = [
+    'research',
+    'achievement',
+    'contractDone',
+    'contractFail',
+    'outpost',
+    'shipLoss',
+    'ping',
+    'salvage',
+  ] as CueKey[];
 
   it('maps every cue key to its own preset at its pinned level', () => {
     // oxlint-disable-next-line unicorn/no-array-sort -- the sorted copies are test-local
@@ -93,6 +102,8 @@ describe('event cues', () => {
       contractFail: 0.45,
       outpost: 0.55,
       shipLoss: 0.7,
+      ping: 0.5,
+      salvage: 0.65,
     });
   });
 
@@ -182,6 +193,15 @@ describe('event cues', () => {
     expect(l.allow('contractFail', 0)).toBe(true);
     expect(l.allow('contractFail', 0.29)).toBe(false);
     expect(l.allow('contractFail', 0.3)).toBe(true);
+  });
+
+  it('plays ping and salvage from their log events', () => {
+    expect(
+      cueBatch([
+        { level: 'info', text: 'Sensor ping: 2 anomalies found.', event: 'ping' },
+        { level: 'major', text: 'Salvaged Ore freighter: …', event: 'salvage' },
+      ]),
+    ).toEqual({ deny: false, cues: ['ping', 'salvage'] });
   });
 
   it('paces outpost through MIN_GAP', () => {

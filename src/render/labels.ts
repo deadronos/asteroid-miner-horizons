@@ -6,6 +6,7 @@
 import type { Vec2 } from '../core/vec';
 import { TUNING } from '../data/tuning';
 import type { Planet, Run, StarSystem } from '../sim/types';
+import { type WorldLabel, collectWorldLabels } from './explorationView';
 import { BLIP_GLYPH, type Blip, beltLabel, collectBlips } from './mapBlips';
 
 /** View half-heights (world units) over which labels fade in; normal play zoom is 420. */
@@ -111,6 +112,16 @@ export const planetPos = (p: Planet): Vec2 => ({ x: Math.cos(p.angle) * p.orbitR
 
 export class MapLabels {
   readonly el: HTMLElement;
+  /** Play-zoom anomaly labels: a layer of their own because the map layer fades out at play zoom. */
+  private readonly worldEl: HTMLElement;
+  private worldSpans: HTMLSpanElement[] = [];
+  private worldSizes: { w: number; h: number }[] = [];
+  private readonly worldItems: LabelItem[] = [];
+  private readonly worldPlacedOut: (Box | null)[] = [];
+  private readonly worldPlacedScratch: Box[] = [];
+  private readonly worldLabels: WorldLabel[] = [];
+  private readonly worldPos: Vec2 = { x: 0, z: 0 };
+  private worldBlockerAge = BLOCKER_REFRESH;
   private spans: HTMLSpanElement[] = [];
   /** Label sizes, re-measured with the blockers so a HUD-scale change is picked up. */
   private sizes: { w: number; h: number }[] = [];
@@ -136,7 +147,9 @@ export class MapLabels {
   ) {
     this.el = document.createElement('div');
     this.el.className = 'map-labels';
-    container.append(this.el);
+    this.worldEl = document.createElement('div');
+    this.worldEl.className = 'world-labels';
+    container.append(this.el, this.worldEl);
   }
 
   private build(sys: StarSystem): void {
@@ -172,9 +185,12 @@ export class MapLabels {
       }
       this.shown = false;
       this.blockerAge = BLOCKER_REFRESH;
+      this.worldEl.style.display = '';
+      this.updateWorld(run, wpp, dt, toScreen);
       return;
     }
     this.shown = true;
+    this.worldEl.style.display = 'none';
 
     this.blockerAge += dt;
     if (this.blockerAge >= BLOCKER_REFRESH) {
@@ -228,6 +244,67 @@ export class MapLabels {
       if (b) span.style.transform = `translate(${b.x.toFixed(1)}px, ${b.y.toFixed(1)}px)`;
     }
     this.updateBlips(run, toScreen);
+  }
+
+  /**
+   * Play-zoom labels for revealed derelicts and rich rocks. The map layer is faded out here, so this layer places
+   * its own labels against the same HUD blockers and pools its spans and scratch arrays.
+   */
+  private updateWorld(run: Run, wpp: number, dt: number, toScreen: (p: Vec2) => { x: number; y: number }): void {
+    const n = collectWorldLabels(run, this.worldLabels);
+    for (let i = this.worldSpans.length; i < n; i++) {
+      const s = document.createElement('span');
+      s.className = 'world-label';
+      s.style.visibility = 'hidden';
+      this.worldEl.append(s);
+      this.worldSpans.push(s);
+      this.worldSizes.push({ w: s.offsetWidth, h: s.offsetHeight });
+    }
+    for (let i = n; i < this.worldSpans.length; i++) this.worldSpans[i]!.style.visibility = 'hidden';
+    if (n === 0) return;
+
+    this.worldBlockerAge += dt;
+    if (this.worldBlockerAge >= BLOCKER_REFRESH) {
+      this.worldBlockerAge = 0;
+      const o = this.container.getBoundingClientRect();
+      this.blockers = this.readBlockers().map((b) => ({ x: b.x - o.left, y: b.y - o.top, w: b.w, h: b.h }));
+      for (let i = 0; i < n; i++) {
+        const sz = this.worldSizes[i]!;
+        sz.w = this.worldSpans[i]!.offsetWidth;
+        sz.h = this.worldSpans[i]!.offsetHeight;
+      }
+    }
+
+    while (this.worldItems.length < n) this.worldItems.push({ x: 0, y: 0, r: 0, w: 0, h: 0 });
+    this.worldItems.length = n;
+    for (let i = 0; i < n; i++) {
+      const lbl = this.worldLabels[i]!;
+      const span = this.worldSpans[i]!;
+      if (span.dataset.kind !== lbl.kind) {
+        span.dataset.kind = lbl.kind;
+        span.textContent = lbl.text;
+      }
+      this.worldPos.x = lbl.x;
+      this.worldPos.z = lbl.z;
+      const at = toScreen(this.worldPos);
+      const sz = this.worldSizes[i]!;
+      const it = this.worldItems[i]!;
+      it.x = at.x;
+      it.y = at.y;
+      it.r = Math.max(MIN_R_PX, 8 / wpp);
+      it.w = sz.w;
+      it.h = sz.h;
+      if (it.alts) it.alts.length = 0;
+    }
+    this.view.w = this.container.clientWidth;
+    this.view.h = this.container.clientHeight;
+    const placed = placeLabels(this.worldItems, this.blockers, this.view, this.worldPlacedOut, this.worldPlacedScratch);
+    for (let i = 0; i < placed.length; i++) {
+      const b = placed[i]!;
+      const span = this.worldSpans[i]!;
+      span.style.visibility = b && b.w > 0 ? 'visible' : 'hidden';
+      if (b) span.style.transform = `translate(${b.x.toFixed(1)}px, ${b.y.toFixed(1)}px)`;
+    }
   }
 
   /** Pulsing is a CSS animation on the layer; the renderer turns it off for Low quality and reduced motion. */

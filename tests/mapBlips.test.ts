@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { RAW_RESOURCES } from '../src/data/resources';
-import { type Blip, beltLabel, collectBlips, dominantResource } from '../src/render/mapBlips';
+import { BLIP_GLYPH, type Blip, beltLabel, collectBlips, dominantResource } from '../src/render/mapBlips';
 import { newGame } from '../src/sim/create';
+import { anomalies } from '../src/sim/exploration';
 import { generateSystem } from '../src/sim/generate';
 import type { Belt } from '../src/sim/types';
 
@@ -74,6 +75,19 @@ describe('collectBlips', () => {
       { kind: 'comet', x: 9, z: -9 },
       { kind: 'flare', x: 0, z: 0 },
     ]);
+  });
+
+  it('marks revealed anomalies with their glyph and drops claimed derelicts', () => {
+    const { run } = newGame(5);
+    const out: Blip[] = [];
+    const base = collectBlips(run, out);
+    const derelict = anomalies(run).find((a) => a.kind === 'derelict')!;
+    run.exploration.revealed.push(derelict.id);
+    expect(collectBlips(run, out)).toBe(base + 1);
+    expect(out[base]).toEqual({ kind: 'derelict', x: derelict.pos.x, z: derelict.pos.z });
+    expect(BLIP_GLYPH.derelict).toBe('⌖');
+    run.exploration.claimed.push(derelict.id);
+    expect(collectBlips(run, out)).toBe(base);
   });
 
   it('reuses blip objects between calls', () => {

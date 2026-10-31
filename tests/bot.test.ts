@@ -1,19 +1,23 @@
 import { describe, expect, it } from 'vitest';
 import { botCommands, chooseRoute, HAULER_AFTER, ICE_RESERVE } from '../scripts/bot';
 import { runBot } from '../scripts/harness';
-import { send } from './helpers';
+import { runTicks, send } from './helpers';
 import { contractReward } from '../src/sim/contracts';
 import { isVariant, type Tier } from '../src/data/components';
 import { HULLS } from '../src/data/hulls';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
 import { makeOutpost } from '../src/sim/automation';
+import { anomalies } from '../src/sim/exploration';
 import { cometPathEscape, inFlareZone } from '../src/sim/hazards';
 import { warpCost } from '../src/sim/economy';
 import { routeValue, warpRoutes } from '../src/sim/routes';
 import { droneCount, fleetCap, flagship, makeShip, shipStats } from '../src/sim/ships';
 import type { Command } from '../src/sim/commands';
 import type { Contract, GameState, Rock } from '../src/sim/types';
+
+/** Bot commands without the free sensor ping, which rides along with every order. */
+const orders = (cmds: Command[]): Command[] => cmds.filter((c) => c.t !== 'ping');
 
 /** A deliverCrystal offer with a fixed id, for the bot's serviceability check. */
 const crystalOffer = (id: number): Contract => {
@@ -128,9 +132,10 @@ describe('balance bot', () => {
     s.run.pickups = [];
     s.run.rocks = [rock(1, 'ore', 120, 0)];
     s.run.bank = { ore: 0, ice: 10, crystal: 0, alloy: 0, fuel: 0 };
+    s.run.exploration.claimed.push(-1);
 
     // 10 ice queues 2 fuel; the mine order still comes back in the same cycle.
-    expect(botCommands(s, { warp: false })).toEqual([
+    expect(orders(botCommands(s, { warp: false }))).toEqual([
       { t: 'refine', recipe: 'fuel', count: 2 },
       { t: 'mine', shipId: fs.id, rockId: 1 },
     ]);
@@ -158,7 +163,7 @@ describe('balance bot', () => {
     expect(s.run.contracts.active).toBeNull();
     const first = s.run.contracts.offers[0]!;
 
-    expect(botCommands(s, { warp: false })).toEqual([{ t: 'acceptContract', contractId: first.id }]);
+    expect(orders(botCommands(s, { warp: false }))).toEqual([{ t: 'acceptContract', contractId: first.id }]);
   });
 
   it('mines the contract resource for an active deliverIce contract', () => {
@@ -169,6 +174,7 @@ describe('balance bot', () => {
     fs.cargo = { ore: 0, ice: 0, crystal: 0, alloy: 0, fuel: 0 };
     s.run.bank.fuel = 1000; // covered for the next warp, so the bot doesn't refine first
     s.run.pickups = [];
+    s.run.exploration.claimed.push(-1);
     // Ore is nearest; the ice rock is farther but scores as half distance for the contract.
     s.run.rocks = [rock(1, 'ore', 100, 0), rock(2, 'ice', 0, 150)];
     s.run.contracts.active = {
@@ -182,7 +188,7 @@ describe('balance bot', () => {
       data: 0,
     };
 
-    expect(botCommands(s, { warp: false })).toEqual([{ t: 'mine', shipId: fs.id, rockId: 2 }]);
+    expect(orders(botCommands(s, { warp: false }))).toEqual([{ t: 'mine', shipId: fs.id, rockId: 2 }]);
   });
 
   it('refines fuel and reaches the first warp from seed 1000', () => {
@@ -230,7 +236,7 @@ describe('balance bot', () => {
     s.run.bank = { ore: 10000, ice: 10000, crystal: 100, alloy: 0, fuel: 1000 };
 
     // Tier-3 cargo costs 80 ore, 64 alloy, 128 ice, 14 crystal; the ore covers the shortfall.
-    expect(botCommands(s, { warp: false })).toEqual([{ t: 'refine', recipe: 'alloy', count: 64 }]);
+    expect(orders(botCommands(s, { warp: false }))).toEqual([{ t: 'refine', recipe: 'alloy', count: 64 }]);
   });
 
   it('smelts the alloy a hauler is short of instead of skipping it', () => {
@@ -244,9 +250,11 @@ describe('balance bot', () => {
     s.run.contracts.active = null;
     s.run.contracts.offers = [];
     s.run.bank = { ore: 10000, ice: 10000, crystal: 0, alloy: 0, fuel: 1000 };
-    expect(botCommands(s, { warp: false })).toEqual([{ t: 'refine', recipe: 'alloy', count: HULLS.hauler.cost.alloy }]);
+    expect(orders(botCommands(s, { warp: false }))).toEqual([
+      { t: 'refine', recipe: 'alloy', count: HULLS.hauler.cost.alloy },
+    ]);
     s.run.bank.alloy = HULLS.hauler.cost.alloy!;
-    expect(botCommands(s, { warp: false })).toEqual([{ t: 'buyHull', hullId: 'hauler' }]);
+    expect(orders(botCommands(s, { warp: false }))).toEqual([{ t: 'buyHull', hullId: 'hauler' }]);
   });
 
   it('a refine cycle while docked also buys an affordable item', () => {
@@ -260,7 +268,7 @@ describe('balance bot', () => {
     const reserve = ICE_RESERVE * warpCost(s);
     s.run.bank = { ore: 200, ice: reserve * 5 + 75, crystal: 0, alloy: 0, fuel: 0 };
 
-    expect(botCommands(s, { warp: false })).toEqual([
+    expect(orders(botCommands(s, { warp: false }))).toEqual([
       { t: 'refine', recipe: 'fuel', count: reserve },
       { t: 'buyHull', hullId: 'drone' },
     ]);
@@ -273,7 +281,7 @@ describe('balance bot', () => {
     // is left above the reserve to refine at all).
     s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
     const cmds = botCommands(s, { warp: false });
-    expect(cmds).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
+    expect(orders(cmds)).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
     // Applied, this cycle and the next few go through without a rejected command.
     for (const c of cmds) send(s, c);
     expect(flagship(s.run).slots[0]?.tier).toBe(2);
@@ -301,10 +309,10 @@ describe('balance bot', () => {
       { id: 9, kind: 'deliverIce', target: 6, progress: 0, timeLimit: 360, timeLeft: 100, reward, data },
     ];
     const cmds = botCommands(s, { warp: false });
-    expect(cmds).toEqual([{ t: 'acceptContract', contractId: 9 }]);
+    expect(orders(cmds)).toEqual([{ t: 'acceptContract', contractId: 9 }]);
     for (const c of cmds) send(s, c);
     // The contract takes this cycle; the laser is still affordable on the next.
-    expect(botCommands(s, { warp: false })).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
+    expect(orders(botCommands(s, { warp: false }))).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
   });
 });
 
@@ -316,6 +324,8 @@ function orderOnly(): GameState {
   s.run.pickups = [];
   s.run.rocks = [];
   flagship(s.run).order = null;
+  // A sentinel claim marks the sensor sweep as over, so these cases start on the flagship's order.
+  s.run.exploration.claimed.push(-1);
   return s;
 }
 
@@ -326,8 +336,9 @@ function flareWarning(s: GameState): void {
 }
 
 const only = (cmds: Command[]): Command => {
-  expect(cmds).toHaveLength(1);
-  return cmds[0]!;
+  const rest = orders(cmds);
+  expect(rest).toHaveLength(1);
+  return rest[0]!;
 };
 
 /** The target of a move command; throws on anything else. */
@@ -365,7 +376,7 @@ describe('balance bot hazard reflexes', () => {
     fs.order = { kind: 'mine', rockId: 500 };
     expect(only(botCommands(s))).toEqual({ t: 'stop', shipId: fs.id });
     fs.order = null;
-    expect(botCommands(s)).toEqual([]);
+    expect(orders(botCommands(s))).toEqual([]);
   });
 
   it('moves out of a comet path', () => {
@@ -417,6 +428,7 @@ function docked(drones: number, laserTier: Tier = 2): GameState {
   const fs = flagship(s.run);
   fs.pos = { ...st };
   fs.slots[0] = { type: 'laser', variant: 'focused', tier: laserTier };
+  s.run.exploration.claimed.push(-1);
   s.run.contracts.offers = [];
   s.profile.perks.bay = 1;
   for (let i = 0; i < drones; i++) s.run.ships.push(makeShip(s.run, s.profile, 'drone', `Drone-${i}`, st));
@@ -448,20 +460,20 @@ describe('balance bot automation', () => {
   it('spends the fleet slot after two drones and a builder on a hauler', () => {
     const s = docked(2);
     s.run.ships.push(makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', s.run.system.station.pos));
-    expect(botCommands(s, { warp: false })).toEqual([{ t: 'buyHull', hullId: 'hauler' }]);
+    expect(orders(botCommands(s, { warp: false }))).toEqual([{ t: 'buyHull', hullId: 'hauler' }]);
   });
 
   it('still buys a second drone before any hauler', () => {
-    expect(botCommands(docked(1), { warp: false })).toEqual([{ t: 'buyHull', hullId: 'drone' }]);
+    expect(orders(botCommands(docked(1), { warp: false }))).toEqual([{ t: 'buyHull', hullId: 'drone' }]);
   });
 
   it('buys a first drone before the tier-2 laser', () => {
-    expect(botCommands(docked(0, 1), { warp: false })).toEqual([{ t: 'buyHull', hullId: 'drone' }]);
+    expect(orders(botCommands(docked(0, 1), { warp: false }))).toEqual([{ t: 'buyHull', hullId: 'drone' }]);
   });
 
   it('upgrades the flagship laser to tier 2 before a second drone', () => {
     const s = docked(1, 1);
-    expect(botCommands(s, { warp: false })).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
+    expect(orders(botCommands(s, { warp: false }))).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
   });
 
   it('saves for the tier-2 laser instead of buying a second drone', () => {
@@ -479,7 +491,7 @@ describe('balance bot automation', () => {
 
   it('buys one construction drone once it has two mining drones, ahead of the hauler', HEAVY, () => {
     const s = docked(2);
-    expect(botCommands(s, { warp: false })).toEqual([{ t: 'buyHull', hullId: 'constructionDrone' }]);
+    expect(orders(botCommands(s, { warp: false }))).toEqual([{ t: 'buyHull', hullId: 'constructionDrone' }]);
     s.run.ships.push(makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', s.run.system.station.pos));
     expect(botCommands(s, { warp: false }).some((c) => c.t === 'buyHull' && c.hullId === 'constructionDrone')).toBe(
       false,
@@ -544,7 +556,7 @@ describe('balance bot refinery perks', () => {
     const s = newGame(1000);
     s.profile.data = 2; // affords only furnace 1 (cost 2) or a cheap perk at level 1
     maxCheapPerks(s);
-    expect(botCommands(s, { warp: false })[0]).not.toEqual({ t: 'buyPerk', perk: 'furnace' });
+    expect(orders(botCommands(s, { warp: false }))[0]).not.toEqual({ t: 'buyPerk', perk: 'furnace' });
   });
 
   it('researches the furnace once refining the warp fuel takes over a minute', () => {
@@ -552,6 +564,37 @@ describe('balance bot refinery perks', () => {
     s.profile.warps = 5; // 50 × 1.3^5 ≈ 186 fuel ≈ 93 s of refining
     s.profile.data = 2;
     maxCheapPerks(s);
-    expect(botCommands(s, { warp: false })[0]).toEqual({ t: 'buyPerk', perk: 'furnace' });
+    expect(orders(botCommands(s, { warp: false }))[0]).toEqual({ t: 'buyPerk', perk: 'furnace' });
+  });
+});
+
+describe('balance bot exploration', () => {
+  it('pings and claims a derelict, and a claim never pays twice', () => {
+    const s = newGame(1);
+    let pings = 0;
+    runBot(s, {
+      seconds: 600,
+      warp: false,
+      commands: (cmds) => {
+        pings += cmds.filter((c) => c.t === 'ping').length;
+      },
+      after: (st) => st.run.exploration.claimed.length > 0,
+    });
+
+    expect(pings).toBeGreaterThan(1);
+    expect(s.run.exploration.revealed.length).toBeGreaterThan(0);
+    const claimed = s.run.exploration.claimed;
+    expect(claimed.length).toBeGreaterThan(0);
+    expect(new Set(claimed).size).toBe(claimed.length);
+
+    for (const id of claimed) {
+      const dl = anomalies(s.run)[id];
+      expect(dl?.kind).toBe('derelict');
+      if (dl?.kind !== 'derelict') continue;
+      const before = { ...s.run.bank };
+      flagship(s.run).pos = { ...dl.pos };
+      runTicks(s, 3);
+      expect(s.run.bank).toEqual(before);
+    }
   });
 });

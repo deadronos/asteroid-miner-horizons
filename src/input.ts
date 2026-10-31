@@ -9,7 +9,7 @@ import { interactTarget, padThrust, padZoom } from './core/gamepad';
 import { type Point, pinchStep } from './core/gesture';
 import { nextFocusIndex, FOCUSABLE } from './ui/focus';
 import { GamepadHint } from './ui/GamepadHint';
-import { PAD, PadReader } from './gamepad';
+import { PAD, PadReader, padCommand } from './gamepad';
 import { TUNING } from './data/tuning';
 import { dist, type Vec2 } from './core/vec';
 import { HULLS } from './data/hulls';
@@ -222,6 +222,9 @@ export class Input {
         if (hit?.kind === 'rock') this.send({ t: 'deployOutpost', rockId: hit.rock.id });
         return;
       }
+      case 'ping':
+        this.send({ t: 'ping' });
+        return;
     }
   }
 
@@ -273,6 +276,11 @@ export class Input {
       this.renderer.zoomAt(zoom, r.left + r.width / 2, r.top + r.height / 2);
     }
     for (const b of f.edges) {
+      const command = padCommand(b);
+      if (command) {
+        this.send(command);
+        continue;
+      }
       switch (b) {
         case PAD.A:
           this.padInteract();

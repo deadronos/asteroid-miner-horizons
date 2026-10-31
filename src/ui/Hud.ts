@@ -178,7 +178,7 @@ export class Hud {
       <b>Mine</b> tap an asteroid · <b>Unload</b> tap the station<br>
       <b>Fleet</b> tap a ship or Ship ▸ to select · long-press orders without selecting<br>
       <b>Automation</b> Outpost, then tap a large asteroid<br>
-      <b>View</b> pinch zoom · drag to pan · Follow · Map<br>
+      <b>View</b> pinch zoom · drag to pan · Follow · Map · Ping<br>
       <b>Menus</b> Research and the Horizon Gate · Pause · ? hides help · ⚙ saves & settings`
       : `
       <b>Flight</b> ${k('up')} ${k('left')} ${k('down')} ${k('right')} · click space to move<br>
@@ -186,6 +186,7 @@ export class Hud {
       <b>Collect</b> fly near debris · <b>Unload</b> click the station<br>
       <b>Fleet</b> click a ship, ${k('cycleShip')} or 1–9 to select · Esc stops<br>
       <b>Automation</b> ${k('outpost')} over a large asteroid deploys an outpost · haulers collect from it<br>
+      <b>Sensors</b> ${k('ping')} ping · reveals nearby rich deposits and derelicts<br>
       <b>View</b> wheel zoom · drag to pan · ${k('follow')} follow · ${k('map')} map<br>
       <b>Menus</b> ${k('research')} research and the Horizon Gate · ${k('pause')} pause · ${k('help')} hide help · ⚙ saves & settings`;
     this.fps.classList.toggle('hidden', !s.showFps);

@@ -35,6 +35,8 @@ export interface Rock {
   trait?: RockTrait;
   /** Set on a live comet, which flies straight instead of settling into orbit. Absent on every other rock. */
   comet?: true;
+  /** A rich deposit's rock: a large rock with `richYieldMul` times the usual units. Absent on every other rock. */
+  rich?: true;
 }
 
 export interface Pickup {
@@ -217,6 +219,7 @@ export interface Run {
   refinery: Refinery;
   hazards: Hazards;
   automation: Automation;
+  exploration: Exploration;
 }
 
 export interface CometWarning {
@@ -250,6 +253,22 @@ export interface Hazards {
   flares: number;
 }
 
+/** A hidden point of interest; derived from `exploration.seed`, never persisted itself. */
+export type Anomaly =
+  | { id: number; kind: 'rich'; pos: Vec2; resource: RawResource }
+  | { id: number; kind: 'derelict'; pos: Vec2; salvage: number };
+
+export interface Exploration {
+  /** Seed the anomaly list is derived from; mixed from profile seed, system and warp route. */
+  seed: number;
+  /** Seconds until the sensor ping is ready. */
+  pingCd: number;
+  /** Ids of anomalies a ping has revealed. */
+  revealed: number[];
+  /** Ids of derelicts whose salvage has been paid. */
+  claimed: number[];
+}
+
 export interface Profile {
   seed: number;
   warps: number;
@@ -278,10 +297,11 @@ export type Fx =
   | { t: 'impact'; pos: Vec2 }
   | { t: 'explode'; pos: Vec2 }
   | { t: 'warp' }
-  | { t: 'hazard'; kind: 'comet' | 'flare'; phase: 'warn' | 'start'; pos?: Vec2 };
+  | { t: 'hazard'; kind: 'comet' | 'flare'; phase: 'warn' | 'start'; pos?: Vec2 }
+  | { t: 'ping'; pos: Vec2; range: number };
 
-/** Explicit event identities the audio layer keys on (details stay in `text`). */
-export type LogEvent = 'research' | 'contractDone' | 'contractFail' | 'outpost' | 'shipLoss';
+/** Explicit event identities the HUD and audio layer can key on (details stay in `text`). */
+export type LogEvent = 'research' | 'contractDone' | 'contractFail' | 'outpost' | 'shipLoss' | 'ping' | 'salvage';
 
 export interface LogEntry {
   /** info: routine · warn: rejected command / danger · major: milestones and losses */

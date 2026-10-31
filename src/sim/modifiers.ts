@@ -33,8 +33,13 @@ export function rollModifiers(seed: number, number: number): ModifierId[] {
   return out;
 }
 
-/** The product of every modifier's multipliers; 1 where a modifier says nothing. */
+/** Last computed effects and the array they came from; a system's modifiers array is stable per run. */
+let fxMods: readonly ModifierId[] | null = null;
+let fxValue: SystemEffects | null = null;
+
+/** The product of every modifier's multipliers; 1 where a modifier says nothing. Cached per modifiers array. */
 export function systemEffects(mods: readonly ModifierId[]): SystemEffects {
+  if (mods === fxMods && fxValue) return fxValue;
   const fx: SystemEffects = { beltCount: 1, mix: { ore: 1, ice: 1, crystal: 1 }, magnet: 1, regrowInterval: 1 };
   for (const id of mods) {
     const m = MODIFIERS[id];
@@ -43,6 +48,8 @@ export function systemEffects(mods: readonly ModifierId[]): SystemEffects {
     fx.regrowInterval *= m.regrowInterval ?? 1;
     for (const k of KINDS) fx.mix[k] *= m.mix?.[k] ?? 1;
   }
+  fxMods = mods;
+  fxValue = fx;
   return fx;
 }
 

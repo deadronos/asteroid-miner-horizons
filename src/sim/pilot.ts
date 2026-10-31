@@ -16,6 +16,11 @@ import { setStatus } from './status';
 import { canMine, volatileSafeDistance } from './traits';
 import type { GameState, Rock, Ship } from './types';
 
+/** Scratch vectors for the hot per-ship steering path; callers consume them before the next call. */
+const AVOID = { x: 0, z: 0 };
+const ESCAPE = { x: 0, z: 0 };
+const SHELTER = { x: 0, z: 0 };
+
 export interface TickCtx {
   state: GameState;
   index: SimIndex;
@@ -131,10 +136,9 @@ export function steer(
       px = wx / w;
       pz = wz / w;
     }
-    const a = { x: 0, z: 0 };
-    const danger = avoidance(ctx, ship, st, px, pz, ignoreId, a);
-    x += a.x * Math.max(want, 0.5);
-    z += a.z * Math.max(want, 0.5);
+    const danger = avoidance(ctx, ship, st, px, pz, ignoreId, AVOID);
+    x += AVOID.x * Math.max(want, 0.5);
+    z += AVOID.z * Math.max(want, 0.5);
     want *= 1 - 0.7 * danger; // ease off the throttle while threading a cluster
     if (brake) brakeForRocks(ctx, ship, st);
   }
@@ -184,8 +188,9 @@ function starDetour(
   const l = Math.sqrt(l2);
   const nx = c > 1e-6 ? cx / c : -dz / l;
   const nz = c > 1e-6 ? cz / c : dx / l;
-  const wp = { x: nx * (safe + TUNING.starRoutePad), z: nz * (safe + TUNING.starRoutePad) };
-  steer(ctx, ship, st, wp.x - ship.pos.x, wp.z - ship.pos.z, ctx.assists.avoid, avoidId, brake);
+  const wx = nx * (safe + TUNING.starRoutePad);
+  const wz = nz * (safe + TUNING.starRoutePad);
+  steer(ctx, ship, st, wx - ship.pos.x, wz - ship.pos.z, ctx.assists.avoid, avoidId, brake);
   return true;
 }
 
@@ -391,18 +396,16 @@ export function unsafe(ctx: TickCtx, pos: Vec2): boolean {
  */
 export function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: boolean): boolean {
   const { run } = ctx.state;
-  const esc = { x: 0, z: 0 };
-  if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, esc)) {
+  if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, ESCAPE)) {
     setStatus(ctx.state.out, ship.id, 'avoidComet');
-    steer(ctx, ship, st, esc.x, esc.z, ctx.assists.avoid, null, false);
+    steer(ctx, ship, st, ESCAPE.x, ESCAPE.z, ctx.assists.avoid, null, false);
     return true;
   }
   if (!inFlareZone(run, ship.pos)) return false;
   setStatus(ctx.state.out, ship.id, 'flare');
-  const shelter = { x: 0, z: 0 };
-  if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, shelter) === 'dock')
+  if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, SHELTER) === 'dock')
     arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.5, null, false);
-  else arrive(ctx, ship, st, shelter, 20, null, false);
+  else arrive(ctx, ship, st, SHELTER, 20, null, false);
   return true;
 }
 

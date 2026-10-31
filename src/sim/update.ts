@@ -1,6 +1,6 @@
 // The fixed-step simulation tick. Order of operations:
-// commands → orbits → rocks → hazards → outposts → ships (pilot, collide, heat, dock) → pickups → belt regrowth →
-// contracts → refinery → achievements.
+// commands → time and sensor cooldown → orbits → rocks → hazards → outposts → ships (pilot, collide, heat, dock) →
+// exploration (derelict salvage) → pickups → belt regrowth → contracts → refinery → achievements.
 
 import { range } from '../core/rng';
 import { damp, dist, integrate, len, type Vec2, hypot2 } from '../core/vec';
@@ -14,6 +14,7 @@ import { haulerThink, updateOutposts } from './automation';
 import { applyCommand, type Command } from './commands';
 import { contractProgress, updateContracts } from './contracts';
 import { isDocked } from './economy';
+import { updateExploration } from './exploration';
 import { serviceDocked } from './fleetAuto';
 import { spawnBeltRock } from './generate';
 import { flareExposure, updateHazards } from './hazards';
@@ -37,6 +38,16 @@ export interface TickInput {
   hazards?: HazardLevel;
 }
 
+/** Reused across ticks: the tick is not reentrant, so one context object avoids a per-tick allocation. */
+const TICK_CTX = {
+  state: null as unknown as GameState,
+  index: null as unknown as SimIndex,
+  dt: 0,
+  assists: DEFAULT_ASSISTS,
+  auto: DEFAULT_FLEET_AUTO,
+  hazards: 'off' as HazardLevel,
+};
+
 /** Applies and clears queued commands. Also used while paused so menus still work. */
 export function applyCommands(state: GameState, commands: Command[]): void {
   for (const c of commands) applyCommand(state, c);
@@ -49,15 +60,21 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   const { run } = state;
   run.time += dt;
   state.profile.stats.time += dt;
+  if (run.exploration.pingCd > 0) run.exploration.pingCd = Math.max(0, run.exploration.pingCd - dt);
 
-  for (const p of run.system.planets) {
+  const planets = run.system.planets;
+  for (let i = 0; i < planets.length; i++) {
+    const p = planets[i]!;
     p.angle += p.speed * dt;
-    for (const m of p.moons) m.angle += m.speed * dt;
+    const moons = p.moons;
+    for (let j = 0; j < moons.length; j++) moons[j]!.angle += moons[j]!.speed * dt;
   }
 
   // Rocks drift on slow circular orbits; fragments settle back into them.
   const settle = 1 - damp(0.25, dt);
-  for (const r of run.rocks) {
+  const rocks = run.rocks;
+  for (let i = 0; i < rocks.length; i++) {
+    const r = rocks[i]!;
     if (r.comet) {
       integrate(r, dt);
       continue;
@@ -76,14 +93,13 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   index.rebuild(state);
   updateOutposts(state, index, dt);
 
-  const ctx: TickCtx = {
-    state,
-    index,
-    dt,
-    assists: input.assists ?? DEFAULT_ASSISTS,
-    auto: input.automation ?? DEFAULT_FLEET_AUTO,
-    hazards: level,
-  };
+  TICK_CTX.state = state;
+  TICK_CTX.index = index;
+  TICK_CTX.dt = dt;
+  TICK_CTX.assists = input.assists ?? DEFAULT_ASSISTS;
+  TICK_CTX.auto = input.automation ?? DEFAULT_FLEET_AUTO;
+  TICK_CTX.hazards = level;
+  const ctx = TICK_CTX;
 
   // Index-based so a ship removed in `updateShip` (an in-place `removeItem`)
   // does not shift the next ship into an already-visited slot. A volatile blast
@@ -100,6 +116,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     if (run.ships.length !== before) i = -1;
   }
 
+  updateExploration(state);
   updatePickups(state, index, dt);
   regrowBelts(state, dt);
   updateContracts(state, dt);
@@ -255,7 +272,9 @@ function updatePickups(state: GameState, index: SimIndex, dt: number): void {
 
     let best: Ship | null = null;
     let bestD = Infinity;
-    for (const s of run.ships) {
+    const ships = run.ships;
+    for (let j = 0; j < ships.length; j++) {
+      const s = ships[j]!;
       if (!isAlive(s)) continue; // was `const live = run.ships.filter(isAlive)`
       const st = stats.get(s.id)!;
       const d = dist(s.pos, p.pos);

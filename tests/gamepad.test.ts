@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buttonEdges, interactTarget, padThrust, padZoom } from '../src/core/gamepad';
+import { PAD, padCommand } from '../src/gamepad';
 
 describe('padThrust', () => {
   it('is zero inside the radial dead zone, even with both axes nonzero', () => {
@@ -46,6 +47,14 @@ describe('buttonEdges', () => {
   it('treats missing previous buttons as released, and releases as no edge', () => {
     expect(buttonEdges([], [false, true])).toEqual([1]);
     expect(buttonEdges([true], [false])).toEqual([]);
+  });
+});
+
+describe('padCommand', () => {
+  it('sends a ping from the right trigger and leaves stateful buttons to Input', () => {
+    expect(padCommand(PAD.RT)).toEqual({ t: 'ping' });
+    expect(padCommand(PAD.A)).toBeNull();
+    expect(padCommand(PAD.START)).toBeNull();
   });
 });
 

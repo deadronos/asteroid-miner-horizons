@@ -22,6 +22,12 @@
 //   whichever resource the bank (or the active delivery contract) needs. The
 //   flagship also leaves the rock to dock when the bank can pay for a hull, and
 //   heads for a large rock when an outpost is affordable.
+//   The sensors ping whenever they are ready, alongside any other order. Once
+//   the opening purchases are done and until the first derelict is claimed, the
+//   flagship sweeps points around the belts, so its pings reach ground the
+//   station-side rocks never cover. A revealed, safe derelict outranks the
+//   sweep and mining, and the warp waits until it is claimed. Far from the
+//   station, rocks are scored from the station so the ship works its way home.
 //   Hazard reflexes come first in the flagship's order: step out of a comet
 //   path, and dock (staying docked) or flee past the reach of a pending or
 //   burning flare; targets in either are skipped. A fuel refine rides
@@ -59,6 +65,7 @@ import {
 } from '../src/sim/economy';
 import { gatePayment } from '../src/sim/gate';
 import { outpostAt, outpostBlock } from '../src/sim/automation';
+import { anomalies, isClaimed, isRevealed, pingReady } from '../src/sim/exploration';
 import { findRock } from '../src/sim/generate';
 import { cometPathEscape, flareShelter, inFlareZone } from '../src/sim/hazards';
 import { batchCost, batchesPerCycle, cycleTime, queuedOutput, refineBlock } from '../src/sim/refining';
@@ -75,7 +82,7 @@ import {
   type ShipStats,
 } from '../src/sim/ships';
 import { canMine } from '../src/sim/traits';
-import type { GameState, Rock, Run, Ship } from '../src/sim/types';
+import type { Anomaly, GameState, Rock, Run, Ship } from '../src/sim/types';
 
 export const ICE_RESERVE = 0.5;
 /** Ice the fuel recipe eats per unit of fuel produced. */
@@ -101,6 +108,15 @@ const BUILDER_RESERVE = DEFAULT_FLEET_AUTO.builderReserve;
 export const HAULER_AFTER = 2;
 /** How far sideways the flagship is sent to leave a comet path. */
 const COMET_STEP = 150;
+/** The free sensor ping and an empty order list, shared so a bot cycle allocates neither. */
+const PING_ORDER: readonly Command[] = [{ t: 'ping' }];
+const NO_COMMANDS: readonly Command[] = [];
+/** Seconds spent sweeping the belts with the sensors once the opening purchases are done. */
+const SURVEY_SEC = 80;
+/** Survey stops once it has visited this many points around the belt. */
+const SURVEY_POINTS = 8;
+/** Beyond this many units from the station, mining is scored from the station so the ship comes home. */
+const HOME_RADIUS = 900;
 
 export interface BotOptions {
   /** Allow the bot to warp (the bench turns this off to stay in one system). */
@@ -140,19 +156,26 @@ function pilotCommands(state: GameState, opts: BotOptions): Command[] {
 
   const wc = warpCost(state);
   if (opts.warp !== false && run.bank.fuel >= wc) {
-    const route = opts.route === 'first' ? 0 : chooseRoute(state);
-    // Spare resources would be abandoned at the jump. Horizon Data joins them
-    // only once the measured mid-game is over. Warp fuel is reserved either way.
-    const data = profile.warps >= 6;
-    return gatePayment(state, { data })
-      ? [
-          { t: 'fundGate', data },
-          { t: 'warp', route },
-        ]
-      : [{ t: 'warp', route }];
+    // A safe, already-revealed derelict is a one-off payout: claim it before leaving.
+    refreshComets(WARP_HAZARD, run);
+    if (!isAlive(fs) || nearestDerelict(state, fs, WARP_HAZARD) == null) {
+      const route = opts.route === 'first' ? 0 : chooseRoute(state);
+      // Spare resources would be abandoned at the jump. Horizon Data joins them
+      // only once the measured mid-game is over. Warp fuel is reserved either way.
+      const data = profile.warps >= 6;
+      return gatePayment(state, { data })
+        ? [
+            { t: 'fundGate', data },
+            { t: 'warp', route },
+          ]
+        : [{ t: 'warp', route }];
+    }
   }
 
   if (!isAlive(fs)) return [];
+
+  // A free sensor ping rides along with every other order, whenever it is ready.
+  const ping = pingReady(run) ? PING_ORDER : NO_COMMANDS;
 
   // What the bank would buy now. The refine leaves that purchase's ice alone:
   // queueing a refine pays its ice up front and refining is one-way, so a refine
@@ -163,21 +186,21 @@ function pilotCommands(state: GameState, opts: BotOptions): Command[] {
   const fuel = refineFuel(state, wc, want ? iceOf(state, want) : 0);
   const contract = nextContract(state);
 
-  if (contract) return fuel ? [fuel, contract] : [contract];
+  if (contract) return [...ping, ...(fuel ? [fuel] : NO_COMMANDS), contract];
 
   const st = shipStats(fs, profile);
   if (isDocked(run, fs)) {
     // Price the purchase against the bank the refine leaves behind, then issue
     // both, so the purchase still happens before the ship undocks.
     const buy = fuel ? nextPurchase(projectedState(state, fuel), wc) : want;
-    if (buy) return fuel ? [fuel, buy] : [buy];
+    if (buy) return [...ping, ...(fuel ? [fuel] : NO_COMMANDS), buy];
   }
 
   const outpost = nextOutpost(state, fs, wc);
-  if (outpost) return fuel ? [fuel, outpost] : [outpost];
+  if (outpost) return [...ping, ...(fuel ? [fuel] : NO_COMMANDS), outpost];
 
   const order = flagshipOrder(state, fs, st, wc, want);
-  return fuel ? [fuel, ...order] : order;
+  return [...ping, ...(fuel ? [fuel] : NO_COMMANDS), ...order];
 }
 
 /** Price checks shared by every purchase: the ice reserve, and smelting an alloy shortfall from ore. */
@@ -229,7 +252,7 @@ function nextOutpost(state: GameState, fs: Ship, wc: number): Command | null {
   const { ok, needsAlloy, smeltFor } = purse(state, wc);
   if (needsAlloy(TUNING.outpostCost)) return smeltFor(TUNING.outpostCost);
   if (!ok(TUNING.outpostCost)) return null;
-  const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
+  const hz = refreshComets(WARP_HAZARD, run);
   for (const r of run.rocks) {
     if (r.size !== 0 || dist(r.pos, fs.pos) > r.radius + TUNING.outpostDeployGap + 40) continue;
     if (!outpostBlock(state, r, fs) && !unsafe(run, hz, r.pos)) return { t: 'deployOutpost', rockId: r.id };
@@ -283,14 +306,114 @@ interface Hazard {
   out: Vec2;
 }
 
+/** Reused by the warp gate so its derelict check allocates nothing. */
+const WARP_HAZARD: Hazard = { comets: [], out: { x: 0, z: 0 } };
+
+/** Refills `hz.comets` in place with the run's live comets. */
+function refreshComets(hz: Hazard, run: Run): Hazard {
+  const comets = hz.comets;
+  comets.length = 0;
+  for (let i = 0; i < run.rocks.length; i++) {
+    const r = run.rocks[i]!;
+    if (r.comet) comets.push(r);
+  }
+  return hz;
+}
+
+/** Reused survey target, so scoring a rock allocates no vectors. */
+const SURVEY: Vec2 = { x: 0, z: 0 };
+
+/**
+ * The current survey point, written into `SURVEY`. The sweep starts opposite
+ * the station and steps around the belt, so its pings reach anomalies the
+ * station-side rocks never cover.
+ */
+function surveyPoint(run: Run, elapsed: number): Vec2 {
+  const st = run.system.station.pos;
+  const belts = run.system.belts;
+  const radius = belts.length ? (belts[0]!.inner + belts[belts.length - 1]!.outer) / 2 : 0;
+  // Start opposite the station and step around the belt, so the sweep covers
+  // both belts without ever aiming at a point the station-side pings reach.
+  const phase = Math.min(SURVEY_POINTS - 1, Math.floor(elapsed / (SURVEY_SEC / SURVEY_POINTS)));
+  const a = Math.atan2(st.z, st.x) + Math.PI + phase * (Math.PI / 4);
+  SURVEY.x = Math.cos(a) * radius;
+  SURVEY.z = Math.sin(a) * radius;
+  return SURVEY;
+}
+
+/** True once a drone is in the fleet and the flagship's laser is tier 2, the opening purchases. */
+function openingDone(state: GameState): boolean {
+  const { run } = state;
+  let drone = false;
+  for (let i = 0; i < run.ships.length; i++) if (!isFlagship(run.ships[i]!)) drone = true;
+  if (!drone) return false;
+  const slots = flagship(run).slots;
+  for (let i = 0; i < slots.length; i++) {
+    const f = slots[i];
+    if (f?.type === 'laser') return f.tier >= 2;
+  }
+  return false;
+}
+
+/**
+ * Seconds into the current survey, or -1 when the system gets no survey. One
+ * entry per run object: its start time, or `NO_SURVEY` once it is over.
+ */
+const NO_SURVEY = -1;
+const surveyStart = new WeakMap<Run, number>();
+
+/**
+ * The sensor sweep starts after the opening purchases and runs for `SURVEY_SEC`,
+ * so it never delays the opening targets. A claim or the end of the sweep marks
+ * it done, so later bot cycles skip the opening check.
+ */
+function sweepElapsed(state: GameState): number {
+  const { run } = state;
+  const start = surveyStart.get(run);
+  if (start === NO_SURVEY) return -1;
+  if (run.exploration.claimed.length > 0) {
+    surveyStart.set(run, NO_SURVEY);
+    return -1;
+  }
+  if (start == null) {
+    if (!openingDone(state)) return -1;
+    surveyStart.set(run, run.time);
+    return 0;
+  }
+  const elapsed = run.time - start;
+  if (elapsed >= SURVEY_SEC) {
+    surveyStart.set(run, NO_SURVEY);
+    return -1;
+  }
+  return elapsed;
+}
+
 /** True if `pos` lies in the flare zone or a comet path (see `sim/hazards`). */
 const unsafe = (run: Run, hz: Hazard, pos: Vec2): boolean =>
   inFlareZone(run, pos) || cometPathEscape(run, hz.comets, pos, TUNING.cometDodgePad, hz.out);
 
+/** Nearest revealed, unclaimed derelict that is safe to fly to, or null. */
+function nearestDerelict(state: GameState, fs: Ship, hz: Hazard): Anomaly | null {
+  const { run } = state;
+  const list = anomalies(run);
+  let best: Anomaly | null = null;
+  let bestDist = Infinity;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]!;
+    if (a.kind !== 'derelict' || !isRevealed(run, a.id) || isClaimed(run, a.id) || unsafe(run, hz, a.pos)) continue;
+    const d = distSq(fs.pos, a.pos);
+    if (d < bestDist) {
+      bestDist = d;
+      best = a;
+    }
+  }
+  return best;
+}
+
 /** The flagship's non-purchase order this cycle: get clear of a hazard, dock, chase debris, or mine. */
 function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number, want: Command | null): Command[] {
   const { run } = state;
-  const hz: Hazard = { comets: run.rocks.filter((r) => r.comet), out: { x: 0, z: 0 } };
+  const hz = refreshComets(WARP_HAZARD, run);
   const full = isHoldFull(fs, st);
 
   if (cometPathEscape(run, hz.comets, fs.pos, TUNING.cometDodgePad + st.size, hz.out)) {
@@ -309,6 +432,17 @@ function flagshipOrder(state: GameState, fs: Ship, st: ShipStats, wc: number, wa
   if (full || affordsHull) return fs.order?.kind === 'dock' ? [] : [{ t: 'dock', shipId: fs.id }];
   const o = fs.order;
   if (o?.kind === 'dock') return [];
+  // A revealed derelict pays once, so it outranks mining while it is safe to reach.
+  const derelict = nearestDerelict(state, fs, hz);
+  if (derelict && distSq(fs.pos, derelict.pos) > TUNING.derelictClaimRadius ** 2)
+    return [{ t: 'move', shipId: fs.id, to: { ...derelict.pos } }];
+  // Once the opening purchases are done, hold the current survey point for a
+  // sweep: the station-side pings alone never reach anomalies out there.
+  const sweep = sweepElapsed(state);
+  if (sweep >= 0) {
+    const p = surveyPoint(run, sweep);
+    return distSq(fs.pos, p) > 120 * 120 ? [{ t: 'move', shipId: fs.id, to: { x: p.x, z: p.z } }] : [];
+  }
   // A mine order stands unless its rock has drifted into danger.
   let stale = false;
   if (o?.kind === 'mine') {
@@ -481,14 +615,19 @@ function pickRock(state: GameState, fs: Ship, wc: number, hz: Hazard): Rock | nu
   const breakLarge = active?.kind === 'breakLarge';
   // A delivery contract owns the want: crystal stops being a free bonus while it runs.
   const bonusCrystal = !active || breakLarge;
+  // Far from the station, score rocks from the station so the ship works its way home.
+  const station = state.run.system.station.pos;
+  const from = distSq(fs.pos, station) > HOME_RADIUS * HOME_RADIUS ? station : fs.pos;
   let best: Rock | null = null;
   let bestScore = Infinity;
   const st = shipStats(fs, state.profile);
   for (const r of state.run.rocks) {
     if (unsafe(state.run, hz, r.pos)) continue;
     if (!canMine(st, r) || outpostAt(state, r.id)) continue;
-    let score = dist(fs.pos, r.pos) * (r.kind === want || (bonusCrystal && r.kind === 'crystal') ? 0.5 : 1);
+    let score = dist(from, r.pos) * (r.kind === want || (bonusCrystal && r.kind === 'crystal') ? 0.5 : 1);
     if ((breakLarge || siting) && r.size === 0) score *= 0.5;
+    // Rich deposits carry `richYieldMul` units, so a short detour is usually worth it.
+    if (r.rich) score *= 0.5;
     if (score < bestScore) {
       bestScore = score;
       best = r;
