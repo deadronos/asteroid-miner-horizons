@@ -8,6 +8,8 @@ import { describeModifier } from '../../sim/modifiers';
 import { type HazardRating, hazardRating, richestRoute, routeRocks, warpRoutes } from '../../sim/routes';
 import type { Profile, StarClass, StarSystem } from '../../sim/types';
 import { Panel, h, setDisabled, setText } from '../dom';
+import { FOCUSABLE } from '../focus';
+import { previousFocus, trapModalTab } from '../modalKey';
 import type { PanelCtx } from './context';
 
 const STAR_NAMES: Record<StarClass, string> = { M: 'red dwarf', G: 'yellow star', B: 'blue giant' };
@@ -45,11 +47,15 @@ export const warpPanelKey = (p: Profile, hazards: HazardLevel): string => `${p.s
 
 export class WarpPanel {
   private panel: Panel;
+  private returnTo: HTMLElement | null = null;
 
   constructor(
     readonly el: HTMLElement,
     ctx: PanelCtx,
   ) {
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-modal', 'true');
+    el.setAttribute('aria-label', 'Warp routes');
     const st = ctx.getState;
     this.panel = new Panel(
       el,
@@ -116,15 +122,32 @@ export class WarpPanel {
     el.addEventListener('click', (e) => {
       if (e.target === el) this.toggle(false);
     });
+    window.addEventListener('keydown', this.onKey);
   }
+
+  /** Tab and arrows cycle the picker when it is the topmost modal. Gamepad uses the same buttons. */
+  private onKey = (e: KeyboardEvent): void => {
+    trapModalTab(this.el, e);
+  };
 
   get open(): boolean {
     return !this.el.classList.contains('hidden');
   }
 
   toggle(force?: boolean): void {
-    this.el.classList.toggle('hidden', force == null ? undefined : !force);
-    if (this.open) this.panel.refresh();
+    const open = force ?? !this.open;
+    const was = this.open;
+    if (open && !was) this.returnTo = previousFocus(document.activeElement);
+    this.el.classList.toggle('hidden', !open);
+    if (open) {
+      this.panel.refresh();
+      const first = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].find((n) => n.getClientRects().length > 0);
+      first?.focus();
+    } else if (was) {
+      const target = this.returnTo?.isConnected ? this.returnTo : null;
+      this.returnTo = null;
+      target?.focus();
+    }
   }
 
   /** Refreshes only while visible. */

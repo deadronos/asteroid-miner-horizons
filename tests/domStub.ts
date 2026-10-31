@@ -1,4 +1,4 @@
-// A tiny document, enough to build the research and gate dialogs and dispatch Tab.
+// A tiny document, enough to build the research, gate and warp dialogs and dispatch Tab.
 // The suite stays on the node environment, so this is not a DOM implementation.
 
 export interface FakeEl {
@@ -25,7 +25,7 @@ export interface FakeEl {
   getAttribute: (name: string) => string | null;
   hasAttribute: (name: string) => boolean;
   addEventListener: (type: string, fn: (e: Event) => void) => void;
-  append: (...nodes: FakeEl[]) => void;
+  append: (...nodes: (FakeEl | string)[]) => void;
   replaceChildren: (...nodes: FakeEl[]) => void;
   querySelectorAll: (selector: string) => FakeEl[];
   getClientRects: () => { length: number };
@@ -140,8 +140,9 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
     addEventListener: () => {},
     append(...nodes) {
       for (const n of nodes) {
-        n.parent = el;
-        el.childNodes.push(n);
+        const node = typeof n === 'string' ? textNode(doc, n) : n;
+        node.parent = el;
+        el.childNodes.push(node);
       }
     },
     replaceChildren(...nodes) {
@@ -180,6 +181,13 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
     },
   };
   return el;
+}
+
+/** A text node: only `parent`, `tag` and `textContent` matter to the walkers below. */
+function textNode(doc: FakeDoc, text: string): FakeEl {
+  const node = createEl(doc, '#text');
+  node.textContent = text;
+  return node;
 }
 
 function shown(el: FakeEl): boolean {
