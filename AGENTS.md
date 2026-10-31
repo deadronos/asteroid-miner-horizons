@@ -21,8 +21,9 @@ with Vitest, linted and formatted with the Oxc toolchain.
 | `npm run balance`      | Bot plays 30 seeds × 10 warps, rewrites `docs/balance.md`                       |
 | `npm run balance:ci`   | Same, inside Docker on CI's platform; use this for the committed report         |
 
-`npm run check` is exactly what CI runs (plus a build, a warn-only bench and a balance-report
-freshness check that fails on drift). Green means done. Balance numbers depend on CPU architecture, so commit
+`npm run check` is the correctness gate CI runs first (plus a build, the bundle-size budget, a warn-only
+bench and a balance-report freshness check that fails on drift). Green means done. Balance numbers depend
+on CPU architecture, so commit
 `docs/balance.md` from `npm run balance:ci` (Docker, linux/amd64 like CI), not a native `npm run balance`.
 
 ## Rules that bite

@@ -56,9 +56,9 @@ After every task, before committing:
    behaviour is meant to be unchanged (bot ignores the feature), assert that explicitly and check
    `run.rng.s` is untouched.
 4. If the change touches dependencies, imports of three.js or other large modules, run `npm run build && npm run
-   bundle-size`. CI fails when the gzipped JS in `dist/assets` totals more than **240 kB** (about 5% over today's
-   ~223 kB). `three` is split into a `vendor` chunk (`vite.config.ts`) so game updates keep it cached; raise the
-   budget in `scripts/bundle-size.mjs` only with a reason in the PR.
+   bundle-size`. CI fails when the gzipped JS in `dist/assets` totals more than **240 kB**. The current build is
+   ~239 kB, so the budget is nearly full; `three` is split into a `vendor` chunk (`vite.config.ts`) so game updates
+   keep it cached. Raise the budget in `scripts/bundle-size.mjs` only with a reason and a measured number in the PR.
 5. Regenerate generated files rather than hand-editing them; `docs/balance.md` comes from `npm run balance:ci`.
 
 ## Branches, commits, PRs
@@ -86,7 +86,7 @@ Publishing is tag-driven and deliberately narrow: a `v*` tag is the only thing t
    git push origin v0.2.0
    ```
 
-`.github/workflows/release.yml` then repeats the CI gates, builds once, publishes that build to
+`.github/workflows/release.yml` then repeats the correctness checks, builds once, publishes that build to
 <https://deadronos.github.io/asteroid-miner-horizons/> and cuts a GitHub Release with the build attached.
 
 - **The tag must match `package.json`.** A suffix is allowed for a rehearsal — `v0.2.0-rc.1` passes and marks the

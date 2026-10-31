@@ -21,13 +21,17 @@ src/
     save.ts        save slots, import/export format
     migrations.ts  versioned save upgrades
     validate.ts    validateState: shape checks on a migrated save
+    exploration.ts anomaly rolls, pings and derelict salvage
+    gate.ts        Horizon Gate deliveries and New Game+
   render/        three.js; Renderer.ts composes the views, camera.ts the view state, fxView.ts the fx
   ui/            DOM HUD; Hud.ts composes panels/, Menu.ts is the ⚙ modal over menu/,
                  TitleScreen.ts the boot screen, TouchControls.ts the touch stick and buttons
   input.ts       keyboard/pointer/touch -> Commands; world-space picking
+  gamepad.ts     gamepad button edges -> actions
   settings.ts    preferences store, separate from saves
   pause.ts       pause kind -> banner + continuous-audio policy
   session.ts     which slot is running; load/new/import/delete/autosave
+  slotLock.ts    one writable tab per save slot
   reloadGuard.ts caps reloads after repeated WebGL context loss
   debugHook.ts   when `window.__amh` is attached (dev, or `?debug` / localStorage opt-in)
   main.ts        bootstrap + 60 Hz fixed-step loop
