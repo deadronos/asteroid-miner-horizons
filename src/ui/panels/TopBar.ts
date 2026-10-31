@@ -4,6 +4,7 @@ import { MODIFIERS } from '../../data/modifiers';
 import { PERK_IDS } from '../../data/perks';
 import { RESOURCES, RESOURCE_INFO, type Resource } from '../../data/resources';
 import { dataGain, doctrineWindowOpen, perkCost, warpCost } from '../../sim/economy';
+import { gateChip } from '../gateView';
 import { keyLabel } from '../../settings';
 import { describeModifier } from '../../sim/modifiers';
 import type { GameState } from '../../sim/types';
@@ -33,11 +34,11 @@ const RESOURCE_TAG: Record<Resource, string> = {
 export const resourceReadout = (resource: Resource, amount: number): string =>
   `${RESOURCE_TAG[resource]} ${RESOURCE_INFO[resource].icon} ${fmt(amount)}`;
 
-/** Research button label. The respec window is named in the text, not by colour alone. */
-export function researchCue(windowOpen: boolean): { text: string; label: string } {
+/** Research button label. The respec window and the gate are named in the text, not by colour alone. */
+export function researchCue(windowOpen: boolean, gateLabel: string): { text: string; label: string } {
   return windowOpen
-    ? { text: 'Research · respec', label: 'Research. Doctrine respec open.' }
-    : { text: 'Research', label: 'Research' };
+    ? { text: 'Research · respec', label: `Research. Doctrine respec open. ${gateLabel}` }
+    : { text: 'Research', label: `Research. ${gateLabel}` };
 }
 
 /** Panel key: rebuilds on warp and when a loaded slot has the same system number but different modifiers. */
@@ -77,6 +78,8 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
         return e;
       });
       const data = h('span', { class: 'res data', title: 'Horizon Data — spend on permanent research' });
+      const gate = h('span', { class: 'res gate' });
+      gate.setAttribute('role', 'status');
       const warp = h('button', { class: 'warp', onclick: hooks.openWarp });
       warp.dataset.title =
         'Choose a fresh system to jump to. Resets your fleet and bank; keeps research. Grants Horizon Data based on value delivered this run.';
@@ -108,7 +111,11 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
           s.run.bank.fuel < cost,
           `Need ${cost} fuel in the station bank (have ${Math.floor(s.run.bank.fuel)}). Would earn +${gain} HD.`,
         );
-        const cue = researchCue(doctrineWindowOpen(s.run.time));
+        const chip = gateChip(s);
+        setText(gate, chip.text);
+        if (gate.getAttribute('aria-label') !== chip.label) gate.setAttribute('aria-label', chip.label);
+        if (gate.title !== chip.label) gate.title = chip.label;
+        const cue = researchCue(doctrineWindowOpen(s.run.time), chip.label);
         setText(researchBtn, cue.text);
         if (researchBtn.getAttribute('aria-label') !== cue.label) researchBtn.setAttribute('aria-label', cue.label);
         researchBtn.classList.toggle(
@@ -121,6 +128,7 @@ export function createTopBar(el: HTMLElement, ctx: PanelCtx, hooks: TopBarHooks)
         ...(mods.length ? [h('span', { class: 'mods' }, ...mods)] : []),
         ...res,
         data,
+        gate,
         warp,
         researchBtn,
         help,

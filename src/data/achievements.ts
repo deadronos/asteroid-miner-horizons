@@ -16,6 +16,7 @@ export const STAT_KEYS = [
   'perks',
   'comets',
   'shipsLost',
+  'gates',
 ] as const;
 
 export type StatKey = (typeof STAT_KEYS)[number];
@@ -38,6 +39,7 @@ export const STAT_LABELS: Record<StatKey, string> = {
   perks: 'Research levels bought',
   comets: 'Comets weathered',
   shipsLost: 'Ships lost',
+  gates: 'Horizon Gates opened',
 };
 
 export interface AchievementDef {
@@ -70,6 +72,7 @@ export const ACHIEVEMENTS = {
   scholar: { name: 'Scholar', desc: 'Buy 10 research levels.', stat: 'perks', at: 10 },
   cometWatcher: { name: 'Comet Watcher', desc: 'Weather 10 comets.', stat: 'comets', at: 10 },
   hardLessons: { name: 'Hard Lessons', desc: 'Lose a ship.', stat: 'shipsLost', at: 1 },
+  gateOpen: { name: 'Beyond the Horizon', desc: 'Open the Horizon Gate.', stat: 'gates', at: 1 },
 } as const satisfies Record<string, AchievementDef>;
 
 export type AchievementId = keyof typeof ACHIEVEMENTS;
