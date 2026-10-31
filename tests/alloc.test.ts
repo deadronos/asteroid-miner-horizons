@@ -9,11 +9,10 @@ import { newGame } from '../src/sim/create';
 import { droneCount, fleetCap, makeShip } from '../src/sim/ships';
 
 /**
- * Mean bytes allocated per tick: ~39 KB measured on Node 24 (8 drones, a hauler and 3 outposts, ~240 rocks;
- * the bot builds a hauler and outposts since #206),
- * stable to about 1% run to run. The headroom (#217) catches a per-rock or per-ship
- * allocation, not a single array copy. If a deliberate change moves the baseline,
- * log `mean` below to re-measure and keep roughly 25% headroom.
+ * Mean bytes allocated per tick: ~39 KB measured on Node 24 (7 drones, a hauler, two builders and 3 outposts,
+ * ~200 rocks; the bot buys a hauler and a builder), stable to about 1% run to run. The headroom (#217) catches a
+ * per-rock or per-ship allocation, not a single array copy. If a deliberate change moves the baseline, log `mean`
+ * below to re-measure and keep roughly 25% headroom.
  */
 const TICK_ALLOC_BUDGET = 48 * 1024;
 
@@ -26,14 +25,17 @@ describe('per-tick allocation', () => {
     state.profile.perks.bay = PERKS.bay.max;
     state.run.bank = { ore: 1e7, ice: 1e7, crystal: 1e5, alloy: 0, fuel: 0 };
     runBot(state, { seconds: 180, warp: false }); // fills the fleet and warms the JIT
-    // Drones die and are rebought, so the count drifts; it is 9/9 at this point.
+    // Drones die and are rebought, so the count drifts; the bot had filled all 9 slots (9/9) here,
+    // before the hand-added builder below.
     expect(droneCount(state.run)).toBeGreaterThanOrEqual(fleetCap(state.profile) - 2);
 
-    // One construction drone joins the fleet (the bot doesn't buy them), warmed up so its first-tick records don't count.
+    // A construction drone joins the fleet by hand, warmed up so its first-tick records don't count.
     const st = state.run.system.station.pos;
     state.run.ships.push(makeShip(state.run, state.profile, 'constructionDrone', 'Builder', { ...st }));
     runBot(state, { seconds: 5, warp: false });
 
+    // The builder's deploy path is covered deterministically in builder.test.ts; here only its steady-state
+    // per-tick cost is measured, so a slow approach cannot look like an allocation regression.
     const deltas: number[] = [];
     runBot(state, {
       seconds: 10,

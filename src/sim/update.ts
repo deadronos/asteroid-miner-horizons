@@ -22,6 +22,7 @@ import { systemEffects } from './modifiers';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
 import { updateRefinery } from './refining';
 import { cargoFree, damageShip, isAlive, isBuilder, isFlagship, isHauler, type ShipStats } from './ships';
+import { setStatus } from './status';
 import { magnetPull } from './traits';
 import type { GameState, Rock, Run, Ship } from './types';
 
@@ -135,11 +136,14 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
   const manual = ship.id === run.selectedId && (thrust.x !== 0 || thrust.z !== 0);
   if (manual) {
     ship.order = null;
+    setStatus(state.out, ship.id, 'manual');
     steer(ctx, ship, st, thrust.x, thrust.z);
   } else if (!runOrder(ctx, ship, st)) {
     if (isHauler(ship)) haulerThink(ctx, ship, st);
     else if (isBuilder(ship)) builderThink(ctx, ship, st);
     else if (!isFlagship(ship)) droneThink(ctx, ship, st);
+    // The flagship has no brain: drop the manual record it left behind instead of inventing a status.
+    else if (state.out.status.get(ship.id)?.kind === 'manual') state.out.status.delete(ship.id);
   }
 
   // Inertia with gentle drag so space feels slick but controllable.
