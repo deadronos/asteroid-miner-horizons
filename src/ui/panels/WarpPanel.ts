@@ -45,6 +45,10 @@ export function routeCard(sys: StarSystem, hazards: HazardLevel): RouteCard {
 /** Panel key: the cards change only with the save's seed and warp count, and the hazard setting. */
 export const warpPanelKey = (p: Profile, hazards: HazardLevel): string => `${p.seed}|${p.warps}|${hazards}`;
 
+/** The top bar's WARP button, the first `button.warp` outside the picker (the bar precedes it in the document). */
+const warpButton = (picker: HTMLElement): HTMLElement | null =>
+  [...document.querySelectorAll<HTMLElement>('button.warp')].find((b) => !picker.contains(b)) ?? null;
+
 export class WarpPanel {
   private panel: Panel;
   private returnTo: HTMLElement | null = null;
@@ -75,6 +79,7 @@ export class WarpPanel {
               this.toggle(false);
             },
           });
+          btn.type = 'button';
           bind(() => {
             const s = st();
             const cost = warpCost(s);
@@ -110,6 +115,7 @@ export class WarpPanel {
           );
         });
         const close = h('button', { text: 'Cancel', onclick: () => this.toggle(false) });
+        close.type = 'button';
         box.append(
           h('h2', { text: 'Warp routes' }),
           intro,
@@ -144,9 +150,11 @@ export class WarpPanel {
       const first = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].find((n) => n.getClientRects().length > 0);
       first?.focus();
     } else if (was) {
-      const target = this.returnTo?.isConnected ? this.returnTo : null;
+      // The opener may be gone by now; fall back to the WARP button, then to the body so focus
+      // does not stay on a button inside the hidden picker.
+      const target = this.returnTo?.isConnected ? this.returnTo : warpButton(this.el);
       this.returnTo = null;
-      target?.focus();
+      (target ?? document.body).focus();
     }
   }
 
