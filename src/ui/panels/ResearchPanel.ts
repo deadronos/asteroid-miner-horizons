@@ -6,7 +6,8 @@ import { dataGain, perkCost } from '../../sim/economy';
 import { doctrinePanel } from '../doctrines';
 import { gatePanel } from '../gateView';
 import { Panel, bar, h, setDisabled, setText, slotRow } from '../dom';
-import { FOCUSABLE, nextFocusIndex } from '../focus';
+import { FOCUSABLE } from '../focus';
+import { previousFocus, trapModalTab } from '../modalKey';
 import type { PanelCtx } from './context';
 
 export class ResearchPanel {
@@ -171,18 +172,9 @@ export class ResearchPanel {
     window.addEventListener('keydown', this.onKey);
   }
 
-  /** Tab and arrows cycle the dialog. Gamepad uses the same focusable buttons. */
+  /** Tab and arrows cycle the dialog when it is the topmost modal. Gamepad uses the same buttons. */
   private onKey = (e: KeyboardEvent): void => {
-    if (!this.open || e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
-    const tab = e.key === 'Tab';
-    const arrows = e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight';
-    if (!tab && !arrows) return;
-    const items = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.getClientRects().length > 0);
-    const backward = e.key === 'Tab' ? e.shiftKey : e.key === 'ArrowUp' || e.key === 'ArrowLeft';
-    const at = items.indexOf(document.activeElement as HTMLElement);
-    const dest = items[nextFocusIndex(items.length, at, backward)];
-    e.preventDefault();
-    dest?.focus();
+    trapModalTab(this.el, e);
   };
 
   get open(): boolean {
@@ -192,10 +184,7 @@ export class ResearchPanel {
   toggle(force?: boolean): void {
     const open = force ?? !this.open;
     const was = this.open;
-    if (open && !was) {
-      const active = document.activeElement;
-      this.returnTo = active instanceof HTMLElement && active !== document.body ? active : null;
-    }
+    if (open && !was) this.returnTo = previousFocus(document.activeElement);
     this.el.classList.toggle('hidden', !open);
     if (open) {
       this.panel.refresh();
@@ -207,9 +196,11 @@ export class ResearchPanel {
     }
   }
 
+  /** A doctrine button, so opening the panel does not land on Deliver or a perk purchase. */
   private focusFirst(): void {
-    const first = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].find((n) => n.getClientRects().length > 0);
-    first?.focus();
+    const items = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.getClientRects().length > 0);
+    const doctrine = items.find((n) => n.closest('.doctrine'));
+    (doctrine ?? items[0])?.focus();
   }
 
   /** Refreshes only while visible. */

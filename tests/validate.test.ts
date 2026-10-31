@@ -60,6 +60,7 @@ const corruptions: Corrupt[] = [
   ['bank alloy NaN', (s) => ((s.run.bank.alloy as unknown) = NaN)],
   ['bank alloy Infinity', (s) => ((s.run.bank.alloy as unknown) = Infinity)],
   ['ship cargo alloy NaN', (s) => ((s.run.ships[0]!.cargo.alloy as unknown) = NaN)],
+  ['gate has an unknown field', (s) => ((s.profile.gate as { extra?: number }).extra = 1)],
 ];
 
 describe('validateState – build orders', () => {

@@ -22,7 +22,11 @@ export interface SummaryRow {
   value: string;
 }
 
-/** The run record shown when the gate opens, and again from Research after the dialog is closed. */
+/**
+ * The record shown when the gate opens, and again from Research after the dialog is closed.
+ * Warps, Horizon Data and doctrines are this run. The other rows are career totals: they are
+ * lifetime stats, so a later New Game+ still counts the runs before it.
+ */
 export function summaryRows(summary: GateSummary): SummaryRow[] {
   const doctrines = DOCTRINE_PAIR_IDS.filter((pair) => summary.doctrines[pair]).map((pair) => {
     const side = summary.doctrines[pair]!;
@@ -30,11 +34,11 @@ export function summaryRows(summary: GateSummary): SummaryRow[] {
   });
   return [
     { label: 'Warps', value: groupDigits(summary.warps) },
-    { label: 'Time played', value: formatDuration(summary.time, { seconds: true }) },
-    { label: 'Asteroids broken', value: groupDigits(summary.rocksBroken) },
-    { label: 'Units mined', value: groupDigits(summary.unitsMined) },
-    { label: 'Contracts', value: groupDigits(summary.contracts) },
-    { label: 'Units refined', value: groupDigits(summary.refined) },
+    { label: 'Career time', value: formatDuration(summary.time, { seconds: true }) },
+    { label: 'Career asteroids broken', value: groupDigits(summary.rocksBroken) },
+    { label: 'Career units mined', value: groupDigits(summary.unitsMined) },
+    { label: 'Career contracts', value: groupDigits(summary.contracts) },
+    { label: 'Career units refined', value: groupDigits(summary.refined) },
     { label: 'Horizon Data earned', value: groupDigits(summary.dataEarned) },
     { label: 'Doctrines', value: doctrines.length ? doctrines.join(', ') : 'None' },
   ];
@@ -93,9 +97,12 @@ export function gatePanel(state: GameState): GatePanelView {
     fraction,
     bar: `${gate.stage} of ${total} stages, ${stage.name} in progress`,
     deliverLabel: ready ? 'Deliver stage' : 'Deliver',
-    deliverBlocked: payment
+    // A partial spend cannot finish the stage, so the button stays disabled until the whole bill fits.
+    deliverBlocked: ready
       ? null
-      : `Nothing spare to deliver. ${formatGateCost(due)} still needed. Warp fuel stays in the bank.`,
+      : payment
+        ? `A delivery pays this whole stage or nothing. Still needed: ${formatGateCost(due)}.`
+        : `Nothing spare to deliver. ${formatGateCost(due)} still needed. Warp fuel stays in the bank.`,
     summary: null,
     rule: NG_PLUS_RULE,
   };

@@ -220,6 +220,15 @@ describe('gate copy', () => {
     expect(panel.next).toContain('ore');
     expect(panel.summary).toBeNull();
     expect(panel.rule).toBe(NG_PLUS_RULE);
+    // Starting wallet is 40 ore and 10 ice. Anchor wants 40 ore and 15 ice, so Deliver stays off.
+    expect(s.run.bank.ore).toBe(40);
+    expect(s.run.bank.ice).toBe(10);
+    expect(panel.deliverBlocked).not.toBeNull();
+    s.profile.data = 1;
+    s.run.bank.ice = 15;
+    expect(gatePanel(s).deliverBlocked).toBeNull();
+    s.run.bank.ice = 10;
+    expect(gatePanel(s).deliverBlocked).not.toBeNull();
   });
 
   it('lists the frozen summary with doctrine side ids', () => {
@@ -229,6 +238,16 @@ describe('gate copy', () => {
     s.profile.warps = 2;
     send(s, { t: 'fundGate' });
     const rows = summaryRows(s.profile.gate.summary!);
+    expect(rows.map((r) => r.label)).toEqual([
+      'Warps',
+      'Career time',
+      'Career asteroids broken',
+      'Career units mined',
+      'Career contracts',
+      'Career units refined',
+      'Horizon Data earned',
+      'Doctrines',
+    ]);
     expect(rows.find((r) => r.label === 'Warps')?.value).toBe('2');
     expect(rows.find((r) => r.label === 'Doctrines')?.value).toContain('swarm');
     expect(gateChip(s).text).toBe('Gate open');

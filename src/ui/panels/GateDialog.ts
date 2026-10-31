@@ -4,8 +4,9 @@
 
 import { NG_PLUS_RULE } from '../../data/gate';
 import { Panel, h } from '../dom';
-import { FOCUSABLE, nextFocusIndex } from '../focus';
+import { FOCUSABLE } from '../focus';
 import { summaryRows } from '../gateView';
+import { previousFocus, trapModalTab } from '../modalKey';
 import type { PanelCtx } from './context';
 
 export class GateDialog {
@@ -32,7 +33,7 @@ export class GateDialog {
         const title = h('h2', { text: 'Horizon Gate open' });
         title.id = 'gate-title';
         const lead = h('p', {
-          text: 'This run reached the gate. The record below is what you finished with.',
+          text: 'This run reached the gate. Warps, Horizon Data and doctrines are this run. Time, rocks, units, contracts and refined are career totals, which include earlier runs.',
         });
         const list = h('dl');
         const rule = h('p', { class: 'dim', text: NG_PLUS_RULE });
@@ -78,18 +79,9 @@ export class GateDialog {
     window.addEventListener('keydown', this.onKey);
   }
 
-  /** Tab and arrows cycle the dialog. Gamepad uses the same focusable buttons. */
+  /** Tab and arrows cycle the dialog when it is the topmost modal. Gamepad uses the same buttons. */
   private onKey = (e: KeyboardEvent): void => {
-    if (!this.open || e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
-    const tab = e.key === 'Tab';
-    const arrows = e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight';
-    if (!tab && !arrows) return;
-    const items = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.getClientRects().length > 0);
-    const backward = e.key === 'Tab' ? e.shiftKey : e.key === 'ArrowUp' || e.key === 'ArrowLeft';
-    const at = items.indexOf(document.activeElement as HTMLElement);
-    const dest = items[nextFocusIndex(items.length, at, backward)];
-    e.preventDefault();
-    dest?.focus();
+    trapModalTab(this.el, e);
   };
 
   get open(): boolean {
@@ -107,10 +99,7 @@ export class GateDialog {
   toggle(force?: boolean): void {
     const open = force ?? !this.open;
     const was = this.open;
-    if (open && !was) {
-      const active = document.activeElement;
-      this.returnTo = active instanceof HTMLElement && active !== document.body ? active : null;
-    }
+    if (open && !was) this.returnTo = previousFocus(document.activeElement);
     this.el.classList.toggle('hidden', !open);
     if (open) {
       this.panel.refresh();

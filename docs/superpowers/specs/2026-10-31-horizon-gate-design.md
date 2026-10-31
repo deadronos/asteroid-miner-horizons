@@ -4,7 +4,7 @@ Prestige had no ending. The Horizon Gate is a target a run can finish. It does n
 
 ## Stages
 
-Three stages, in `src/data/gate.ts`. A delivery pays whatever the player can spare toward the current stage. Horizon Data comes from `profile.data`. Resources come from the station bank. Fuel is never a stage cost, and a delivery will not spend fuel that the next warp needs, so funding the gate cannot turn an affordable warp into a failed one. Warping does not look at the gate. A player who never delivers keeps the warp loop they have today.
+Three stages, in `src/data/gate.ts`. The `fundGate` command pays whatever the player can spare toward the current stage (the balance bot uses that). The research Deliver button stays disabled until Horizon Data and the bank can finish the whole stage, so one press cannot sink the starting ore into a stage that still needs more. Horizon Data comes from `profile.data`. Resources come from the station bank. Fuel is never a stage cost, and a delivery will not spend fuel that the next warp needs, so funding the gate cannot turn an affordable warp into a failed one. Ice feedstock is not reserved the same way. Warping does not look at the gate. A player who never delivers keeps the warp loop they have today.
 
 | Stage | Id | Horizon Data | Resources |
 | --- | --- | --- | --- |
@@ -16,7 +16,7 @@ Partial payments persist on `profile.gate` across warps. The stage index advance
 
 ## Completion
 
-The last stage freezes a summary: warps, sim time, asteroids broken, units mined, contracts, units refined, Horizon Data earned, and the doctrine choice (side ids included). `stats.gates` increments. The achievement **Beyond the Horizon** (`gateOpen`) unlocks from that stat at 1. The HUD opens a summary dialog with **New Game+** and **Keep playing**. Dismissing it sends `dismissGate`, which sets `gate.acknowledged`. The summary stays in the research panel until New Game+.
+The last stage freezes a summary: warps, Horizon Data earned and the doctrine choice are this run. Time, asteroids broken, units mined, contracts and units refined are career totals taken from lifetime stats, so they still include earlier runs after New Game+. `stats.gates` increments. The achievement **Beyond the Horizon** (`gateOpen`) unlocks from that stat at 1. The HUD opens a summary dialog with **New Game+** and **Keep playing**. Dismissing it sends `dismissGate`, which sets `gate.acknowledged`. The summary stays in the research panel until New Game+.
 
 ## New Game+
 

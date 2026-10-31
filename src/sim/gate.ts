@@ -26,7 +26,11 @@ import { newRun } from './create';
 import { doctrineRespecNotice, warpCost } from './economy';
 import type { GameState } from './types';
 
-/** How much of `resource` a delivery may take. Fuel stops at the cost of the next warp. */
+/**
+ * How much of `resource` a delivery may take. Fuel stops at the cost of the next warp, so a
+ * delivery cannot turn an affordable warp into a failed one. Ice is not reserved: feedstock
+ * the refinery would turn into fuel can be spent on the gate.
+ */
 export function deliverable(state: GameState, resource: Resource, need: number): number {
   if (need <= 1e-9) return 0;
   let have = state.run.bank[resource];

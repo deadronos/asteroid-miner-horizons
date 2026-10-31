@@ -221,8 +221,13 @@ function isGateCost(c: unknown): c is GateCost {
  * and a finished gate carries exactly one summary. A fully paid stage that never advanced
  * would open the gate twice, so it is rejected.
  */
+const GATE_FIELDS = ['acknowledged', 'paid', 'stage', 'summary'] as const;
+
 function isGate(g: unknown): boolean {
-  if (!isObj(g) || typeof g.stage !== 'number' || !Number.isInteger(g.stage)) return false;
+  if (!isObj(g) || Array.isArray(g)) return false;
+  const keys = Object.keys(g);
+  if (keys.length !== GATE_FIELDS.length || GATE_FIELDS.some((k) => !Object.hasOwn(g, k))) return false;
+  if (typeof g.stage !== 'number' || !Number.isInteger(g.stage)) return false;
   if (g.stage < 0 || g.stage > GATE_STAGES.length) return false;
   if (!isGateCost(g.paid) || typeof g.acknowledged !== 'boolean') return false;
   const paid = g.paid;

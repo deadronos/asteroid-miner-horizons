@@ -140,10 +140,11 @@ It goes away after the first warp; × hides it for that save.
   refinery (Catalytic Furnace) and more batches per refinery cycle (Bulk Hoppers).
   The same panel lists the **Horizon Gate**, a three-stage project (Anchor, Ring, Aperture).
   Each stage costs Horizon Data plus resources from the station bank. Delivering never spends
-  the fuel a warp needs, and warping does not require the gate: a player who ignores it keeps
+  the fuel a warp needs. Ice the refinery would turn into fuel is not held back. Warping does
+  not require the gate: a player who ignores it keeps
   jumping exactly as before. Progress and the next stage's cost are shown in the research panel
   and on the top bar, in words. Finishing the last stage records the achievement **Beyond the Horizon**,
-  shows a run summary (warps, time, totals, and the doctrines in use, named with their ids), and
+  shows a summary (this run's warps, Horizon Data and doctrines, plus career totals for time, rocks, units, contracts and refined), and
   offers **New Game+**. New Game+ keeps 3 perk levels in total, taken from your highest perks
   (ties follow the perk list, Refined Assays first), and 1 doctrine pair: the first one you have
   set, in Fleet, Hold, Beam order, copied by its side id. Warps, Horizon Data, the other perks

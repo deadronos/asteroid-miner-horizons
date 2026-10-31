@@ -428,6 +428,9 @@ button.buy small {
   height: 100%;
   transition: width 0.15s linear;
 }
+.bar.gate .fill {
+  background: #ffe680;
+}
 .bar .label {
   position: absolute;
   inset: 0;
