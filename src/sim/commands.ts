@@ -8,6 +8,7 @@
 import type { Vec2 } from '../core/vec';
 import type { ComponentId, VariantId } from '../data/components';
 import type { HullId } from '../data/hulls';
+import type { DoctrinePairId, DoctrineSideId } from '../data/doctrines';
 import type { PerkId } from '../data/perks';
 import type { RecipeId } from '../data/refining';
 import { handlers } from './handlers';
@@ -29,6 +30,7 @@ export type Command =
   | { t: 'buyHull'; hullId: HullId }
   | { t: 'scrap'; shipId: number }
   | { t: 'buyPerk'; perk: PerkId }
+  | { t: 'chooseDoctrine'; pair: DoctrinePairId; side: DoctrineSideId | null }
   | { t: 'warp'; route: number }
   | { t: 'refine'; recipe: RecipeId; count: number }
   | { t: 'cancelRefine'; jobId: number }

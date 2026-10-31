@@ -3,6 +3,7 @@
 
 import { makeRng } from '../core/rng';
 import { v } from '../core/vec';
+import { emptyDoctrines } from '../data/doctrines';
 import { PERK_IDS, type PerkId } from '../data/perks';
 import { TUNING } from '../data/tuning';
 import { newStats } from './achievements';
@@ -14,7 +15,7 @@ import { newRefinery } from './refining';
 import { makeShip } from './ships';
 import type { GameState, Profile, Run } from './types';
 
-export const SAVE_VERSION = 14;
+export const SAVE_VERSION = 15;
 
 export function newProfile(seed: number): Profile {
   return {
@@ -23,6 +24,7 @@ export function newProfile(seed: number): Profile {
     data: 0,
     dataEarned: 0,
     perks: Object.fromEntries(PERK_IDS.map((p) => [p, 0])) as Record<PerkId, number>,
+    doctrines: emptyDoctrines(),
     stats: newStats(),
     achievements: [],
     goalsDismissed: false,

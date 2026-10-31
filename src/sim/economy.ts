@@ -88,3 +88,6 @@ export function perkCost(state: GameState, perk: PerkId): number | null {
   const lvl = state.profile.perks[perk];
   return lvl >= PERKS[perk].max ? null : PERKS[perk].cost(lvl);
 }
+
+/** True during the opening of a system, the only time a doctrine can change. */
+export const doctrineWindowOpen = (time: number): boolean => time < TUNING.doctrineWindow;

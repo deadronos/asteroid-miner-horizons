@@ -1,17 +1,24 @@
-// Horizon Research (prestige) modal: perk list with levels and costs.
+// Horizon Research (prestige) modal: doctrine pairs, then the perk list.
 
+import { DOCTRINE_PAIR_IDS, DOCTRINE_PAIRS } from '../../data/doctrines';
 import { PERKS, PERK_IDS } from '../../data/perks';
 import { dataGain, perkCost } from '../../sim/economy';
+import { doctrinePanel } from '../doctrines';
 import { Panel, h, setDisabled, setText, slotRow } from '../dom';
+import { FOCUSABLE, nextFocusIndex } from '../focus';
 import type { PanelCtx } from './context';
 
 export class ResearchPanel {
   private panel: Panel;
+  /** The control that opened the dialog, focused again when it closes. */
+  private returnTo: HTMLElement | null = null;
 
   constructor(
     readonly el: HTMLElement,
     ctx: PanelCtx,
   ) {
+    el.setAttribute('role', 'dialog');
+    el.setAttribute('aria-label', 'Horizon Research');
     const st = ctx.getState;
     this.panel = new Panel(
       el,
@@ -20,18 +27,70 @@ export class ResearchPanel {
         const box = h('div', { class: 'hud box' });
         const head = h('h2', { text: 'Horizon Research' });
         const intro = h('p', { class: 'dim' });
+        const hint = h('p', { class: 'dim' });
         bind(() => {
           const s = st();
           setText(
             intro,
             `Warping to a fresh system resets your bank, ships and components but keeps research. You have ✦ ${s.profile.data} Horizon Data (${s.profile.dataEarned} earned over ${s.profile.warps} warps). Warping now earns +${dataGain(s)} HD.`,
           );
+          setText(hint, doctrinePanel(s.profile, s.run.time).hint);
+        });
+        const doctrines = DOCTRINE_PAIR_IDS.map((pid) => {
+          const def = DOCTRINE_PAIRS[pid];
+          const rows = def.sides.map((side) => {
+            const trade = h('small');
+            const btn = h('button', {
+              onclick: () => ctx.send({ t: 'chooseDoctrine', pair: pid, side: side.id }),
+            });
+            btn.type = 'button';
+            const row = slotRow(side.name, trade, btn);
+            bind(() => {
+              const view = doctrinePanel(st().profile, st().run.time).pairs.find((p) => p.id === pid)!;
+              const s = view.sides.find((x) => x.id === side.id)!;
+              setText(trade, s.trade);
+              setText(btn, s.action);
+              btn.setAttribute('aria-pressed', s.picked ? 'true' : 'false');
+              btn.setAttribute('aria-label', `${s.name}. ${s.trade} ${s.action}`);
+              // Stay focusable while locked so keyboard and gamepad can land here.
+              // Activating still sends the command; the sim rejects it with a log line.
+              btn.setAttribute('aria-disabled', view.locked ? 'true' : 'false');
+              btn.title = view.locked ? 'Respec at warp' : '';
+              btn.classList.toggle('on', s.picked);
+              row.classList.toggle('picked', s.picked);
+            });
+            return row;
+          });
+          const clear = h('button', {
+            onclick: () => ctx.send({ t: 'chooseDoctrine', pair: pid, side: null }),
+          });
+          clear.type = 'button';
+          bind(() => {
+            const view = doctrinePanel(st().profile, st().run.time).pairs.find((p) => p.id === pid)!;
+            setText(clear, view.clear);
+            clear.setAttribute('aria-label', `${def.name}. ${view.clear}`);
+            clear.setAttribute('aria-disabled', view.locked ? 'true' : 'false');
+            // Nothing to clear, and the window is open: skip it in the focus order.
+            clear.disabled = !view.locked && view.picked == null;
+            clear.title = view.locked ? 'Respec at warp' : '';
+          });
+          const group = h(
+            'div',
+            { class: 'doctrine' },
+            h('h3', { text: def.name }),
+            ...rows,
+            h('div', { class: 'row end' }, clear),
+          );
+          group.setAttribute('role', 'group');
+          group.setAttribute('aria-label', def.name);
+          return group;
         });
         const rows = PERK_IDS.map((pid) => {
           const def = PERKS[pid];
           const desc = h('small');
           const lvl = h('span', { class: 'pips' });
           const btn = h('button', { onclick: () => ctx.send({ t: 'buyPerk', perk: pid }) });
+          btn.type = 'button';
           bind(() => {
             const s = st();
             const l = s.profile.perks[pid];
@@ -47,21 +106,65 @@ export class ResearchPanel {
           return slotRow(def.name, [lvl, desc], btn);
         });
         const close = h('button', { text: 'Close', onclick: () => this.toggle(false) });
-        box.append(head, intro, ...rows, h('div', { class: 'row end' }, close));
+        close.type = 'button';
+        box.append(
+          head,
+          intro,
+          h('h3', { class: 'section', text: 'Doctrines' }),
+          hint,
+          ...doctrines,
+          h('h3', { class: 'section', text: 'Perks' }),
+          ...rows,
+          h('div', { class: 'row end' }, close),
+        );
         return [box];
       },
     );
     el.addEventListener('click', (e) => {
       if (e.target === el) this.toggle(false);
     });
+    window.addEventListener('keydown', this.onKey);
   }
+
+  /** Tab and arrows cycle the dialog. Gamepad uses the same focusable buttons. */
+  private onKey = (e: KeyboardEvent): void => {
+    if (!this.open || e.ctrlKey || e.altKey || e.metaKey || e.defaultPrevented) return;
+    const tab = e.key === 'Tab';
+    const arrows = e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight';
+    if (!tab && !arrows) return;
+    const items = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((n) => n.getClientRects().length > 0);
+    const backward = e.key === 'Tab' ? e.shiftKey : e.key === 'ArrowUp' || e.key === 'ArrowLeft';
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const dest = items[nextFocusIndex(items.length, at, backward)];
+    e.preventDefault();
+    dest?.focus();
+  };
 
   get open(): boolean {
     return !this.el.classList.contains('hidden');
   }
 
   toggle(force?: boolean): void {
-    this.el.classList.toggle('hidden', force == null ? undefined : !force);
+    const open = force ?? !this.open;
+    const was = this.open;
+    if (open && !was) {
+      const active = document.activeElement;
+      this.returnTo = active instanceof HTMLElement && active !== document.body ? active : null;
+    }
+    this.el.classList.toggle('hidden', !open);
+    if (open) {
+      this.panel.refresh();
+      this.focusFirst();
+    } else if (was) {
+      const target = this.returnTo?.isConnected ? this.returnTo : null;
+      this.returnTo = null;
+      target?.focus();
+    }
+  }
+
+  private focusFirst(): void {
+    const first = [...this.el.querySelectorAll<HTMLElement>(FOCUSABLE)].find((n) => n.getClientRects().length > 0);
+    first?.focus();
   }
 
   /** Refreshes only while visible. */

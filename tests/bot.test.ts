@@ -506,6 +506,31 @@ function maxCheapPerks(s: GameState): void {
   Object.assign(s.profile.perks, { yield: 10, optics: 10, thrust: 8, kit: 5 });
 }
 
+describe('balance bot doctrines', () => {
+  it('picks a side from the seed once the respec window is underway', () => {
+    const odd = newGame(1);
+    expect(botCommands(odd).some((c) => c.t === 'chooseDoctrine')).toBe(false);
+    odd.run.time = 1;
+    expect(botCommands(odd).filter((c) => c.t === 'chooseDoctrine')).toEqual([
+      { t: 'chooseDoctrine', pair: 'fleet', side: 'ace' },
+      { t: 'chooseDoctrine', pair: 'haul', side: 'courier' },
+      { t: 'chooseDoctrine', pair: 'focus', side: 'brawler' },
+    ]);
+    const even = newGame(2);
+    even.run.time = 1;
+    expect(botCommands(even).filter((c) => c.t === 'chooseDoctrine')).toEqual([
+      { t: 'chooseDoctrine', pair: 'fleet', side: 'swarm' },
+      { t: 'chooseDoctrine', pair: 'haul', side: 'freighter' },
+      { t: 'chooseDoctrine', pair: 'focus', side: 'survey' },
+    ]);
+    even.profile.doctrines = { fleet: 'swarm', haul: 'freighter', focus: 'survey' };
+    expect(botCommands(even).some((c) => c.t === 'chooseDoctrine')).toBe(false);
+    even.run.time = TUNING.doctrineWindow;
+    even.profile.doctrines = { fleet: null, haul: null, focus: null };
+    expect(botCommands(even).some((c) => c.t === 'chooseDoctrine')).toBe(false);
+  });
+});
+
 describe('balance bot refinery perks', () => {
   it('researches no refinery perk while the warp fuel refines quickly', () => {
     const s = newGame(1000);

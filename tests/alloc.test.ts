@@ -9,12 +9,12 @@ import { newGame } from '../src/sim/create';
 import { droneCount, fleetCap, makeShip } from '../src/sim/ships';
 
 /**
- * Mean bytes allocated per tick: ~39 KB measured on Node 24 (7 drones, a hauler, two builders and 3 outposts,
- * ~200 rocks; the bot buys a hauler and a builder), stable to about 1% run to run. The headroom (#217) catches a
- * per-rock or per-ship allocation, not a single array copy. If a deliberate change moves the baseline, log `mean`
+ * Mean bytes allocated per tick: ~22 KB measured on Node 24 (seed 12345 takes the odd doctrine: Ace Pilot,
+ * Courier and Brawler; ~11 ships, ~250 rocks). Stable to about 2%. The headroom (#217) catches a per-rock
+ * or per-ship allocation, not a single array copy. If a deliberate change moves the baseline, log `mean`
  * below to re-measure and keep roughly 25% headroom.
  */
-const TICK_ALLOC_BUDGET = 48 * 1024;
+const TICK_ALLOC_BUDGET = 28 * 1024;
 
 // Tests compile without Node types (tsconfig `types: []`).
 const { memoryUsage } = (globalThis as unknown as { process: { memoryUsage(): { heapUsed: number } } }).process;
