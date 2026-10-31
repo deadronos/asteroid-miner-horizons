@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { botCommands, chooseRoute, HAULER_AFTER, ICE_RESERVE } from '../scripts/bot';
 import { runBot } from '../scripts/harness';
+import { send } from './helpers';
 import { contractReward } from '../src/sim/contracts';
 import { isVariant, type Tier } from '../src/data/components';
 import { HULLS } from '../src/data/hulls';
@@ -262,12 +263,16 @@ describe('balance bot', () => {
   it('buys an ice-priced upgrade before the refine that would spend its ice', () => {
     const s = docked(1, 1);
     // 35 ice worth of fuel still to crack: after the refine pays its 175 ice the
-    // laser's 50-ice price no longer fits the bank, though it does now.
+    // laser's 50-ice price no longer fits the bank, though it does now. The refine
+    // was sized before the purchase, so it is left for a later cycle to re-size.
     s.run.bank = { ore: 442, ice: 202, crystal: 0, alloy: 0, fuel: 35 };
-    expect(botCommands(s, { warp: false })).toEqual([
-      { t: 'upgrade', shipId: flagship(s.run).id, slot: 0 },
-      { t: 'refine', recipe: 'fuel', count: 35 },
-    ]);
+    const cmds = botCommands(s, { warp: false });
+    expect(cmds).toEqual([{ t: 'upgrade', shipId: flagship(s.run).id, slot: 0 }]);
+    // Applied, this cycle and the next few go through without a rejected command.
+    for (const c of cmds) send(s, c);
+    expect(flagship(s.run).slots[0]?.tier).toBe(2);
+    for (let i = 0; i < 4; i++) for (const c of botCommands(s, { warp: false })) send(s, c);
+    expect(s.out.log.filter((l) => l.level === 'warn')).toEqual([]);
   });
 
   it('accepts a contract and buys in the same dock visit', () => {
@@ -280,7 +285,6 @@ describe('balance bot', () => {
     expect(botCommands(s, { warp: false })).toEqual([
       { t: 'acceptContract', contractId: 9 },
       { t: 'upgrade', shipId: flagship(s.run).id, slot: 0 },
-      { t: 'refine', recipe: 'fuel', count: 35 },
     ]);
   });
 });

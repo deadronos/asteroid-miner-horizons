@@ -110,11 +110,12 @@ export function botCommands(state: GameState, opts: BotOptions = {}): Command[] 
 
   // Buy first when the refine would otherwise spend the ice the purchase needs:
   // queueing a refine pays its ice up front, and refining is one-way. The buy
-  // rides with the contract so neither is lost while the ship is docked.
+  // rides with the contract so neither is lost while the ship is docked. The refine
+  // was sized against the bank before this purchase, so it waits for the next cycle.
   if (isDocked(run, fs)) {
     const now = nextPurchase(state, wc);
     const after = fuel ? nextPurchase(projectedState(state, fuel), wc) : now;
-    if (now && !sameCommand(now, after)) return [...(contract ? [contract] : []), now, ...(fuel ? [fuel] : [])];
+    if (now && !sameCommand(now, after)) return contract ? [contract, now] : [now];
   }
 
   if (contract) return fuel ? [fuel, contract] : [contract];
