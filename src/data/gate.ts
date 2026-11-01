@@ -26,8 +26,8 @@ const cost = (data: number, ore: number, ice: number, crystal: number, alloy: nu
 });
 
 /**
- * Three stages. Horizon Data is small because the balance bot only has whatever
- * is left after it buys a perk; the resources are what a warp would abandon.
+ * Three stages. Horizon Data is one point a stage so the balance bot can pay it before a perk without
+ * losing the perk the mid-game rows measure; the resources are what a warp would abandon.
  * Fuel is never a cost: the delivery leaves the fuel a warp needs.
  */
 export const GATE_STAGES: readonly GateStage[] = [

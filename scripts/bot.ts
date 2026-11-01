@@ -12,7 +12,8 @@
 //   buy affordable perks → on the tick the bank can warp, deliver spare
 //   resources to the Horizon Gate (warp fuel is left untouched). Spare
 //   Horizon Data is included only from system 7 on (profile.warps >= 6), so
-//   the delivery does not delay the perks the mid-game targets measure.
+//   the delivery does not delay the perks the mid-game targets measure. From
+//   then on, a stage that wants only Horizon Data is paid before any perk.
 //   Then warp (to the route
 //   with the most rock value, lower hazard on a tie) → accept a
 //   serviceable contract → dock when the hold is full → while docked,
@@ -45,11 +46,12 @@
 import { dist, distSq, type Vec2 } from '../src/core/vec';
 import { variantDef, type ComponentId, type VariantId } from '../src/data/components';
 import { CONTRACTS } from '../src/data/contracts';
+import { GATE_STAGES, gateOpen, gateRemainder } from '../src/data/gate';
 import { HULLS, type HullId } from '../src/data/hulls';
 import { DOCTRINE_PAIR_IDS, DOCTRINE_PAIRS } from '../src/data/doctrines';
 import type { PerkId } from '../src/data/perks';
 import { RECIPES } from '../src/data/refining';
-import { canAfford, pay, type Cost, type Wallet } from '../src/data/resources';
+import { canAfford, pay, RESOURCES, type Cost, type Wallet } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { DEFAULT_FLEET_AUTO } from '../src/sim/assists';
 import type { Command } from '../src/sim/commands';
@@ -111,6 +113,8 @@ const COMET_STEP = 150;
 /** The free sensor ping and an empty order list, shared so a bot cycle allocates neither. */
 const PING_ORDER: readonly Command[] = [{ t: 'ping' }];
 const NO_COMMANDS: readonly Command[] = [];
+/** Warps before the bot pays spare Horizon Data to the gate; before that, all of it buys perks. */
+const DATA_DELIVERY_WARPS = 6;
 /** Seconds spent sweeping the belts with the sensors once the opening purchases are done. */
 const SURVEY_SEC = 80;
 /** Survey stops once it has visited this many points around the belt. */
@@ -151,6 +155,10 @@ function pilotCommands(state: GameState, opts: BotOptions): Command[] {
   const { run, profile } = state;
   const fs = flagship(run);
 
+  // The gate's data claim outranks a perk, so a cheap perk cannot spend the last point a stage needs.
+  const gate = gateDataClaim(state);
+  if (gate) return [gate];
+
   const perk = nextPerk(state);
   if (perk) return [{ t: 'buyPerk', perk }];
 
@@ -162,7 +170,7 @@ function pilotCommands(state: GameState, opts: BotOptions): Command[] {
       const route = opts.route === 'first' ? 0 : chooseRoute(state);
       // Spare resources would be abandoned at the jump. Horizon Data joins them
       // only once the measured mid-game is over. Warp fuel is reserved either way.
-      const data = profile.warps >= 6;
+      const data = profile.warps >= DATA_DELIVERY_WARPS;
       return gatePayment(state, { data })
         ? [
             { t: 'fundGate', data },
@@ -489,6 +497,22 @@ function nextPerk(state: GameState): PerkId | null {
     }
   }
   return pick;
+}
+
+/**
+ * The Horizon Data claim the gate gets before any perk: once the current stage wants nothing but data,
+ * a delivery spends data alone, so it cannot starve a purchase the way the spare-resource delivery at
+ * a warp would (#249). Null before the bot pays the gate, while the stage still wants a resource, and
+ * once the gate is open.
+ */
+function gateDataClaim(state: GameState): Command | null {
+  const { profile } = state;
+  if (profile.warps < DATA_DELIVERY_WARPS || gateOpen(profile.gate)) return null;
+  const stage = GATE_STAGES[profile.gate.stage]!;
+  const due = gateRemainder(profile.gate.paid, stage.cost);
+  if (due.data <= 0 || profile.data <= 0) return null;
+  for (const r of RESOURCES) if (due[r] > 0) return null;
+  return { t: 'fundGate', data: true };
 }
 
 /** Ice worth of fuel the bank must keep back for the next warp. */
