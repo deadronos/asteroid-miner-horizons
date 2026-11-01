@@ -4,6 +4,7 @@ import { runBot } from '../scripts/harness';
 import { runTicks, send } from './helpers';
 import { contractReward } from '../src/sim/contracts';
 import { isVariant, type Tier } from '../src/data/components';
+import { GATE_STAGES } from '../src/data/gate';
 import { HULLS } from '../src/data/hulls';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
@@ -65,6 +66,42 @@ describe('balance bot route choice', () => {
       { t: 'fundGate', data: false },
       { t: 'warp', route: 0 },
     ]);
+  });
+});
+
+/** A game ready to warp with `warps` behind it, `data` Horizon Data and nothing paid to the gate. */
+const gateReady = (seed: number, warps: number, data: number): GameState => {
+  const s = newGame(seed);
+  s.profile.warps = warps;
+  s.profile.data = data;
+  s.run.bank.fuel = 1e6;
+  return s;
+};
+
+/** A game whose first gate stage wants Horizon Data and nothing else. */
+const gateAwaitingData = (seed: number, warps: number, data: number): GameState => {
+  const s = gateReady(seed, warps, data);
+  s.profile.gate.paid = { ...GATE_STAGES[0]!.cost, data: 0 };
+  return s;
+};
+
+describe('balance bot gate data priority', () => {
+  it('pays the data a finished stage still wants before buying a perk', () => {
+    expect(botCommands(gateAwaitingData(4, 6, 2))).toEqual([{ t: 'fundGate', data: true }]);
+  });
+
+  it('spends Horizon Data on perks while the stage still wants a resource', () => {
+    expect(botCommands(gateReady(4, 6, 1))).toEqual([{ t: 'buyPerk', perk: 'yield' }]);
+  });
+
+  it('spends Horizon Data on perks before it pays the gate any', () => {
+    expect(botCommands(gateAwaitingData(4, 5, 2))).toEqual([{ t: 'buyPerk', perk: 'yield' }]);
+  });
+
+  it('spends Horizon Data on perks again once the gate is open', () => {
+    const s = gateAwaitingData(4, 6, 2);
+    s.profile.gate.stage = GATE_STAGES.length;
+    expect(botCommands(s)).toEqual([{ t: 'buyPerk', perk: 'yield' }]);
   });
 });
 
