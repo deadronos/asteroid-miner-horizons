@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import type { SaveActions } from '../src/session';
 import { SettingsStore } from '../src/settings';
 import { newGame } from '../src/sim/create';
 import { queueRefine } from '../src/sim/refining';
@@ -13,8 +14,8 @@ import {
   toggledCollapse,
   touchControlsShown,
 } from '../src/ui/hudLayout';
-import type { SaveActions } from '../src/session';
-import { resetDom, type FakeEl } from './domStub';
+import type { FakeEl } from './domStub';
+import { resetDom } from './domStub';
 import { memStorage } from './memStorage';
 
 describe('help box visibility', () => {
@@ -152,6 +153,27 @@ describe('HUD DOM perf helpers', () => {
     expect(p.built).toBe(true);
     p.invalidate();
     expect(p.built).toBe(false);
+  });
+
+  it('places .paused, .hazard, .toasts and #goals inside a single .hud-stack container', () => {
+    resetDom();
+    const state = newGame(7);
+    const root = document.createElement('div');
+    document.body.append(root);
+    const hud = new Hud(
+      root,
+      () => state,
+      { send: () => {}, saves: {} as SaveActions },
+      new SettingsStore(memStorage()),
+    );
+    expect(hud.root).toBe(root);
+    const stack = (root as unknown as FakeEl).querySelectorAll('.hud-stack')[0];
+    expect(stack).toBeDefined();
+    const children = stack!.childNodes;
+    expect(children.some((c) => c.classList.contains('paused'))).toBe(true);
+    expect(children.some((c) => c.classList.contains('hazard'))).toBe(true);
+    expect(children.some((c) => c.classList.contains('toasts'))).toBe(true);
+    expect(children.some((c) => c.id === 'goals')).toBe(true);
   });
 
   it('refreshes collapsed #fleet and #ship headings without rebuilding their bodies', () => {

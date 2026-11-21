@@ -108,6 +108,7 @@ export class Hud {
     };
     const left = h('div', { class: 'hud-col left' });
     const right = h('div', { class: 'hud-col right' });
+    const stack = h('div', { class: 'hud-stack' });
     // A collapsible panel: a fixed toggle button over a body that the panel fills and that scrolls on its own.
     const fold = (id: HudPanelId, parent: HTMLElement, build: (body: HTMLElement) => Panel): Panel => {
       const el = mk(id, 'hud collapsible', parent);
@@ -126,8 +127,9 @@ export class Hud {
       return panel;
     };
     const topbar = mk('topbar');
-    root.append(left, right);
+    root.append(left, right, stack);
     const ctx: PanelCtx = { getState, send: actions.send, settings };
+    stack.append(this.paused, this.hazard, this.toasts);
     this.panels = [
       createTopBar(topbar, ctx, {
         toggleResearch: () => this.toggleResearch(),
@@ -140,7 +142,7 @@ export class Hud {
       fold('contracts', left, (body) => createContractsPanel(body, ctx)),
       fold('ship', right, (body) => createShipPanel(body, ctx)),
       fold('refinery', right, (body) => createRefineryPanel(body, ctx)),
-      createGoalsPanel(mk('goals', 'hud hidden'), ctx),
+      createGoalsPanel(mk('goals', 'hud hidden', stack), ctx),
     ];
     this.log.id = 'log';
     left.append(this.log);
@@ -152,7 +154,7 @@ export class Hud {
 
     this.touch = new TouchControls(root);
     this.menu = new Menu(root, actions.saves, settings, getState);
-    root.append(this.tooltip, this.flash, this.paused, this.hazard, this.fps, this.toasts);
+    root.append(this.tooltip, this.flash, this.fps);
     // The side columns start below the top bar, which wraps onto more lines on a phone.
     if (typeof ResizeObserver === 'function')
       new ResizeObserver(() =>
@@ -298,7 +300,7 @@ export class Hud {
   blockerRects(): { x: number; y: number; w: number; h: number }[] {
     const out: { x: number; y: number; w: number; h: number }[] = [];
     for (const e of this.root.querySelectorAll(
-      ':scope > .hud, :scope > .hud-col > .hud, :scope > .paused, :scope > .hazard, :scope > .touch-ctl > *',
+      ':scope > .hud, :scope > .hud-col > .hud, :scope > .hud-stack > .hud, :scope > .hud-stack > .paused, :scope > .hud-stack > .hazard, :scope > .touch-ctl > *',
     )) {
       const r = e.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) out.push({ x: r.left, y: r.top, w: r.width, h: r.height });
