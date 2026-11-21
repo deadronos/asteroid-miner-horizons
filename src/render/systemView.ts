@@ -3,6 +3,7 @@
 // new system: warp, load or new game.
 
 import * as THREE from 'three';
+import { makeRng, next } from '../core/rng';
 import type { RawResource } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { StarSystem } from '../sim/types';
@@ -16,12 +17,68 @@ const PLANET_TILT = 0.35;
 /** Milliseconds per frame spent painting planet surfaces (a row costs ~0.2 ms). */
 const PAINT_BUDGET_MS = 3;
 
+/** Ring geometry with radial UVs (u = 0 at inner edge, 1 at outer edge) for 1D banded ring textures. */
+function planetRingGeometry(inner: number, outer: number, segments = 64): THREE.BufferGeometry {
+  const geo = flat(new THREE.RingGeometry(inner, outer, segments));
+  const pos = geo.getAttribute('position') as THREE.BufferAttribute;
+  const uv = geo.getAttribute('uv') as THREE.BufferAttribute;
+  const span = Math.max(1e-5, outer - inner);
+  for (let i = 0; i < pos.count; i++) {
+    const r = Math.hypot(pos.getX(i), pos.getZ(i));
+    uv.setXY(i, (r - inner) / span, 0.5);
+  }
+  uv.needsUpdate = true;
+  return geo;
+}
+
+/** Procedural concentric radial-band texture for a ringed planet, seeded deterministically. */
+export function planetRingTexture(seed: number, color: number): THREE.CanvasTexture {
+  const w = 128;
+  const c = document.createElement('canvas');
+  c.width = w;
+  c.height = 1;
+  const g = c.getContext('2d')!;
+  const r = makeRng(seed ^ 0x51a7);
+  const gap1 = 0.32 + next(r) * 0.24;
+  const gap2 = 0.68 + next(r) * 0.16;
+  const f1 = 10 + next(r) * 14;
+  const f2 = 26 + next(r) * 24;
+  const p1 = next(r) * Math.PI * 2;
+  const p2 = next(r) * Math.PI * 2;
+  // Warm sandy-ice base blended gently with the planet's own colour.
+  const br = Math.round(((color >> 16) & 255) * 0.35 + 216 * 0.65);
+  const bg = Math.round(((color >> 8) & 255) * 0.35 + 200 * 0.65);
+  const bb = Math.round((color & 255) * 0.35 + 160 * 0.65);
+  for (let x = 0; x < w; x++) {
+    const t = x / (w - 1);
+    const edge = Math.min(1, t / 0.08, (1 - t) / 0.1);
+    const band = 0.55 + 0.28 * Math.sin(t * f1 + p1) + 0.17 * Math.sin(t * f2 + p2);
+    const d1 = Math.abs(t - gap1);
+    const d2 = Math.abs(t - gap2);
+    const gap = (d1 < 0.045 ? (d1 / 0.045) ** 2 : 1) * (d2 < 0.025 ? (d2 / 0.025) ** 2 : 1);
+    const alpha = Math.max(0, Math.min(1, edge * band * gap * 0.9));
+    const shade = 0.78 + 0.28 * band;
+    const cr = Math.min(255, Math.round(br * shade));
+    const cg = Math.min(255, Math.round(bg * shade));
+    const cb = Math.min(255, Math.round(bb * shade));
+    g.fillStyle = `rgba(${cr},${cg},${cb},${alpha.toFixed(3)})`;
+    g.fillRect(x, 0, 1, 1);
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.wrapS = THREE.ClampToEdgeWrapping;
+  tex.wrapT = THREE.ClampToEdgeWrapping;
+  return tex;
+}
+
 export class SystemView {
   readonly group = new THREE.Group();
   readonly light: THREE.PointLight;
   private planets: { body: THREE.Mesh; moons: THREE.Mesh[]; ring: THREE.Mesh | null }[] = [];
   /** Planet surfaces; their textures are not reached by the material traversal in `dispose`. */
   private surfaces: PlanetSurface[] = [];
+  /** Procedural ring textures owned by this view; disposed on rebuild. */
+  private ringTextures: THREE.Texture[] = [];
   private station = new THREE.Group();
   private stationRing!: THREE.Mesh;
   private beacons: THREE.Mesh[] = [];
@@ -101,7 +158,8 @@ export class SystemView {
       orbit.position.y = -10;
       g.add(orbit);
       const kind = planetKind(p);
-      const surface = new PlanetSurface(kind, p.color, planetSeed(sys, i));
+      const seed = planetSeed(sys, i);
+      const surface = new PlanetSurface(kind, p.color, seed);
       this.surfaces.push(surface);
       const body = new THREE.Mesh(
         new THREE.SphereGeometry(p.radius, 48, 24),
@@ -121,9 +179,17 @@ export class SystemView {
       g.add(body);
       let ring: THREE.Mesh | null = null;
       if (p.ringed) {
+        const ringTex = planetRingTexture(seed, p.color);
+        this.ringTextures.push(ringTex);
         ring = new THREE.Mesh(
-          flat(new THREE.RingGeometry(p.radius * 1.35, p.radius * 2, 64)),
-          new THREE.MeshLambertMaterial({ color: 0xd8c8a0, transparent: true, opacity: 0.55, side: THREE.DoubleSide }),
+          planetRingGeometry(p.radius * 1.35, p.radius * 2, 64),
+          new THREE.MeshLambertMaterial({
+            map: ringTex,
+            transparent: true,
+            opacity: 0.78,
+            side: THREE.DoubleSide,
+            depthWrite: false,
+          }),
         );
         ring.rotation.z = 0.25;
         g.add(ring);
@@ -179,8 +245,11 @@ export class SystemView {
     for (const b of this.beltBands) (b.mesh.material as THREE.MeshBasicMaterial).color.setHex(p.resource[b.kind]);
   }
 
-  /** `boost` (0..1) brightens and swells the star glow, e.g. during a solar flare. */
-  update(sys: StarSystem, time: number, boost = 0): void {
+  /**
+   * `boost` (0..1) brightens and swells the star glow during an active solar flare;
+   * `warning` (0..1) pulses the star glow and heat-zone ring as a telegraph before the flare hits.
+   */
+  update(sys: StarSystem, time: number, boost = 0, warning = 0, reducedMotion = false): void {
     if (this.paletteGen !== paletteGeneration()) this.syncPalette();
     // Planets show their flat colour until their surface finishes painting.
     const until = performance.now() + PAINT_BUDGET_MS;
@@ -203,10 +272,17 @@ export class SystemView {
       (b.material as THREE.MeshBasicMaterial).opacity = 0.35 + 0.65 * Math.max(0, Math.sin(time * 3 + i * 1.6));
     });
     const flicker = 1 + Math.sin(time * 1.7) * 0.03 + Math.sin(time * 5.3) * 0.015;
+    const warnPulse = reducedMotion ? 0.65 : 0.5 + 0.5 * Math.sin(time * 7);
+    const starBoost = Math.max(boost, warning * (0.25 + 0.35 * warnPulse));
     this.starGlow.forEach((s, i) => {
-      s.scale.setScalar(sys.starRadius * (i === 0 ? 4.5 : 11) * flicker * (1 + 0.6 * boost));
-      s.material.opacity = Math.min(1, this.glowOpacity[i]! + 0.3 * boost);
+      s.scale.setScalar(sys.starRadius * (i === 0 ? 4.5 : 11) * flicker * (1 + 0.6 * starBoost));
+      s.material.opacity = Math.min(1, this.glowOpacity[i]! + 0.3 * starBoost);
     });
+    if (this.heatRing) {
+      const alert = Math.max(boost, warning * (0.4 + 0.6 * warnPulse));
+      (this.heatRing.material as THREE.LineBasicMaterial).opacity = Math.min(1, 0.35 + 0.55 * alert);
+      this.heatRing.scale.setScalar(reducedMotion ? 1 : 1 + 0.015 * warning * warnPulse + 0.02 * boost);
+    }
   }
 
   private dispose(): void {
@@ -220,6 +296,8 @@ export class SystemView {
     this.group.clear();
     this.surfaces.forEach((s) => s.texture.dispose());
     this.surfaces = [];
+    this.ringTextures.forEach((t) => t.dispose());
+    this.ringTextures = [];
     this.planets = [];
     this.beacons = [];
     this.dockRing = null;

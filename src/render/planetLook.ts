@@ -245,14 +245,22 @@ export function atmosphereMaterial(kind: PlanetKind, color: number, layer: 'rim'
       uPower: { value: a.power },
       // |n·v| of the halo's back faces where they meet the planet's silhouette.
       uEdge: { value: Math.sqrt(1 - 1 / (HALO_SCALE * HALO_SCALE)) },
+      // Star light position in world space (matches SystemView.light).
+      uSunPos: { value: new THREE.Vector3(0, 220, 0) },
     },
     defines: layer === 'halo' ? { HALO: '' } : {},
     vertexShader: /* glsl */ `
+      uniform vec3 uSunPos;
       varying vec3 vNormal;
       varying vec3 vView;
+      varying vec3 vWorldNormal;
+      varying vec3 vSunDir;
       void main() {
-        vec4 mv = modelViewMatrix * vec4(position, 1.0);
+        vec4 wp = modelMatrix * vec4(position, 1.0);
+        vec4 mv = viewMatrix * wp;
         vNormal = normalize(normalMatrix * normal);
+        vWorldNormal = normalize(mat3(modelMatrix) * normal);
+        vSunDir = normalize(uSunPos - wp.xyz);
         vView = isOrthographic ? vec3(0.0, 0.0, 1.0) : normalize(-mv.xyz);
         gl_Position = projectionMatrix * mv;
       }`,
@@ -263,6 +271,8 @@ export function atmosphereMaterial(kind: PlanetKind, color: number, layer: 'rim'
       uniform float uEdge;
       varying vec3 vNormal;
       varying vec3 vView;
+      varying vec3 vWorldNormal;
+      varying vec3 vSunDir;
       void main() {
         float nv = dot(normalize(vNormal), vView);
         #ifdef HALO
@@ -270,7 +280,11 @@ export function atmosphereMaterial(kind: PlanetKind, color: number, layer: 'rim'
         #else
           float f = pow(1.0 - clamp(nv, 0.0, 1.0), uPower);
         #endif
-        gl_FragColor = vec4(uColor * f * uIntensity, 1.0);
+        // Half-Lambert sun modulation so the night-side limb darkens naturally.
+        float ndl = dot(normalize(vWorldNormal), normalize(vSunDir));
+        float sun = clamp(ndl * 0.5 + 0.5, 0.0, 1.0);
+        float lit = mix(0.14, 1.0, sun * sun);
+        gl_FragColor = vec4(uColor * f * uIntensity * lit, 1.0);
       }`,
     side: layer === 'halo' ? THREE.BackSide : THREE.FrontSide,
     transparent: true,

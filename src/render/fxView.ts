@@ -47,6 +47,11 @@ export class FxView {
     this.ping.setQuality(low);
   }
 
+  /** Scales particle sprite size with the renderer's pixel ratio. */
+  setPixelRatio(dpr: number): void {
+    this.particles.setPixelRatio(dpr);
+  }
+
   /** True while the ping pulse is still fading. */
   get busy(): boolean {
     return this.ping.busy;
@@ -86,8 +91,16 @@ export class FxView {
           P.emit(fx.pos.x, fx.pos.z, col.setHex(palette().resource[fx.kind]), 4, 60, 0.35);
           this.floaters.add(fx.shipId, fx.kind, fx.amount, fx.pos);
           break;
-        case 'dock':
+        case 'dock': {
+          const st = state.run.system.station.pos;
+          const dir = Math.atan2(st.z - fx.pos.z, st.x - fx.pos.x);
+          const count = Math.min(20, 6 + Math.round(Math.sqrt(fx.value) * 0.6));
+          P.emit(fx.pos.x, fx.pos.z, col.setHex(palette().ok), count, 95, 0.55, { dir, spread: 0.7, drag: 2.2 });
+          P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffffff), Math.max(4, Math.round(count * 0.4)), 55, 0.35, {
+            drag: 2.8,
+          });
           break;
+        }
         case 'impact':
           P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffd0a0), 14, 120, 0.4);
           this.ships.flashNear(fx.pos);

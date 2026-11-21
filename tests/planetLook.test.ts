@@ -3,6 +3,7 @@ import {
   PLANET_TEX_H,
   PLANET_TEX_W,
   PlanetSurface,
+  atmosphereMaterial,
   atmosphereOf,
   planetKind,
   planetPixels,
@@ -117,6 +118,16 @@ describe('atmosphere rim', () => {
   it('tints gas giants with their own colour and keeps fixed tints for the rest', () => {
     expect(atmosphereOf('gas', 0xff0000).color.getHex()).not.toBe(atmosphereOf('gas', 0x0000ff).color.getHex());
     expect(atmosphereOf('ice', 0xff0000).color.getHex()).toBe(atmosphereOf('ice', 0x0000ff).color.getHex());
+  });
+
+  it('modulates rim and halo shaders with sun-direction half-Lambert lighting', () => {
+    for (const layer of ['rim', 'halo'] as const) {
+      const mat = atmosphereMaterial('rocky', 0x4d7dd1, layer);
+      expect(mat.uniforms.uSunPos).toBeDefined();
+      expect(mat.vertexShader).toContain('vWorldNormal');
+      expect(mat.vertexShader).toContain('vSunDir');
+      expect(mat.fragmentShader).toContain('ndl');
+    }
   });
 });
 

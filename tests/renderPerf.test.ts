@@ -63,4 +63,13 @@ describe('particles', () => {
     p.update(1 / 60);
     expect(p.count).toBe(6000);
   });
+
+  it('scales particle sprite size with DPR', () => {
+    const p = new Particles();
+    const mat = p.points.material as THREE.PointsMaterial;
+    p.setPixelRatio(1);
+    const s1 = mat.size;
+    p.setPixelRatio(2);
+    expect(mat.size).toBe(s1 * 2);
+  });
 });
