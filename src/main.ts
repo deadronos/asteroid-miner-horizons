@@ -177,8 +177,13 @@ function step(now: number): void {
   } else if (paused) {
     // Menus still work while paused: purchases and refits apply immediately.
     stepper.acc = 0;
-    if (commands.length) renderNow = true;
-    applyCommands(state, commands);
+    if (commands.length) {
+      renderNow = true;
+      const runBefore = state.run;
+      applyCommands(state, commands);
+      if (state.run !== runBefore) session.sim.clear();
+      session.sim.rebuild(state);
+    }
   } else {
     const thrust = input.thrust();
     // Backlog carries across slow frames; only a stall past MAX_BACKLOG is dropped (and counted in stepper.dropped).
