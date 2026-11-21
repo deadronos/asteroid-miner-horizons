@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { MODIFIER_IDS, MODIFIERS, type ModifierId } from '../src/data/modifiers';
 import { TUNING } from '../src/data/tuning';
 import { newGame } from '../src/sim/create';
-import { generateSystem } from '../src/sim/generate';
+import { generateSystem, populateBelts } from '../src/sim/generate';
 import {
   applyBeltModifiers,
   applySystemStats,
@@ -107,6 +107,34 @@ describe('generateSystem', () => {
 
   it('newGame starts in system 1 without modifiers', () => {
     expect(newGame(1).run.system.modifiers).toEqual([]);
+  });
+
+  it('never rolls icePoor on low-richness systems while keeping it on richer systems', () => {
+    let lowRichCount = 0;
+    let lowRichIcePoor = 0;
+    let richIcePoorCount = 0;
+    for (let seed = 1; seed <= 200; seed++) {
+      for (let n = 3; n <= 8; n++) {
+        const s = generateSystem(seed, n);
+        if (s.richness < 0.95) {
+          lowRichCount++;
+          if (s.modifiers.includes('icePoor')) lowRichIcePoor++;
+        } else if (s.modifiers.includes('icePoor')) {
+          richIcePoorCount++;
+        }
+      }
+    }
+    expect(lowRichCount).toBeGreaterThan(0);
+    expect(lowRichIcePoor).toBe(0);
+    expect(richIcePoorCount).toBeGreaterThan(0);
+  });
+
+  it('guarantees a minimum ice rock count in the inner and mid belts', () => {
+    const g = newGame(7);
+    for (const b of g.run.system.belts) b.mix = { ore: 1, ice: 0, crystal: 0 };
+    populateBelts(g.run, 7);
+    const iceInInnerMid = g.run.rocks.filter((r) => r.belt <= 1 && r.kind === 'ice').length;
+    expect(iceInInnerMid).toBeGreaterThanOrEqual(20);
   });
 });
 

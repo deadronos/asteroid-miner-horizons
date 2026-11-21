@@ -30,7 +30,7 @@ import { MODIFIER_IDS, MODIFIERS } from '../src/data/modifiers';
 import { walletValue } from '../src/data/resources';
 import { newGame } from '../src/sim/create';
 import { isDocked } from '../src/sim/economy';
-import { anomalies } from '../src/sim/exploration';
+import { anomalies, salvageReward } from '../src/sim/exploration';
 import { droneCount, fleetCap, isBuilder, isFlagship, isHauler } from '../src/sim/ships';
 import type { GameState } from '../src/sim/types';
 import { runBot } from './harness';
@@ -235,7 +235,9 @@ export function playSeed(seed: number, warps: number, hazards: HazardLevel = 'of
         const claimed = s.run.exploration.claimed;
         for (let i = seenClaimed; i < claimed.length; i++) {
           const a = anomalies(s.run)[claimed[i]!];
-          if (a?.kind === 'derelict') cur.salvageValue += walletValue(DERELICT_SALVAGE[a.salvage]!.reward);
+          if (a?.kind === 'derelict') {
+            cur.salvageValue += walletValue(salvageReward(DERELICT_SALVAGE[a.salvage]!.reward, state.run.system));
+          }
         }
         cur.derelictsClaimed += Math.max(0, claimed.length - seenClaimed);
         seenClaimed = claimed.length;

@@ -46,7 +46,7 @@
 import { dist, distSq, type Vec2 } from '../src/core/vec';
 import { variantDef, type ComponentId, type VariantId } from '../src/data/components';
 import { CONTRACTS } from '../src/data/contracts';
-import { GATE_STAGES, gateOpen, gateRemainder } from '../src/data/gate';
+import { gateOpen, gateRemainder, gateStageCost } from '../src/data/gate';
 import { HULLS, type HullId } from '../src/data/hulls';
 import { DOCTRINE_PAIR_IDS, DOCTRINE_PAIRS } from '../src/data/doctrines';
 import type { PerkId } from '../src/data/perks';
@@ -62,6 +62,7 @@ import {
   perkCost,
   refitBlock,
   repairCost,
+  slotCost,
   upgradeCost,
   warpCost,
 } from '../src/sim/economy';
@@ -95,10 +96,10 @@ const ORE_PER_ALLOY = (RECIPES.alloy.input.ore ?? 0) / RECIPES.alloy.output;
 const INSTALL_ORDER: { comp: ComponentId; variant: VariantId }[] = [
   { comp: 'cargo', variant: 'standard' },
   { comp: 'sensor', variant: 'standard' },
-  { comp: 'engine', variant: 'ion' },
-  { comp: 'armor', variant: 'standard' },
-  { comp: 'laser', variant: 'focused' },
   { comp: 'shield', variant: 'standard' },
+  { comp: 'armor', variant: 'standard' },
+  { comp: 'engine', variant: 'ion' },
+  { comp: 'laser', variant: 'focused' },
 ];
 /** Upgrade order for fitted components. */
 const UPGRADE_ORDER: ComponentId[] = ['laser', 'cargo', 'sensor', 'engine', 'armor', 'shield'];
@@ -135,7 +136,20 @@ export const chooseRoute = (state: GameState): number => richestRoute(warpRoutes
 export function botCommands(state: GameState, opts: BotOptions = {}): Command[] {
   const play = pilotCommands(state, opts);
   const doctrines = doctrinePicks(state);
-  return doctrines.length ? [...play, ...doctrines] : play;
+  const repairs = autoRepairPicks(state);
+  if (!doctrines.length && !repairs.length) return play;
+  return [...play, ...doctrines, ...repairs];
+}
+
+/** Enables autorepair on every live fleet ship once the run is underway (#275). */
+function autoRepairPicks(state: GameState): Command[] {
+  if (state.run.time <= 0) return [];
+  const cmds: Command[] = [];
+  for (const s of state.run.ships) {
+    if (!isFlagship(s) && isAlive(s) && !s.autoRepair)
+      cmds.push({ t: 'shipAuto', shipId: s.id, kind: 'repair', on: true });
+  }
+  return cmds;
 }
 
 /**
@@ -270,7 +284,7 @@ function nextOutpost(state: GameState, fs: Ship, wc: number): Command | null {
 
 /** Ice a purchase decision spends (a smelt or repair spends none). */
 function iceOf(state: GameState, cmd: Command): number {
-  const ship = cmd.t === 'upgrade' ? findShip(state.run, cmd.shipId) : undefined;
+  const ship = cmd.t === 'upgrade' || cmd.t === 'buySlot' ? findShip(state.run, cmd.shipId) : undefined;
   const cost: Cost | null =
     cmd.t === 'buyHull'
       ? HULLS[cmd.hullId].cost
@@ -278,7 +292,9 @@ function iceOf(state: GameState, cmd: Command): number {
         ? variantDef(cmd.comp, cmd.variant).cost(1)
         : cmd.t === 'upgrade' && ship
           ? upgradeCost(ship, cmd.slot)
-          : null;
+          : cmd.t === 'buySlot' && ship
+            ? slotCost(ship)
+            : null;
   return cost?.ice ?? 0;
 }
 
@@ -508,8 +524,7 @@ function nextPerk(state: GameState): PerkId | null {
 function gateDataClaim(state: GameState): Command | null {
   const { profile } = state;
   if (profile.warps < DATA_DELIVERY_WARPS || gateOpen(profile.gate)) return null;
-  const stage = GATE_STAGES[profile.gate.stage]!;
-  const due = gateRemainder(profile.gate.paid, stage.cost);
+  const due = gateRemainder(profile.gate.paid, gateStageCost(profile.gate.stage, profile.ngPlus));
   if (due.data <= 0 || profile.data <= 0) return null;
   for (const r of RESOURCES) if (due[r] > 0) return null;
   return { t: 'fundGate', data: true };
@@ -586,15 +601,32 @@ function nextPurchase(state: GameState, wc: number): Command | null {
     const refine = needsAlloy(HULLS[hullId].cost) ? smeltFor(HULLS[hullId].cost) : null;
     if (refine) return refine;
   }
+  const wantHarvester =
+    profile.warps >= 6 &&
+    miners >= HAULER_AFTER &&
+    !wantBuilder &&
+    !wantHauler &&
+    !run.ships.some((x) => x.hullId === 'harvester');
+  if (hulls && wantHarvester && !hullBlocked(state, 'harvester')) {
+    if (ok(HULLS.harvester.cost)) return { t: 'buyHull', hullId: 'harvester' };
+    const refine = needsAlloy(HULLS.harvester.cost) ? smeltFor(HULLS.harvester.cost) : null;
+    if (refine) return refine;
+  }
   if (hulls && !wantHauler && !wantBuilder && !hullBlocked(state, 'drone') && ok(HULLS.drone.cost))
     return { t: 'buyHull', hullId: 'drone' };
 
   const docked = run.ships.filter((s) => !refitBlock(state, s));
   for (const { comp, variant } of INSTALL_ORDER) {
     for (const s of docked) {
+      const support = isHauler(s) || isBuilder(s);
+      if (support && (comp === 'sensor' || comp === 'laser')) continue;
+      if (!isFlagship(s) && !support && profile.warps >= 1 && comp === 'sensor') continue;
+      // Drones and builders benefit most from armor's flat hull (+40 vs volatile blasts) before shields.
+      if (!isFlagship(s) && !isHauler(s) && comp === 'shield' && !s.slots.some((f) => f?.type === 'armor')) continue;
+      const pick: VariantId = support && comp === 'engine' ? 'thruster' : variant;
       const i = s.slots.indexOf(null);
-      if (i >= 0 && ok(variantDef(comp, variant).cost(1)) && !s.slots.some((f) => f?.type === comp && comp !== 'laser'))
-        return { t: 'install', shipId: s.id, slot: i, comp, variant };
+      if (i >= 0 && ok(variantDef(comp, pick).cost(1)) && !s.slots.some((f) => f?.type === comp && comp !== 'laser'))
+        return { t: 'install', shipId: s.id, slot: i, comp, variant: pick };
     }
   }
   for (const comp of UPGRADE_ORDER) {
@@ -607,6 +639,20 @@ function nextPurchase(state: GameState, wc: number): Command | null {
         const refine = smeltFor(cost);
         if (refine) return refine;
       }
+    }
+  }
+  // In systems with hazards, expand ships with full slots so they can fit shields and armor (#275).
+  // Hold off while a builder is still waiting to deploy the system's first outpost so early automation isn't delayed.
+  const waitingFirstOutpost = run.ships.some(isBuilder) && run.automation.outposts.length === 0;
+  if (hulls && profile.warps >= 1 && !waitingFirstOutpost) {
+    for (const s of docked) {
+      if (s.slots.includes(null)) continue;
+      const hasShield = s.slots.some((f) => f?.type === 'shield');
+      const hasArmor = s.slots.some((f) => f?.type === 'armor');
+      if (hasShield && hasArmor) continue;
+      if (s.slots.length >= HULLS[s.hullId].slots + 2) continue;
+      const sc = slotCost(s);
+      if (sc && ok(sc)) return { t: 'buySlot', shipId: s.id };
     }
   }
   if (hulls && !hullBlocked(state, 'excavator')) {

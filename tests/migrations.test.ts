@@ -17,7 +17,7 @@ import type { Command } from '../src/sim/commands';
 import { tick } from '../src/sim/update';
 import { validateState } from '../src/sim/validate';
 import { goalDone, type GoalId } from '../src/ui/goals';
-// Real saves frozen at versions 2 to 17 (belt trimmed to a few rocks), committed
+// Real saves frozen at versions 2 to 18 (belt trimmed to a few rocks), committed
 // so future bumps stay loadable.
 import FIXTURE from './fixtures/save-v2.json?raw';
 import V3_FIXTURE from './fixtures/save-v3.json?raw';
@@ -35,6 +35,7 @@ import V14_FIXTURE from './fixtures/save-v14.json?raw';
 import V15_FIXTURE from './fixtures/save-v15.json?raw';
 import V16_FIXTURE from './fixtures/save-v16.json?raw';
 import V17_FIXTURE from './fixtures/save-v17.json?raw';
+import V18_FIXTURE from './fixtures/save-v18.json?raw';
 
 // The root tsconfig has `types: []`; referencing @types/node here would leak Node globals into src/.
 interface Fs {
@@ -126,6 +127,9 @@ const sansGoals = <P extends { stats: object }>(profile: P): P => {
   return { ...profile, stats, goalsDismissed: undefined } as P;
 };
 
+/** `profile` without the v18 `ngPlus` counter. toEqual treats an undefined field as absent. */
+const sansNgPlus = <P extends object>(profile: P): P => ({ ...profile, ngPlus: undefined }) as P;
+
 /** A valid current-version save, with the given run overrides applied on top. */
 const saveCurrent = (run: Record<string, unknown> = {}): SaveData => {
   const fixture = v3FixtureState();
@@ -137,6 +141,7 @@ const saveCurrent = (run: Record<string, unknown> = {}): SaveData => {
     goalsDismissed: false,
     doctrines: emptyDoctrines(),
     gate: freshGate(),
+    ngPlus: 0,
   };
   return { ...fixture, profile, version: SAVE_VERSION, run: { ...currentRun(), ...run } } as unknown as SaveData;
 };
@@ -948,8 +953,10 @@ describe('lifetime stats migration to v11', () => {
     const loaded = loadFrozen(V10_FIXTURE);
     // toEqual treats an undefined field as absent, so this compares everything else.
     expect(
-      sansGate(
-        sansDoctrines({ ...loaded.profile, stats: undefined, achievements: undefined, goalsDismissed: undefined }),
+      sansNgPlus(
+        sansGate(
+          sansDoctrines({ ...loaded.profile, stats: undefined, achievements: undefined, goalsDismissed: undefined }),
+        ),
       ),
     ).toEqual(before.profile);
     expect(sansExploration(sansShipAuto(loaded.run))).toEqual(before.run);
@@ -998,7 +1005,7 @@ describe('ship automation migration to v12', () => {
   it('keeps the v11 fixture otherwise unchanged', () => {
     const before = JSON.parse(V11_FIXTURE).state;
     const loaded = loadFrozen(V11_FIXTURE);
-    expect(sansGate(sansDoctrines(sansGoals(loaded.profile)))).toEqual(before.profile);
+    expect(sansNgPlus(sansGate(sansDoctrines(sansGoals(loaded.profile))))).toEqual(before.profile);
     expect(sansExploration(sansShipAuto(loaded.run))).toEqual(before.run);
   });
 
@@ -1056,7 +1063,7 @@ describe('first-steps migration to v13', () => {
   it('keeps the v12 fixture otherwise unchanged', () => {
     const before = JSON.parse(V12_FIXTURE).state;
     const loaded = loadFrozen(V12_FIXTURE);
-    expect(sansGate(sansDoctrines(sansGoals(loaded.profile)))).toEqual(before.profile);
+    expect(sansNgPlus(sansGate(sansDoctrines(sansGoals(loaded.profile))))).toEqual(before.profile);
     expect(sansExploration(sansAutoBuild(loaded.run))).toEqual(before.run);
   });
 
@@ -1100,12 +1107,12 @@ describe('frozen save fixtures', () => {
     expect(migrated.version).toBe(SAVE_VERSION);
     const validated = validateState(migrated);
     if (!validated) throw new Error('validate rejected the v13 fixture');
-    expect(sansGate(sansDoctrines(validated.profile))).toEqual(frozen.profile);
+    expect(sansNgPlus(sansGate(sansDoctrines(validated.profile)))).toEqual(frozen.profile);
     expect(sansExploration(sansAutoBuild(validated.run))).toEqual(frozen.run);
 
     const state = loadFrozen(V13_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
-    expect(sansGate(sansDoctrines(state.profile))).toEqual(frozen.profile);
+    expect(sansNgPlus(sansGate(sansDoctrines(state.profile)))).toEqual(frozen.profile);
     expect(sansExploration(sansAutoBuild(state.run))).toEqual(frozen.run);
   });
 
@@ -1116,7 +1123,7 @@ describe('frozen save fixtures', () => {
     expect(frozen.run.ships.length).toBeGreaterThan(1);
     const state = loadFrozen(V14_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
-    expect(sansGate(state.profile)).toEqual({ ...frozen.profile, doctrines: emptyDoctrines() });
+    expect(sansNgPlus(sansGate(state.profile))).toEqual({ ...frozen.profile, doctrines: emptyDoctrines() });
     expect(sansExploration(state.run)).toEqual(frozen.run);
   });
 });
@@ -1139,7 +1146,7 @@ describe('horizon gate migration to v16', () => {
     expect(frozen.run.ships.length).toBeGreaterThan(1);
     const state = loadFrozen(V16_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
-    expect(state.profile).toEqual(frozen.profile);
+    expect(sansNgPlus(state.profile)).toEqual(frozen.profile);
     expect(sansExploration(state.run)).toEqual(frozen.run);
     const again = deserialize(serialize(state));
     expect(again && serialize(again)).toBe(serialize(state));
@@ -1160,7 +1167,7 @@ describe('doctrine migration to v15', () => {
     expect(frozen.run.ships.length).toBeGreaterThan(1);
     const state = loadFrozen(V15_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
-    expect(state.profile).toEqual({
+    expect(sansNgPlus(state.profile)).toEqual({
       ...frozen.profile,
       stats: { ...frozen.profile.stats, gates: 0 },
       gate: freshGate(),
@@ -1185,10 +1192,37 @@ describe('exploration migration to v17', () => {
     expect(frozen.run.exploration).toEqual(newExploration(frozen.profile.seed, frozen.run.system.number));
     const state = loadFrozen(V17_FIXTURE);
     expect(state.version).toBe(SAVE_VERSION);
+    expect(sansNgPlus(state.profile)).toEqual(frozen.profile);
+    expect(state.profile.ngPlus).toBe(0);
+    expect(state.run).toEqual(frozen.run);
+    const again = deserialize(serialize(state));
+    expect(again && serialize(again)).toBe(serialize(state));
+  });
+});
+
+describe('New Game+ cycle migration to v18', () => {
+  it('v17 fixture migrates with ngPlus at 0', () => {
+    const state = loadFrozen(V17_FIXTURE);
+    expect(state.version).toBe(SAVE_VERSION);
+    expect(state.profile.ngPlus).toBe(0);
+  });
+
+  it('save-v18 fixture round-trips through fromData', () => {
+    const frozen = JSON.parse(V18_FIXTURE).state as SaveData;
+    expect(frozen.version).toBe(18);
+    expect(frozen.profile.ngPlus).toBe(0);
+    const state = loadFrozen(V18_FIXTURE);
+    expect(state.version).toBe(SAVE_VERSION);
     expect(state.profile).toEqual(frozen.profile);
     expect(state.run).toEqual(frozen.run);
     const again = deserialize(serialize(state));
     expect(again && serialize(again)).toBe(serialize(state));
+  });
+
+  it('rejects a current save whose ngPlus is missing, negative, fractional or non-numeric', () => {
+    for (const ngPlus of [undefined, null, -1, 1.5, '1']) {
+      expect(deserialize(JSON.stringify(merge({ ngPlus })(saveCurrent())))).toBeNull();
+    }
   });
 });
 
@@ -1231,5 +1265,21 @@ describe('construction drone migration to v14', () => {
     const base = loadFrozen(JSON.stringify(raw)).profile.stats.miningDrones;
     raw.state.run.ships.push({ ...raw.state.run.ships[1]!, id: 9999, hullId: 'constructionDrone' });
     expect(loadFrozen(JSON.stringify(raw)).profile.stats.miningDrones).toBe(base);
+  });
+
+  it('v17 saves mid-stage on Ring clamp and refund paid ice above the v18 cap', () => {
+    const raw = JSON.parse(V17_FIXTURE) as { state: SaveData };
+    const bankIceBefore = raw.state.run.bank.ice;
+    raw.state.profile.gate = {
+      ...raw.state.profile.gate,
+      stage: 1,
+      paid: { data: 0, ore: 20, ice: 15, crystal: 5, alloy: 0, fuel: 0 },
+    };
+    const state = loadFrozen(JSON.stringify(raw));
+    expect(state.profile.ngPlus).toBe(0);
+    expect(state.profile.gate.stage).toBe(1);
+    expect(state.profile.gate.paid.ice).toBe(0);
+    expect(state.profile.gate.paid.ore).toBe(20);
+    expect(state.run.bank.ice).toBe(bankIceBefore + 15);
   });
 });

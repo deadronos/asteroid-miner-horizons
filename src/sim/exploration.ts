@@ -5,8 +5,8 @@
 
 import { chance, int, makeRng, next, pick, range, type Rng } from '../core/rng';
 import { dist, distSq, fromAngle, type Vec2 } from '../core/vec';
-import { COMPONENTS, defaultVariant, variantDef } from '../data/components';
-import { DERELICT_SALVAGE } from '../data/exploration';
+import { COMPONENTS, defaultVariant, variantDef, type Tier } from '../data/components';
+import { DERELICT_SALVAGE, SALVAGE_SYSTEM_SCALE, SALVAGE_TIER_SYSTEMS } from '../data/exploration';
 import {
   credit,
   formatCost,
@@ -161,6 +161,24 @@ function rewardText(reward: Cost): string {
   return parts.join(', ');
 }
 
+/** Scales a derelict's base resource payout by system number and richness. */
+export function salvageReward(base: Cost, system: Pick<StarSystem, 'number' | 'richness'>): Cost {
+  const scale = (1 + SALVAGE_SYSTEM_SCALE * (system.number - 1)) * system.richness;
+  const out: Cost = {};
+  for (const r of RESOURCES) {
+    const n = base[r];
+    if (n !== undefined && n > 0) out[r] = Math.max(1, Math.round(n * scale));
+  }
+  return out;
+}
+
+/** Component tier recovered from a derelict in `systemNumber` (T1 early, T2 from sys 4, T3 from sys 7). */
+export function salvageTier(systemNumber: number): Tier {
+  if (systemNumber >= SALVAGE_TIER_SYSTEMS.tier3) return 3;
+  if (systemNumber >= SALVAGE_TIER_SYSTEMS.tier2) return 2;
+  return 1;
+}
+
 /**
  * Pays every revealed, unclaimed derelict a ship has reached. The component
  * roll comes from the anomaly's own stream (seed and id), not run.rng, so
@@ -182,29 +200,33 @@ export function updateExploration(state: GameState): void {
     if (!claimer) continue;
 
     const salvage = DERELICT_SALVAGE[anomaly.salvage]!;
+    const reward = salvageReward(salvage.reward, run.system);
     exploration.claimed.push(id);
-    credit(run.bank, salvage.reward);
-    run.runValue += walletValue(salvage.reward);
+    credit(run.bank, reward);
+    run.runValue += walletValue(reward);
 
     const dropRng = makeRng((exploration.seed ^ Math.imul(id + 1, 0x85ebca6b)) >>> 0);
     const drop = chance(dropRng, salvage.componentChance) ? pick(dropRng, salvage.components) : null;
     let tail = '';
     if (drop) {
       const variant = defaultVariant(drop);
+      const tier = salvageTier(run.system.number);
+      const label = tier > 1 ? `T${tier} ${COMPONENTS[drop].name}` : COMPONENTS[drop].name;
       const slot = claimer.slots.indexOf(null);
       if (slot >= 0) {
-        claimer.slots[slot] = { type: drop, variant, tier: 1 };
+        claimer.slots[slot] = { type: drop, variant, tier };
         clampToStats(state, claimer);
-        tail = ` + ${COMPONENTS[drop].name}`;
+        tail = ` + ${label}`;
       } else {
-        const cost = variantDef(drop, variant).cost(1);
+        const cost = variantDef(drop, variant).cost(tier);
         credit(run.bank, cost);
-        tail = ` + ${formatCost(cost)} for a ${COMPONENTS[drop].name}`;
+        run.runValue += walletValue(cost);
+        tail = ` + ${formatCost(cost)} for a ${label}`;
       }
     }
     state.out.log.push({
       level: 'major',
-      text: `Salvaged ${salvage.label}: ${rewardText(salvage.reward)}${tail}.`,
+      text: `Salvaged ${salvage.label}: ${rewardText(reward)}${tail}.`,
       event: 'salvage',
     });
   }

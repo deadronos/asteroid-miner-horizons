@@ -253,6 +253,35 @@ describe('haulers', () => {
     const d = Math.hypot(hauler.pos.x - s.run.system.station.pos.x, hauler.pos.z - s.run.system.station.pos.z);
     expect(d).toBeLessThan(200);
   });
+
+  it('brakes for an asteroid while skimming a moving miner instead of ramming it (#275)', () => {
+    const { s, hauler } = haulerSetup();
+    const st = s.run.system.station.pos;
+    // Place a large rock directly ahead of a fast-moving miner with the hauler in transfer range.
+    const rock: Rock = {
+      id: 9001,
+      kind: 'ore',
+      size: 0,
+      pos: { x: st.x + 560, z: st.z },
+      vel: { x: 0, z: 0 },
+      radius: 36,
+      hp: 500,
+      maxHp: 500,
+      units: 50,
+      belt: 0,
+    };
+    s.run.rocks = [rock];
+    const drone = makeShip(s.run, s.profile, 'drone', 'Drone-1', { x: st.x + 480, z: st.z });
+    drone.cargo.ore = 30;
+    drone.vel = { x: 110, z: 0 };
+    s.run.ships.push(drone);
+    hauler.pos = { x: st.x + 495, z: st.z };
+    hauler.vel = { x: 110, z: 0 };
+    const hullBefore = hauler.hull;
+    runFor(s, 2);
+    expect(hauler.hull).toBe(hullBefore);
+    expect(hauler.cargo.ore + s.run.bank.ore).toBeGreaterThan(0);
+  });
 });
 
 describe('idle automation', () => {

@@ -82,11 +82,13 @@ function avoidance(
  * rock faster than `rockApproachCap` of the collision threshold, as late as the ship's acceleration allows. Open
  * space is untouched; only a rock within stopping distance slows the ship. Comets are left to the dodge reflexes.
  */
-function brakeForRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
+export function brakeForRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const cap = TUNING.collisionMinSpeed * TUNING.rockApproachCap;
   const decel = st.accel * TUNING.rockBrakeMargin;
   const maxDv = st.accel * ctx.dt;
-  ctx.index.rockHash.query(ship.pos, st.size + 90, (r) => {
+  const sp = len(ship.vel);
+  const stopReach = sp > cap ? (sp * sp - cap * cap) / (2 * decel) + 50 : 50;
+  ctx.index.rockHash.query(ship.pos, st.size + Math.max(90, stopReach), (r) => {
     if (r.comet || !ctx.index.rockById.has(r.id)) return;
     const rx = r.pos.x - ship.pos.x;
     const rz = r.pos.z - ship.pos.z;
@@ -140,7 +142,6 @@ export function steer(
     x += AVOID.x * Math.max(want, 0.5);
     z += AVOID.z * Math.max(want, 0.5);
     want *= 1 - 0.7 * danger; // ease off the throttle while threading a cluster
-    if (brake) brakeForRocks(ctx, ship, st);
   }
   const l = hypot2(x, z);
   if (l > 1e-6) {
@@ -158,6 +159,7 @@ export function steer(
     ship.vel.x *= ease;
     ship.vel.z *= ease;
   }
+  if (avoid && brake) brakeForRocks(ctx, ship, st);
 }
 
 /**

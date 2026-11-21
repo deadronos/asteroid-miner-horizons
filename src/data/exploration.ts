@@ -30,6 +30,12 @@ export interface SalvageDef {
   components: readonly ComponentId[];
 }
 
+/** Per-system salvage payout growth above system 1: `1 + this * (system.number - 1)`. */
+export const SALVAGE_SYSTEM_SCALE = 0.3;
+
+/** Minimum system number for tier-2 and tier-3 derelict component drops. */
+export const SALVAGE_TIER_SYSTEMS = { tier2: 4, tier3: 7 } as const;
+
 /** One derelict salvage payout; an anomaly's `salvage` indexes this list. */
 export const DERELICT_SALVAGE: readonly SalvageDef[] = [
   { label: 'Ore freighter', reward: { ore: 120, alloy: 6 }, componentChance: 0.35, components: ['cargo', 'engine'] },

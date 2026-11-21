@@ -1,10 +1,19 @@
 import { describe, expect, it } from 'vitest';
 import { emptyDoctrines } from '../src/data/doctrines';
-import { GATE_STAGES, NG_PLUS_RULE, freshGate, formatGateCost } from '../src/data/gate';
+import {
+  GATE_STAGES,
+  NG_PLUS_COST_STEP,
+  NG_PLUS_HAZARD_STEP,
+  NG_PLUS_RICHNESS_STEP,
+  NG_PLUS_RULE,
+  freshGate,
+  formatGateCost,
+  gateStageCost,
+} from '../src/data/gate';
 import { botCommands } from '../scripts/bot';
-import { newGame } from '../src/sim/create';
+import { newGame, newProfile, newRun } from '../src/sim/create';
 import { warpCost } from '../src/sim/economy';
-import { deliverable, keptDoctrines, keptPerks } from '../src/sim/gate';
+import { deliverable, keptDoctrines, keptPerks, nextNgPlusSeed } from '../src/sim/gate';
 import { deserialize, serialize } from '../src/sim/save';
 import { gateChip, gatePanel, summaryRows } from '../src/ui/gateView';
 import { runTicks, send } from './helpers';
@@ -167,7 +176,7 @@ describe('New Game+', () => {
     expect(keptDoctrines({ fleet: 'ace', haul: 'freighter', focus: null }).fleet).toBe('ace');
   });
 
-  it('resets the run and the progression, and copies the kept subset by stable ids', () => {
+  it('resets the run and the progression, advances the galaxy seed and ngPlus cycle, and copies the kept subset by stable ids', () => {
     const s = newGame(11);
     s.profile.doctrines = { fleet: null, haul: 'freighter', focus: 'survey' };
     s.profile.perks = { yield: 4, optics: 1, thrust: 0, bay: 2, kit: 0, warp: 0, furnace: 0, hopper: 0 };
@@ -178,12 +187,15 @@ describe('New Game+', () => {
     s.profile.achievements = ['firstJump'];
     s.profile.goalsDismissed = true;
     const seed = s.profile.seed;
+    expect(s.profile.ngPlus).toBe(0);
     fill(s);
     send(s, { t: 'fundGate' });
     expect(s.profile.gate.summary).not.toBeNull();
     const gates = s.profile.stats.gates;
     send(s, { t: 'newGamePlus' });
-    expect(s.profile.seed).toBe(seed);
+    expect(s.profile.ngPlus).toBe(1);
+    expect(s.profile.seed).toBe(nextNgPlusSeed(seed, 1));
+    expect(s.profile.seed).not.toBe(seed);
     expect(s.profile.warps).toBe(0);
     expect(s.profile.data).toBe(0);
     expect(s.profile.dataEarned).toBe(0);
@@ -196,14 +208,60 @@ describe('New Game+', () => {
     expect(s.run.system.number).toBe(1);
     expect(s.out.log.some((l) => l.text.includes('freighter'))).toBe(true);
     expect(s.out.fx.at(-1)).toEqual({ t: 'warp' });
-    // A second identical profile takes the same keep, and the new run matches.
+    // A second identical profile takes the same keep, and the new run matches deterministically.
     const again = newGame(11);
     again.profile.doctrines = { fleet: null, haul: 'freighter', focus: 'survey' };
     again.profile.perks = { yield: 4, optics: 1, thrust: 0, bay: 2, kit: 0, warp: 0, furnace: 0, hopper: 0 };
     fill(again);
     send(again, { t: 'fundGate' });
     send(again, { t: 'newGamePlus' });
+    expect(again.profile.seed).toBe(s.profile.seed);
+    expect(again.profile.ngPlus).toBe(1);
     expect(JSON.stringify(again.run)).toBe(JSON.stringify(s.run));
+  });
+
+  it('scales gate stage costs, system richness and hazard timers on NG+ cycles', () => {
+    const base0 = gateStageCost(0, 0);
+    expect(base0).toBe(GATE_STAGES[0]!.cost);
+    const ng1 = gateStageCost(0, 1);
+    const ng2 = gateStageCost(0, 2);
+    expect(ng1.data).toBe(Math.round(base0.data * (1 + NG_PLUS_COST_STEP)));
+    expect(ng1.ore).toBe(Math.round(base0.ore * (1 + NG_PLUS_COST_STEP)));
+    expect(ng2.data).toBe(Math.round(base0.data * (1 + 2 * NG_PLUS_COST_STEP)));
+
+    // Same seed on ngPlus 0 vs ngPlus 1: richness increases and hazard timers tighten.
+    const p0 = newProfile(42);
+    const p1 = { ...newProfile(42), ngPlus: 1 };
+    const r0 = newRun(p0, 0);
+    const r1 = newRun(p1, 0);
+    expect(r1.system.richness).toBeCloseTo(r0.system.richness * (1 + NG_PLUS_RICHNESS_STEP), 9);
+    expect(r1.hazards.cometTimer).toBeCloseTo(r0.hazards.cometTimer / (1 + NG_PLUS_HAZARD_STEP), 9);
+    expect(r1.hazards.flareTimer).toBeCloseTo(r0.hazards.flareTimer / (1 + NG_PLUS_HAZARD_STEP), 9);
+
+    // Paying the base cost on NG+1 only partially pays the scaled stage.
+    const s = newGame(7);
+    s.profile.ngPlus = 1;
+    s.profile.data = base0.data;
+    s.run.bank = { ore: base0.ore, ice: base0.ice, crystal: base0.crystal, alloy: base0.alloy, fuel: 1000 };
+    send(s, { t: 'fundGate' });
+    expect(s.profile.gate.stage).toBe(0);
+    expect(s.profile.gate.paid.data).toBe(base0.data);
+    // Round-tripping mid-stage on NG+1 passes validation even when paid exceeds base cost.
+    s.profile.data = ng1.data - base0.data;
+    s.run.bank.ore = ng1.ore - base0.ore;
+    // Leave ice short so the stage stays open while ore exceeds base0.ore.
+    send(s, { t: 'fundGate' });
+    expect(s.profile.gate.stage).toBe(0);
+    expect(s.profile.gate.paid.ore).toBe(ng1.ore);
+    expect(s.profile.gate.paid.ore).toBeGreaterThan(base0.ore);
+    const loaded = deserialize(serialize(s));
+    expect(loaded).not.toBeNull();
+    expect(loaded!.profile.ngPlus).toBe(1);
+    expect(loaded!.profile.gate.paid.ore).toBe(ng1.ore);
+
+    // Copy reflects the NG+ cycle and scaled cost.
+    expect(gateChip(s).text).toContain('NG+1');
+    expect(gatePanel(s).status).toContain('NG+1');
   });
 });
 
@@ -220,14 +278,15 @@ describe('gate copy', () => {
     expect(panel.next).toContain('ore');
     expect(panel.summary).toBeNull();
     expect(panel.rule).toBe(NG_PLUS_RULE);
-    // Starting wallet is 40 ore and 10 ice. Anchor wants 40 ore and 15 ice, so Deliver stays off.
+    // Starting wallet cannot cover Anchor, so Deliver stays off until the full stage fits.
     expect(s.run.bank.ore).toBe(40);
     expect(s.run.bank.ice).toBe(10);
     expect(panel.deliverBlocked).not.toBeNull();
-    s.profile.data = 1;
-    s.run.bank.ice = 15;
+    const anchor = GATE_STAGES[0]!.cost;
+    s.profile.data = anchor.data;
+    s.run.bank = { ore: anchor.ore, ice: anchor.ice, crystal: anchor.crystal, alloy: anchor.alloy, fuel: 0 };
     expect(gatePanel(s).deliverBlocked).toBeNull();
-    s.run.bank.ice = 10;
+    s.run.bank.ice = Math.max(0, anchor.ice - 1);
     expect(gatePanel(s).deliverBlocked).not.toBeNull();
   });
 

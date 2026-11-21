@@ -4,6 +4,7 @@
 import { removeItem } from '../core/array';
 import { makeRng, range } from '../core/rng';
 import { dist, fromAngle, len, type Vec2 } from '../core/vec';
+import { NG_PLUS_HAZARD_STEP } from '../data/gate';
 import { FLARES, HAZARD_LEVELS, type HazardLevel } from '../data/hazards';
 import { TUNING } from '../data/tuning';
 import { isDocked } from './economy';
@@ -105,6 +106,8 @@ export function updateHazards(state: GameState, dt: number, level: HazardLevel):
     return;
   }
   const lv = HAZARD_LEVELS[level];
+  const intervalScale =
+    state.profile.ngPlus > 0 ? lv.interval / (1 + NG_PLUS_HAZARD_STEP * state.profile.ngPlus) : lv.interval;
 
   if (hz.comet) {
     hz.comet.timeLeft -= dt;
@@ -116,7 +119,7 @@ export function updateHazards(state: GameState, dt: number, level: HazardLevel):
     hz.cometTimer -= dt;
     if (hz.cometTimer <= 0) {
       hz.comet = rollComet(state, TUNING.cometSpeed * lv.damage);
-      hz.cometTimer = range(hz.rng, TUNING.cometInterval[0], TUNING.cometInterval[1]) * lv.interval;
+      hz.cometTimer = range(hz.rng, TUNING.cometInterval[0], TUNING.cometInterval[1]) * intervalScale;
       out.log.push({
         level: 'warn',
         text: `☄ Comet inbound — crossing the ${BELT_NAMES[hz.comet.belt] ?? 'outer'} belt in ${TUNING.cometWarning}s.`,
@@ -132,7 +135,7 @@ export function updateHazards(state: GameState, dt: number, level: HazardLevel):
     hz.flareTimer -= dt;
     if (hz.flareTimer <= 0) {
       hz.flare = { phase: 'warning', timeLeft: TUNING.flareWarning };
-      hz.flareTimer = range(hz.rng, profile.interval[0], profile.interval[1]) * lv.interval;
+      hz.flareTimer = range(hz.rng, profile.interval[0], profile.interval[1]) * intervalScale;
       out.log.push({
         level: 'warn',
         text: `☀ Solar flare building — dock or get clear of the star within ${TUNING.flareWarning}s.`,

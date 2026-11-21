@@ -83,13 +83,17 @@ describe('doctrine effects', () => {
     expect(ratio(next.cargoCap, was.cargoCap)).toBeCloseTo(0.85);
   });
 
-  it('Survey Array adds 25% pickup radius and cuts laser damage by 10%', () => {
+  it('Survey Array adds 40% pickup radius and 15% laser range while cutting laser damage by 5%', () => {
     const got = fitted({ focus: 'survey' });
     const next = shipStats(got.fs, got.state.profile);
     const was = shipStats(base.fs, base.state.profile);
-    expect(ratio(next.magnet, was.magnet)).toBeCloseTo(1.25);
-    expect(ratio(next.dps, was.dps)).toBeCloseTo(0.9);
+    expect(ratio(next.magnet, was.magnet)).toBeCloseTo(1.4);
+    expect(ratio(next.range, was.range)).toBeCloseTo(1.15);
+    expect(ratio(next.dps, was.dps)).toBeCloseTo(0.95);
     expect(fleetCap(got.state.profile)).toBe(fleetCap(base.state.profile));
+    expect(sideBonus(DOCTRINE_SIDES.survey)).toContain('+40% pickup radius');
+    expect(sideBonus(DOCTRINE_SIDES.survey)).toContain('+15% laser range');
+    expect(sideCost(DOCTRINE_SIDES.survey)).toBe('−5% laser damage');
   });
 
   it('Brawler adds 15% laser damage and cuts pickup radius by 20%', () => {

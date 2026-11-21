@@ -22,6 +22,9 @@ const STAR_CLASSES: Record<StarClass, { radius: number; color: number; heat: num
   B: { radius: 100, color: 0x9cc8ff, heat: 2.4 },
 };
 
+const LOW_RICHNESS_ICE_FLOOR = 0.95;
+const MIN_INNER_MID_ICE_ROCKS = 20;
+
 /** Size class → [min, max] radius. */
 export const ROCK_RADII: Record<RockSize, readonly [number, number]> = {
   0: [30, 44],
@@ -87,7 +90,8 @@ export function generateSystem(seed: number, number: number, route = 0): StarSys
     belts.push({ inner: 1950, outer: 2150, mix: { ore: 0.35, ice: 0.35, crystal: 0.3 }, initialCount: 90 });
   }
 
-  const modifiers = rollModifiers(s, number);
+  const rawModifiers = rollModifiers(s, number);
+  const modifiers = richness < LOW_RICHNESS_ICE_FLOOR ? rawModifiers.filter((m) => m !== 'icePoor') : rawModifiers;
   applyBeltModifiers(belts, modifiers);
 
   const stationAngle = range(r, 0, Math.PI * 2);
@@ -163,4 +167,19 @@ export function populateBelts(run: Run, seed: number): void {
   run.system.belts.forEach((b, i) => {
     for (let n = 0; n < b.initialCount; n++) spawnBeltRock(run, seed, i);
   });
+  let iceCount = 0;
+  for (let i = 0; i < run.rocks.length; i++) {
+    const r = run.rocks[i]!;
+    if (r.belt <= 1 && r.kind === 'ice') iceCount++;
+  }
+  // Guarantee a small ice floor in the inner/mid belts without touching run.rng.
+  for (let belt = 1; belt >= 0 && iceCount < MIN_INNER_MID_ICE_ROCKS; belt--) {
+    for (let i = 0; i < run.rocks.length && iceCount < MIN_INNER_MID_ICE_ROCKS; i++) {
+      const r = run.rocks[i]!;
+      if (r.belt === belt && r.kind === 'ore') {
+        r.kind = 'ice';
+        iceCount++;
+      }
+    }
+  }
 }

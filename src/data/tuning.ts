@@ -30,8 +30,8 @@ export const TUNING = {
   starRoutePad: 120,
   flagshipRespawn: 4,
   repairOrePerHull: 0.3,
-  /** Cost of a ship's 3rd slot; each later slot costs slotCostGrowth× the one before (#141). */
-  slotBaseCost: { ore: 120, ice: 60 },
+  /** Cost of a ship's 3rd slot; each later slot costs slotCostGrowth× the one before (#141, #275). */
+  slotBaseCost: { ore: 90, ice: 12 },
   slotCostGrowth: 1.7,
   /** Sim seconds between one ship's autoupgrade steps while docked, so purchases read in the log (#140). */
   autoUpgradeInterval: 0.5,
@@ -47,9 +47,8 @@ export const TUNING = {
   // Prestige.
   /** Bank fuel the first warp costs: long enough in system 1 for a drone and a tier-2 laser (#197). */
   firstWarpFuel: 70,
-  /** Base of the later warps' fuel cost, which grows per warp; every warp is cut by the warp perk. */
-  warpBaseFuel: 50,
-  warpCostGrowth: 1.3,
+  /** Per-warp fuel growth multiplier; every warp is cut by the warp perk. */
+  warpCostGrowth: 1.26,
   /** Horizon Data = floor(sqrt(runValue / dataDivisor)). */
   dataDivisor: 60,
   /**

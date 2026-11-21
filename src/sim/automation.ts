@@ -2,7 +2,7 @@
 // ferries cargo from miners and outposts back to the station. Nothing here
 // draws from an RNG, so the run's rock and pickup sequence is untouched.
 
-import { dist, type Vec2 } from '../core/vec';
+import { damp, dist, type Vec2 } from '../core/vec';
 import { HULLS } from '../data/hulls';
 import { RESOURCES, canAfford, emptyWallet, pay, walletTotal, type Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
@@ -10,7 +10,7 @@ import { isDocked } from './economy';
 import { needsRepair } from './fleetAuto';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
-import { arrive, dodgeBlast, dodgeHazards, formationSlot, unsafe, type TickCtx } from './pilot';
+import { arrive, brakeForRocks, dodgeBlast, dodgeHazards, formationSlot, unsafe, type TickCtx } from './pilot';
 import { setStatus, type IdleReason } from './status';
 import {
   cargoFree,
@@ -239,12 +239,14 @@ export function haulStep(ctx: TickCtx, ship: Ship, st: ShipStats, why: IdleReaso
     setStatus(out, ship.id, ctx.index.outpostRocks.has(src.avoidId ?? -1) ? 'haulOutpost' : 'haulMiner', why);
     const reach = st.size + src.radius + TUNING.haulTransferGap;
     if (dist(ship.pos, src.pos) > reach) {
-      arrive(ctx, ship, st, src.pos, reach * 0.7, src.avoidId);
+      arrive(ctx, ship, st, src.pos, reach * 0.9, src.avoidId);
       return;
     }
-    // Hold station alongside and load.
-    ship.vel.x = src.vel.x;
-    ship.vel.z = src.vel.z;
+    // Hold station alongside and load, braking for nearby rocks so matching a moving miner never rams an asteroid.
+    const k = damp(3, ctx.dt);
+    ship.vel.x = src.vel.x + (ship.vel.x - src.vel.x) * k;
+    ship.vel.z = src.vel.z + (ship.vel.z - src.vel.z) * k;
+    if (ctx.assists.avoid) brakeForRocks(ctx, ship, st);
     transfer(src.hold, ship.cargo, Math.min(TUNING.haulTransferRate * ctx.dt, cargoFree(ship, st)));
     return;
   }

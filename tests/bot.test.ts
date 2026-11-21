@@ -556,6 +556,85 @@ describe('balance bot automation', () => {
   });
 });
 
+describe('balance bot defenses and coverage (#275)', () => {
+  it('enables autoRepair on live fleet ships once the run is underway', () => {
+    const s = docked(2);
+    const builder = makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', s.run.system.station.pos);
+    s.run.ships.push(builder);
+    // At time 0, no autoRepair toggles are emitted.
+    expect(botCommands(s, { warp: false }).some((c) => c.t === 'shipAuto')).toBe(false);
+    s.run.time = 1;
+    const cmds = botCommands(s, { warp: false }).filter((c) => c.t === 'shipAuto');
+    expect(cmds).toHaveLength(3);
+    expect(cmds.every((c) => c.t === 'shipAuto' && c.kind === 'repair' && c.on)).toBe(true);
+    expect(cmds.some((c) => c.t === 'shipAuto' && c.shipId === flagship(s.run).id)).toBe(false);
+    for (const c of cmds) send(s, c);
+    expect(botCommands(s, { warp: false }).some((c) => c.t === 'shipAuto')).toBe(false);
+  });
+
+  it('buys a defensive slot in systems with hazards and installs shields/armor', () => {
+    const s = docked(0);
+    s.profile.warps = 2;
+    const fs = flagship(s.run);
+    fs.slots = [
+      { type: 'laser', variant: 'focused', tier: 3 },
+      { type: 'engine', variant: 'ion', tier: 3 },
+      { type: 'cargo', variant: 'standard', tier: 3 },
+      { type: 'sensor', variant: 'standard', tier: 3 },
+    ];
+    fillFleet(s);
+    for (const ship of s.run.ships) {
+      if (ship === fs) continue;
+      ship.pos = { x: 1e5, z: 1e5 }; // undocked so flagship is the only docked ship
+    }
+    const buy = orders(botCommands(s, { warp: false }));
+    expect(buy).toEqual([{ t: 'buySlot', shipId: fs.id }]);
+    for (const c of buy) send(s, c);
+    // The new empty slot gets a shield on the flagship.
+    expect(orders(botCommands(s, { warp: false }))).toEqual([
+      { t: 'install', shipId: fs.id, slot: 4, comp: 'shield', variant: 'standard' },
+    ]);
+  });
+
+  it('fits armor on builders instead of sensors, and vector thrusters on support engines', () => {
+    const s = docked(0);
+    const fs = flagship(s.run);
+    fs.slots = [
+      { type: 'laser', variant: 'focused', tier: 3 },
+      { type: 'engine', variant: 'ion', tier: 3 },
+      { type: 'cargo', variant: 'standard', tier: 3 },
+      { type: 'sensor', variant: 'standard', tier: 3 },
+    ];
+    const b = makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', s.run.system.station.pos);
+    b.slots = [{ type: 'cargo', variant: 'standard', tier: 1 }, null];
+    s.run.ships.push(b);
+    fillFleet(s);
+    for (const ship of s.run.ships) if (ship !== fs && ship !== b) ship.pos = { x: 1e5, z: 1e5 };
+
+    expect(orders(botCommands(s, { warp: false }))).toEqual([
+      { t: 'install', shipId: b.id, slot: 1, comp: 'armor', variant: 'standard' },
+    ]);
+    b.slots = [
+      { type: 'cargo', variant: 'standard', tier: 1 },
+      { type: 'armor', variant: 'standard', tier: 1 },
+      { type: 'shield', variant: 'standard', tier: 1 },
+      null,
+    ];
+    expect(orders(botCommands(s, { warp: false }))).toEqual([
+      { t: 'install', shipId: b.id, slot: 3, comp: 'engine', variant: 'thruster' },
+    ]);
+  });
+
+  it('buys a harvester in late systems once the core fleet is fielded', () => {
+    const s = docked(2);
+    s.profile.warps = 6;
+    const st = s.run.system.station.pos;
+    s.run.ships.push(makeShip(s.run, s.profile, 'constructionDrone', 'Builder-1', st));
+    s.run.ships.push(makeShip(s.run, s.profile, 'hauler', 'Hauler-1', st));
+    expect(orders(botCommands(s, { warp: false }))).toEqual([{ t: 'buyHull', hullId: 'harvester' }]);
+  });
+});
+
 /** Maxes the perks that would otherwise undercut the furnace's price. */
 function maxCheapPerks(s: GameState): void {
   Object.assign(s.profile.perks, { yield: 10, optics: 10, thrust: 8, kit: 5 });
