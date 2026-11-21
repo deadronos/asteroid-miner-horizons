@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { COMPONENTS, COMPONENT_IDS, type Tier } from '../src/data/components';
+import { HULLS } from '../src/data/hulls';
 import { RESOURCES, walletTotal, walletValue } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import type { Command } from '../src/sim/commands';
@@ -150,11 +151,22 @@ describe('warp / prestige', () => {
     expect(s.run.runValue).toBe(0);
   });
 
-  it('prices the first warp on its own knob and later warps on the growth curve', () => {
+  it('prices the first warp at firstWarpFuel and rises monotonically with each warp', () => {
     const s = newGame(11);
     expect(warpCost(s)).toBe(TUNING.firstWarpFuel);
-    s.profile.warps = 1;
-    expect(warpCost(s)).toBe(Math.round(TUNING.warpBaseFuel * TUNING.warpCostGrowth));
+    let prev = warpCost(s);
+    for (let warps = 1; warps <= 9; warps++) {
+      s.profile.warps = warps;
+      const cost = warpCost(s);
+      expect(cost).toBeGreaterThan(prev);
+      prev = cost;
+    }
+  });
+
+  it('keeps constructionDrone distinct from hauler in cargo and alloy cost', () => {
+    expect(HULLS.constructionDrone.cargo).toBeLessThanOrEqual(HULLS.hauler.cargo / 4);
+    expect(HULLS.constructionDrone.cost.alloy).toBeGreaterThanOrEqual(15);
+    expect(HULLS.constructionDrone.cost.alloy).toBeLessThan(HULLS.hauler.cost.alloy!);
   });
 
   it('refuses to warp without fuel', () => {

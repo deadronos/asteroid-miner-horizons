@@ -75,6 +75,7 @@ export function writeShipStats(out: ShipStats, ship: Ship, profile: Profile): Sh
  */
 function applyDoctrines(out: ShipStats, who: 'flagship' | 'drone' | 'other', choice: DoctrineChoice): void {
   let dps = 1;
+  let range = 1;
   let speed = 1;
   let cargo = 1;
   let magnet = 1;
@@ -88,12 +89,14 @@ function applyDoctrines(out: ShipStats, who: 'flagship' | 'drone' | 'other', cho
       if (e.who === 'flagship' && who !== 'flagship') continue;
       if (e.who === 'drone' && who !== 'drone') continue;
       if (e.stat === 'dps') dps *= e.mul;
+      else if (e.stat === 'range') range *= e.mul;
       else if (e.stat === 'speed') speed *= e.mul;
       else if (e.stat === 'cargo') cargo *= e.mul;
       else magnet *= e.mul;
     }
   }
   out.dps *= dps;
+  out.range *= range;
   out.speed *= speed;
   out.accel *= speed;
   out.cargoCap *= cargo;

@@ -1,7 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import { dist } from '../src/core/vec';
-import { defaultVariant } from '../src/data/components';
-import { ANOMALY_INFO, ANOMALY_KINDS, DERELICT_SALVAGE } from '../src/data/exploration';
+import { defaultVariant, variantDef } from '../src/data/components';
+import {
+  ANOMALY_INFO,
+  ANOMALY_KINDS,
+  DERELICT_SALVAGE,
+  SALVAGE_SYSTEM_SCALE,
+  SALVAGE_TIER_SYSTEMS,
+} from '../src/data/exploration';
 import { emptyWallet, RESOURCES, walletValue } from '../src/data/resources';
 import { TUNING } from '../src/data/tuning';
 import { newGame, newProfile, newRun, SAVE_VERSION } from '../src/sim/create';
@@ -13,6 +19,8 @@ import {
   newExploration,
   pingReady,
   rollAnomalies,
+  salvageReward,
+  salvageTier,
 } from '../src/sim/exploration';
 import { generateSystem } from '../src/sim/generate';
 import { migrate, migrations, type SaveData } from '../src/sim/migrations';
@@ -218,6 +226,23 @@ describe('frozen v17 fixture', () => {
 
 const pingCommand = { t: 'ping' } as const;
 
+/** Scans seeds for a derelict component drop at `warps` and returns the claimed state, part and seed. */
+const claimDropAtSystem = (warps: number) => {
+  for (let seed = 1; seed < 80; seed++) {
+    const profile = { ...newProfile(seed), warps };
+    const s = { ...newGame(seed), profile, run: newRun(profile) };
+    const dl = systemAnomalies(s.run).find((a) => a.kind === 'derelict')!;
+    s.run.exploration.revealed = [dl.id];
+    flagship(s.run).pos = { ...dl.pos };
+    runTicks(s, 1);
+    const fitted = flagship(s.run)
+      .slots.slice(2)
+      .find((f) => f !== null);
+    if (fitted) return { s, fitted, seed };
+  }
+  throw new Error(`no component drop found for warps=${warps}`);
+};
+
 /** A fresh game whose flagship sits on its first derelict until the tick claims it. */
 const claimFirstDerelict = (seed: number) => {
   const s = newGame(seed);
@@ -396,5 +421,42 @@ describe('derelict salvage', () => {
     runFor(loaded, 3);
     expect(bankDelta(claimedBank, loaded.run.bank)).toEqual(emptyWallet());
     expect(loaded.run.exploration.claimed).toEqual(exploration.claimed);
+  });
+
+  it('scales salvage payouts with system number and richness', () => {
+    const base = DERELICT_SALVAGE[0]!.reward;
+    expect(salvageReward(base, { number: 1, richness: 1 })).toEqual(base);
+    const sys5 = salvageReward(base, { number: 5, richness: 1.2 });
+    const expectedScale = (1 + SALVAGE_SYSTEM_SCALE * 4) * 1.2;
+    expect(sys5.ore).toBe(Math.round(base.ore! * expectedScale));
+    expect(sys5.alloy).toBe(Math.round(base.alloy! * expectedScale));
+    expect(walletValue(sys5)).toBeGreaterThan(walletValue(base) * 2);
+  });
+
+  it('upgrades salvage component drop tier in mid and late systems', () => {
+    expect(salvageTier(1)).toBe(1);
+    expect(salvageTier(SALVAGE_TIER_SYSTEMS.tier2 - 1)).toBe(1);
+    expect(salvageTier(SALVAGE_TIER_SYSTEMS.tier2)).toBe(2);
+    expect(salvageTier(SALVAGE_TIER_SYSTEMS.tier3 - 1)).toBe(2);
+    expect(salvageTier(SALVAGE_TIER_SYSTEMS.tier3)).toBe(3);
+    expect(salvageTier(10)).toBe(3);
+
+    const mid = claimDropAtSystem(3); // system 4 -> T2
+    expect(mid.fitted.tier).toBe(2);
+    const late = claimDropAtSystem(6); // system 7 -> T3
+    expect(late.fitted.tier).toBe(3);
+
+    // When all slots are full, fallback credits the scaled tier's install cost and counts it in runValue.
+    const profile = { ...newProfile(mid.seed), warps: 3 };
+    const full = { ...newGame(mid.seed), profile, run: newRun(profile) };
+    const fs = flagship(full.run);
+    fs.slots = fs.slots.map((f) => f ?? { type: 'armor', variant: 'standard', tier: 1 });
+    const dl = systemAnomalies(full.run).find((a) => a.kind === 'derelict')!;
+    const expectedBase = salvageReward(DERELICT_SALVAGE[dl.salvage]!.reward, full.run.system);
+    const expectedComp = variantDef(mid.fitted.type, defaultVariant(mid.fitted.type)).cost(2);
+    full.run.exploration.revealed = [dl.id];
+    fs.pos = { ...dl.pos };
+    runTicks(full, 1);
+    expect(full.run.runValue).toBe(walletValue(expectedBase) + walletValue(expectedComp));
   });
 });

@@ -13,7 +13,7 @@ export type DoctrineSideId = (typeof DOCTRINE_SIDE_IDS)[number];
 export type DoctrineChoice = Record<DoctrinePairId, DoctrineSideId | null>;
 
 export type DoctrineWho = 'all' | 'flagship' | 'drone';
-export type DoctrineStat = 'dps' | 'speed' | 'cargo' | 'magnet' | 'fleet';
+export type DoctrineStat = 'dps' | 'range' | 'speed' | 'cargo' | 'magnet' | 'fleet';
 
 export interface DoctrineEffect {
   who: DoctrineWho;
@@ -82,7 +82,7 @@ const survey: DoctrineSide = {
   id: 'survey',
   pair: 'focus',
   name: 'Survey Array',
-  effects: [mul('all', 'magnet', 1.25, true), mul('all', 'dps', 0.9, false)],
+  effects: [mul('all', 'magnet', 1.4, true), mul('all', 'range', 1.15, true), mul('all', 'dps', 0.95, false)],
 };
 const brawler: DoctrineSide = {
   id: 'brawler',
@@ -118,6 +118,7 @@ export function isDoctrineSide(pair: DoctrinePairId, side: unknown): side is Doc
 
 const STAT_NAME: Record<DoctrineStat, string> = {
   dps: 'damage',
+  range: 'laser range',
   speed: 'speed',
   cargo: 'cargo',
   magnet: 'pickup radius',
