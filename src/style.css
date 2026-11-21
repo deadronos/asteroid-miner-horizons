@@ -402,6 +402,12 @@ button.collapse:hover {
 .shiprow:hover {
   background: rgba(80, 140, 200, 0.15);
 }
+.shiprow.outpost {
+  cursor: default;
+}
+.shiprow.outpost:hover {
+  background: transparent;
+}
 .shiprow.sel {
   border-color: var(--accent);
   background: rgba(89, 255, 160, 0.08);
@@ -1474,4 +1480,29 @@ button {
 body[data-pad] :focus {
   outline: 2px solid #6cf;
   outline-offset: 2px;
+}
+
+/* Keyboard focus ring and reduced-motion overrides (#272). */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+@media (prefers-reduced-motion: reduce) {
+  .map-labels.pulse .map-blip[data-kind='selected'],
+  .map-labels.pulse .map-blip[data-kind='comet'],
+  .map-labels.pulse .map-blip[data-kind='flare'],
+  button.bind.capturing,
+  .toast {
+    animation: none;
+  }
+  button.gear svg,
+  .bar .fill {
+    transition: none;
+  }
+  button.gear:hover svg {
+    transform: none;
+  }
+  .flash {
+    display: none;
+  }
 }

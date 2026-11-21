@@ -129,6 +129,12 @@ export class Hud {
     const topbar = mk('topbar');
     root.append(left, right, stack);
     const ctx: PanelCtx = { getState, send: actions.send, settings };
+    this.paused.setAttribute('role', 'status');
+    this.paused.setAttribute('aria-live', 'polite');
+    this.hazard.setAttribute('role', 'alert');
+    this.hazard.setAttribute('aria-live', 'assertive');
+    this.toasts.setAttribute('role', 'status');
+    this.toasts.setAttribute('aria-live', 'polite');
     stack.append(this.paused, this.hazard, this.toasts);
     this.panels = [
       createTopBar(topbar, ctx, {
@@ -145,6 +151,8 @@ export class Hud {
       createGoalsPanel(mk('goals', 'hud hidden', stack), ctx),
     ];
     this.log.id = 'log';
+    this.log.setAttribute('role', 'status');
+    this.log.setAttribute('aria-live', 'polite');
     left.append(this.log);
     this.research = new ResearchPanel(mk('research', 'modal hidden'), ctx);
     this.gate = new GateDialog(mk('gate', 'modal hidden'), ctx);
@@ -258,8 +266,7 @@ export class Hud {
     this.paused.classList.remove('hidden');
     this.paused.classList.add('gfx-reset');
     this.paused.classList.toggle('actionable', list.length > 0);
-    if (list.length > 0) this.paused.setAttribute('role', 'alert');
-    else this.paused.removeAttribute('role');
+    this.paused.setAttribute('role', list.length > 0 ? 'alert' : 'status');
     if (list.length > 0)
       this.paused.replaceChildren(text, ...list.map((a) => h('button', { text: a.label, onclick: a.onClick })));
     else setText(this.paused, text);
@@ -272,7 +279,7 @@ export class Hud {
     if (!this.noticeShown) return;
     this.noticeShown = false;
     this.paused.classList.remove('gfx-reset', 'actionable');
-    this.paused.removeAttribute('role');
+    this.paused.setAttribute('role', 'status');
     this.paused.replaceChildren();
     this.paused.classList.add('hidden');
   }

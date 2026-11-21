@@ -79,11 +79,25 @@ export class Menu {
     };
 
     const tabBar = h('div', { class: 'tabs' });
+    tabBar.setAttribute('role', 'tablist');
+    tabBar.setAttribute('aria-label', 'Menu sections');
     for (const [id, label] of TABS) {
       const b = h('button', { class: 'tab', text: label, onclick: () => this.show(id) });
+      b.setAttribute('role', 'tab');
+      b.setAttribute('aria-selected', String(id === this.tab));
       this.tabs.set(id, b);
       tabBar.append(b);
     }
+    tabBar.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+      const cur = TABS.findIndex(([id]) => id === this.tab);
+      const step = e.key === 'ArrowRight' ? 1 : -1;
+      const next = TABS[(cur + step + TABS.length) % TABS.length]![0];
+      e.preventDefault();
+      this.show(next);
+      this.tabs.get(next)?.focus();
+    });
+    this.body.setAttribute('role', 'tabpanel');
     const close = h('button', { class: 'icon', text: '✕', title: 'Close (Esc)', onclick: () => this.toggle(false) });
     close.setAttribute('aria-label', 'Close menu');
     const title = h('h2', { class: 'sr-only', text: 'Menu' });
@@ -171,7 +185,11 @@ export class Menu {
   private show(tab: Tab): void {
     this.tab = tab;
     this.controls.cancel();
-    for (const [id, b] of this.tabs) b.classList.toggle('active', id === tab);
+    for (const [id, b] of this.tabs) {
+      const active = id === tab;
+      b.classList.toggle('active', active);
+      b.setAttribute('aria-selected', String(active));
+    }
     this.closeOverlay();
     this.body.replaceChildren(...this.render[tab]());
   }
