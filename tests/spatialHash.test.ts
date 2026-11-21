@@ -53,4 +53,16 @@ describe('SpatialHash', () => {
     });
     expect(near).toBe(1);
   });
+
+  it('queryWith passes ctx to a static callback with the same items as query', () => {
+    const hash = new SpatialHash<Thing>(128);
+    const items = [at(10, 10), at(40, 20), at(5000, 5000)];
+    hash.rebuild(items);
+    const ctx = { hits: [] as Thing[] };
+    const visit = (item: Thing, c: typeof ctx): void => {
+      c.hits.push(item);
+    };
+    hash.queryWith({ x: 0, z: 0 }, 100, ctx, visit);
+    expect(ctx.hits).toEqual([items[0], items[1]]);
+  });
 });

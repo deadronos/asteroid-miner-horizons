@@ -37,4 +37,10 @@ describe('useComposer', () => {
       expect(useComposer(bloomOn, wantAA, contextAA)).toBe(expected);
     });
   }
+
+  it('bypasses the composer on low quality regardless of bloom or AA state', () => {
+    for (const [bloomOn, wantAA, contextAA] of cases) {
+      expect(useComposer(bloomOn, wantAA, contextAA, true)).toBe(false);
+    }
+  });
 });

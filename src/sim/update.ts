@@ -18,7 +18,7 @@ import { updateExploration } from './exploration';
 import { serviceDocked } from './fleetAuto';
 import { spawnBeltRock } from './generate';
 import { flareExposure, updateHazards } from './hazards';
-import type { SimIndex } from './index';
+import type { CollideQuery, PickupShipQuery, SimIndex } from './index';
 import { systemEffects } from './modifiers';
 import { droneThink, runOrder, steer, type TickCtx } from './pilot';
 import { updateRefinery } from './refining';
@@ -37,16 +37,6 @@ export interface TickInput {
   /** Hazard difficulty; absent means 'off'. */
   hazards?: HazardLevel;
 }
-
-/** Reused across ticks: the tick is not reentrant, so one context object avoids a per-tick allocation. */
-const TICK_CTX = {
-  state: null as unknown as GameState,
-  index: null as unknown as SimIndex,
-  dt: 0,
-  assists: DEFAULT_ASSISTS,
-  auto: DEFAULT_FLEET_AUTO,
-  hazards: 'off' as HazardLevel,
-};
 
 /** Applies and clears queued commands. Also used while paused so menus still work. */
 export function applyCommands(state: GameState, commands: Command[]): void {
@@ -73,6 +63,7 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   // Rocks drift on slow circular orbits; fragments settle back into them.
   const settle = 1 - damp(0.25, dt);
   const rocks = run.rocks;
+  let shipHashReady = false;
   for (let i = 0; i < rocks.length; i++) {
     const r = rocks[i]!;
     if (r.comet) {
@@ -85,7 +76,13 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
     r.vel.x += (tx - r.vel.x) * settle;
     r.vel.z += (tz - r.vel.z) * settle;
 
-    if (r.trait === 'magnetic') magnetPull(run, r, dt);
+    if (r.trait === 'magnetic') {
+      if (!shipHashReady) {
+        index.shipHash.rebuild(run.ships);
+        shipHashReady = true;
+      }
+      magnetPull(run, r, dt, index);
+    }
     integrate(r, dt);
   }
   const level = input.hazards ?? 'off';
@@ -93,32 +90,36 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   index.rebuild(state);
   updateOutposts(state, index, dt);
 
-  TICK_CTX.state = state;
-  TICK_CTX.index = index;
-  TICK_CTX.dt = dt;
-  TICK_CTX.assists = input.assists ?? DEFAULT_ASSISTS;
-  TICK_CTX.auto = input.automation ?? DEFAULT_FLEET_AUTO;
-  TICK_CTX.hazards = level;
-  const ctx = TICK_CTX;
+  const ctx = index.beginTick(
+    state,
+    dt,
+    input.assists ?? DEFAULT_ASSISTS,
+    input.automation ?? DEFAULT_FLEET_AUTO,
+    level,
+  );
 
   // Index-based so a ship removed in `updateShip` (an in-place `removeItem`)
   // does not shift the next ship into an already-visited slot. A volatile blast
   // can remove several ships in one call, so a removal rewinds the scan and
   // `updatedShipIds` keeps an already-ticked ship from running twice.
-  const updated = index.updatedShipIds;
-  updated.clear();
-  for (let i = 0; i < run.ships.length; i++) {
-    const ship = run.ships[i]!;
-    if (updated.has(ship.id)) continue;
-    updated.add(ship.id);
-    const before = run.ships.length;
-    updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
-    if (run.ships.length !== before) i = -1;
+  try {
+    const updated = index.updatedShipIds;
+    updated.clear();
+    for (let i = 0; i < run.ships.length; i++) {
+      const ship = run.ships[i]!;
+      if (updated.has(ship.id)) continue;
+      updated.add(ship.id);
+      const before = run.ships.length;
+      updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
+      if (run.ships.length !== before) i = -1;
+    }
+  } finally {
+    index.endTick();
   }
 
   updateExploration(state);
   updatePickups(state, index, dt);
-  regrowBelts(state, dt);
+  regrowBelts(state, index, dt);
   updateContracts(state, dt);
   updateRefinery(state, dt);
   updateAchievements(state);
@@ -209,36 +210,47 @@ function updateShip(ctx: TickCtx, ship: Ship, st: ShipStats, thrust: Vec2): void
   }
 }
 
-function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
-  const { state } = ctx;
-  ctx.index.rockHash.query(ship.pos, st.size + 50, (r) => {
-    if (!ctx.index.rockById.has(r.id) || shipGone(ship)) return;
-    const dx = ship.pos.x - r.pos.x;
-    const dz = ship.pos.z - r.pos.z;
-    const d = hypot2(dx, dz) || 0.01;
-    const overlap = r.radius + st.size - d;
-    if (overlap <= 0) return;
-    const nx = dx / d;
-    const nz = dz / d;
-    ship.pos.x += nx * overlap;
-    ship.pos.z += nz * overlap;
-    const rel = (ship.vel.x - r.vel.x) * nx + (ship.vel.z - r.vel.z) * nz;
-    if (rel < 0) {
-      ship.vel.x -= rel * nx * 1.5;
-      ship.vel.z -= rel * nz * 1.5;
-      // Small rocks get shoved around by the hit.
-      if (!r.comet) {
-        const push = (-rel * 8) / (r.radius * r.radius);
-        r.vel.x -= nx * push * 10;
-        r.vel.z -= nz * push * 10;
-      }
-      if (-rel > TUNING.collisionMinSpeed && ship.collisionCd <= 0) {
-        ship.collisionCd = TUNING.collisionCooldown;
-        state.out.fx.push({ t: 'impact', pos: { x: ship.pos.x - nx * st.size, z: ship.pos.z - nz * st.size } });
-        damageShip(state, ship, (-rel - TUNING.collisionMinSpeed) * 0.35 + 3);
-      }
+function visitCollideRock(r: Rock, q: CollideQuery): void {
+  const ctx = q.ctx!;
+  const ship = q.ship!;
+  const st = q.st!;
+  if (!ctx.index.rockById.has(r.id) || shipGone(ship)) return;
+  const dx = ship.pos.x - r.pos.x;
+  const dz = ship.pos.z - r.pos.z;
+  const d = hypot2(dx, dz) || 0.01;
+  const overlap = r.radius + st.size - d;
+  if (overlap <= 0) return;
+  const nx = dx / d;
+  const nz = dz / d;
+  ship.pos.x += nx * overlap;
+  ship.pos.z += nz * overlap;
+  const rel = (ship.vel.x - r.vel.x) * nx + (ship.vel.z - r.vel.z) * nz;
+  if (rel < 0) {
+    ship.vel.x -= rel * nx * 1.5;
+    ship.vel.z -= rel * nz * 1.5;
+    // Small rocks get shoved around by the hit.
+    if (!r.comet) {
+      const push = (-rel * 8) / (r.radius * r.radius);
+      r.vel.x -= nx * push * 10;
+      r.vel.z -= nz * push * 10;
     }
-  });
+    if (-rel > TUNING.collisionMinSpeed && ship.collisionCd <= 0) {
+      ship.collisionCd = TUNING.collisionCooldown;
+      ctx.state.out.fx.push({ t: 'impact', pos: { x: ship.pos.x - nx * st.size, z: ship.pos.z - nz * st.size } });
+      damageShip(ctx.state, ship, (-rel - TUNING.collisionMinSpeed) * 0.35 + 3);
+    }
+  }
+}
+
+function collideRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
+  const q = ctx.index.qCollide;
+  q.ctx = ctx;
+  q.ship = ship;
+  q.st = st;
+  ctx.index.rockHash.queryWith(ship.pos, st.size + 50, q, visitCollideRock);
+  q.ctx = null;
+  q.ship = null;
+  q.st = null;
 }
 
 function unload(state: GameState, ship: Ship): void {
@@ -257,11 +269,36 @@ function unload(state: GameState, ship: Ship): void {
   if (isFlagship(ship) && parts) state.out.log.push({ level: 'info', text: `${ship.name} unloaded ${parts}.` });
 }
 
+function visitPickupShip(s: Ship, q: PickupShipQuery): void {
+  if (!isAlive(s)) return;
+  const st = q.stats!.get(s.id)!;
+  const dx = s.pos.x - q.px;
+  const dz = s.pos.z - q.pz;
+  if (dx * dx + dz * dz > st.magnet * st.magnet) return;
+  const d = hypot2(dx, dz);
+  if (
+    d < st.magnet &&
+    (d < q.bestD || (d === q.bestD && q.best !== null && s.id < q.best.id)) &&
+    cargoFree(s, st) > 0.01
+  ) {
+    q.best = s;
+    q.bestD = d;
+  }
+}
+
 function updatePickups(state: GameState, index: SimIndex, dt: number): void {
   const { run } = state;
+  const pickups = run.pickups;
+  if (pickups.length === 0) return;
   const stats = index.stats;
   const drag = damp(0.8, dt);
-  const pickups = run.pickups;
+  const maxMagnet = index.maxMagnet;
+  const q = index.qPickupShip;
+  if (maxMagnet > 0) {
+    // Ships moved during the ship loop; refresh shipHash before querying magnet pull.
+    index.shipHash.rebuild(run.ships);
+    q.stats = stats;
+  }
   let kept = 0;
   for (let i = 0; i < pickups.length; i++) {
     const p = pickups[i]!;
@@ -272,16 +309,14 @@ function updatePickups(state: GameState, index: SimIndex, dt: number): void {
 
     let best: Ship | null = null;
     let bestD = Infinity;
-    const ships = run.ships;
-    for (let j = 0; j < ships.length; j++) {
-      const s = ships[j]!;
-      if (!isAlive(s)) continue; // was `const live = run.ships.filter(isAlive)`
-      const st = stats.get(s.id)!;
-      const d = dist(s.pos, p.pos);
-      if (d < st.magnet && d < bestD && cargoFree(s, st) > 0.01) {
-        best = s;
-        bestD = d;
-      }
+    if (maxMagnet > 0) {
+      q.px = p.pos.x;
+      q.pz = p.pos.z;
+      q.best = null;
+      q.bestD = Infinity;
+      index.shipHash.queryWith(p.pos, maxMagnet, q, visitPickupShip);
+      best = (q as PickupShipQuery).best;
+      bestD = q.bestD;
     }
     if (best) {
       const st = stats.get(best.id)!;
@@ -307,16 +342,18 @@ function updatePickups(state: GameState, index: SimIndex, dt: number): void {
     pickups[kept++] = p;
   }
   pickups.length = kept;
+  q.best = null;
+  q.stats = null;
 }
 
 /** Belts slowly regrow so long sessions (and idle drones) never run dry. */
-function regrowBelts(state: GameState, dt: number): void {
+function regrowBelts(state: GameState, index: SimIndex, dt: number): void {
   const { run } = state;
   run.regrowTimer += dt;
   if (run.regrowTimer < TUNING.beltRegrowInterval * systemEffects(run.system.modifiers).regrowInterval) return;
   run.regrowTimer = 0;
   const belts = run.system.belts;
-  const counts = beltCounts;
+  const counts = index.beltCounts;
   counts.length = belts.length;
   counts.fill(0);
   for (const r of run.rocks) counts[r.belt] = (counts[r.belt] ?? 0) + 1;
@@ -330,9 +367,6 @@ function regrowBelts(state: GameState, dt: number): void {
     }
   }
 }
-
-/** Scratch for `regrowBelts`: live rocks per belt. */
-const beltCounts: number[] = [];
 
 const clearOfShips = (run: Run, rock: Rock): boolean => {
   for (const s of run.ships) if (dist(s.pos, rock.pos) <= 900) return false;

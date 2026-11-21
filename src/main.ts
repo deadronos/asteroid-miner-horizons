@@ -177,8 +177,13 @@ function step(now: number): void {
   } else if (paused) {
     // Menus still work while paused: purchases and refits apply immediately.
     stepper.acc = 0;
-    if (commands.length) renderNow = true;
-    applyCommands(state, commands);
+    if (commands.length) {
+      renderNow = true;
+      const runBefore = state.run;
+      applyCommands(state, commands);
+      if (state.run !== runBefore) session.sim.clear();
+      session.sim.rebuild(state);
+    }
   } else {
     const thrust = input.thrust();
     // Backlog carries across slow frames; only a stall past MAX_BACKLOG is dropped (and counted in stepper.dropped).
@@ -195,7 +200,7 @@ function step(now: number): void {
   renderAcc += dt;
   const busy = renderNow || renderer.busy || state.out.fx.length > 0 || (now - lastInput) / 1000 < INPUT_GRACE;
   if (renderDue(paused, renderAcc, busy)) {
-    renderer.render(state, Math.min(0.25, renderAcc), input.moveMark);
+    renderer.render(state, Math.min(0.25, renderAcc), input.moveMark, session.sim);
     if (s.quality === 'auto' && !paused) {
       const level = autoQuality.update(dt * 1000);
       if (level !== null) renderer.applySettings(s, level);

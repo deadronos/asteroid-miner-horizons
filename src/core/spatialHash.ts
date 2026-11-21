@@ -111,4 +111,24 @@ export class SpatialHash<T extends { pos: Vec2 }> {
       }
     }
   }
+
+  /** Like `query`, passing `ctx` to a static callback so hot loops allocate no closure. */
+  queryWith<C>(center: Vec2, radius: number, ctx: C, fn: (item: T, ctx: C) => void): void {
+    const c = this.cell;
+    const x0 = Math.floor((center.x - radius) / c);
+    const x1 = Math.floor((center.x + radius) / c);
+    const z0 = Math.floor((center.z - radius) / c);
+    const z1 = Math.floor((center.z + radius) / c);
+    for (let cx = x0; cx <= x1; cx++) {
+      for (let cz = z0; cz <= z1; cz++) {
+        const k = this.key(cx, cz);
+        const slot = this.find(k, cx, cz);
+        const bucket = this.keys[slot] === k ? this.slots[slot] : undefined;
+        if (bucket) {
+          const n = bucket[0] as number;
+          for (let i = 1; i <= n; i++) fn(bucket[i] as T, ctx);
+        }
+      }
+    }
+  }
 }

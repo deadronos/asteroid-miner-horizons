@@ -10,9 +10,10 @@ export function contextAntialias(antialias: boolean, startupBloom: number): bool
 }
 
 /**
- * Whether a frame renders through the composer. Bloom on always does. Bloom off still needs the composer
- * when AA is wanted but the context has none, which happens after a runtime switch to a no-bloom preset.
+ * Whether a frame renders through the composer. Low quality bypasses the composer entirely so struggling GPUs
+ * avoid the half-float MSAA target. Otherwise bloom on always uses it, and bloom off still needs it when AA is
+ * wanted but the context has none (a runtime switch to a no-bloom preset).
  */
-export function useComposer(bloomOn: boolean, wantAA: boolean, contextAA: boolean): boolean {
-  return bloomOn || (wantAA && !contextAA);
+export function useComposer(bloomOn: boolean, wantAA: boolean, contextAA: boolean, lowQuality = false): boolean {
+  return !lowQuality && (bloomOn || (wantAA && !contextAA));
 }
