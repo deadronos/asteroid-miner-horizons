@@ -265,9 +265,11 @@ export class Hud {
     this.noticeShown = true;
     this.paused.classList.remove('hidden');
     this.paused.classList.add('gfx-reset');
-    this.paused.classList.toggle('actionable', list.length > 0);
-    this.paused.setAttribute('role', list.length > 0 ? 'alert' : 'status');
-    if (list.length > 0)
+    const urgent = list.length > 0;
+    this.paused.classList.toggle('actionable', urgent);
+    this.paused.setAttribute('role', urgent ? 'alert' : 'status');
+    this.paused.setAttribute('aria-live', urgent ? 'assertive' : 'polite');
+    if (urgent)
       this.paused.replaceChildren(text, ...list.map((a) => h('button', { text: a.label, onclick: a.onClick })));
     else setText(this.paused, text);
     // The frame loop may have stopped, so a warp flash would otherwise stay frozen over the notice.
@@ -280,6 +282,7 @@ export class Hud {
     this.noticeShown = false;
     this.paused.classList.remove('gfx-reset', 'actionable');
     this.paused.setAttribute('role', 'status');
+    this.paused.setAttribute('aria-live', 'polite');
     this.paused.replaceChildren();
     this.paused.classList.add('hidden');
   }

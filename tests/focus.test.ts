@@ -46,8 +46,19 @@ describe('nextFocusIndex', () => {
   });
 });
 
-const fireKey = (el: FakeEl, key: string): void => {
-  el.dispatch('keydown', { key, target: el, preventDefault: () => {} } as unknown as Event);
+const fireKey = (el: FakeEl, key: string): { prevented: boolean; stopped: boolean } => {
+  const res = { prevented: false, stopped: false };
+  el.dispatch('keydown', {
+    key,
+    target: el,
+    preventDefault: () => {
+      res.prevented = true;
+    },
+    stopPropagation: () => {
+      res.stopped = true;
+    },
+  } as unknown as Event);
+  return res;
 };
 
 describe('UI accessibility (#272)', () => {
@@ -88,8 +99,8 @@ describe('UI accessibility (#272)', () => {
     expect(droneRow.getAttribute('role')).toBe('button');
     expect(droneRow.getAttribute('aria-current')).toBeNull();
 
-    fireKey(droneRow, 'Enter');
-    fireKey(droneRow, ' ');
+    expect(fireKey(droneRow, 'Enter')).toEqual({ prevented: true, stopped: true });
+    expect(fireKey(droneRow, ' ')).toEqual({ prevented: true, stopped: true });
     expect(sent).toEqual([
       { t: 'select', shipId: drone.id },
       { t: 'select', shipId: drone.id },
@@ -166,8 +177,10 @@ describe('UI accessibility (#272)', () => {
 
     hud.showNotice('Graphics lost', { label: 'Reload', onClick: () => {} });
     expect(paused.getAttribute('role')).toBe('alert');
+    expect(paused.getAttribute('aria-live')).toBe('assertive');
     hud.clearNotice();
     expect(paused.getAttribute('role')).toBe('status');
+    expect(paused.getAttribute('aria-live')).toBe('polite');
   });
 
   it('labels icon-only remove/cancel buttons and empty-slot selects in ShipPanel and RefineryPanel', () => {
