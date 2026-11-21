@@ -56,12 +56,11 @@ export function labelOpacity(halfH: number): number {
   return t * t * (3 - 2 * t);
 }
 
-const overlaps = (a: Box, b: Box): boolean => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
-
 /**
  * Places each label centred above its body, or below if above is taken. A
  * spot must lie inside the `view` and clear every blocker and every label
  * placed before it, so earlier items win. Returns null where neither fits.
+ * When `pool` is supplied, placed `Box` records are reused from it instead of allocating.
  */
 export function placeLabels(
   items: LabelItem[],
@@ -69,6 +68,7 @@ export function placeLabels(
   view: { w: number; h: number },
   out: (Box | null)[] = [],
   placed: Box[] = [],
+  pool?: Box[],
 ): (Box | null)[] {
   placed.length = 0;
   out.length = items.length;
@@ -81,10 +81,26 @@ export function placeLabels(
       const ax = a < 0 ? it.x : alts![a * 2]!;
       const ay = a < 0 ? it.y : alts![a * 2 + 1]!;
       for (let side = 0; side < 2; side++) {
-        const y = side === 0 ? ay - it.r - GAP - it.h : ay + it.r + GAP;
-        const b = { x: ax - it.w / 2, y, w: it.w, h: it.h };
-        if (b.x < EDGE || b.y < EDGE || b.x + b.w > view.w - EDGE || b.y + b.h > view.h - EDGE) continue;
-        if (hitsAny(b, blockers) || hitsAny(b, placed)) continue;
+        const bx = ax - it.w / 2;
+        const by = side === 0 ? ay - it.r - GAP - it.h : ay + it.r + GAP;
+        if (bx < EDGE || by < EDGE || bx + it.w > view.w - EDGE || by + it.h > view.h - EDGE) continue;
+        if (hitsAny(bx, by, it.w, it.h, blockers) || hitsAny(bx, by, it.w, it.h, placed)) continue;
+        let b: Box;
+        if (pool) {
+          const idx = placed.length;
+          if (idx < pool.length) {
+            b = pool[idx]!;
+            b.x = bx;
+            b.y = by;
+            b.w = it.w;
+            b.h = it.h;
+          } else {
+            b = { x: bx, y: by, w: it.w, h: it.h };
+            pool.push(b);
+          }
+        } else {
+          b = { x: bx, y: by, w: it.w, h: it.h };
+        }
         placed.push(b);
         out[i] = b;
         break;
@@ -94,8 +110,13 @@ export function placeLabels(
   return out;
 }
 
-const hitsAny = (b: Box, boxes: Box[]): boolean => {
-  for (let i = 0; i < boxes.length; i++) if (overlaps(b, boxes[i]!)) return true;
+const hitsAny = (x: number, y: number, w: number, h: number, boxes: Box[]): boolean => {
+  const r = x + w;
+  const b = y + h;
+  for (let i = 0; i < boxes.length; i++) {
+    const o = boxes[i]!;
+    if (x < o.x + o.w && o.x < r && y < o.y + o.h && o.y < b) return true;
+  }
   return false;
 };
 
@@ -110,6 +131,9 @@ const pointHitsAny = (x: number, y: number, boxes: Box[]): boolean => {
 /** A planet's current world position. */
 export const planetPos = (p: Planet): Vec2 => ({ x: Math.cos(p.angle) * p.orbitR, z: Math.sin(p.angle) * p.orbitR });
 
+/** World-to-screen projection callback; writes into `out` when provided to avoid allocations. */
+export type ToScreen = (p: Vec2, out?: { x: number; y: number }) => { x: number; y: number };
+
 export class MapLabels {
   readonly el: HTMLElement;
   /** Play-zoom anomaly labels: a layer of their own because the map layer fades out at play zoom. */
@@ -119,8 +143,10 @@ export class MapLabels {
   private readonly worldItems: LabelItem[] = [];
   private readonly worldPlacedOut: (Box | null)[] = [];
   private readonly worldPlacedScratch: Box[] = [];
+  private readonly worldPlacedPool: Box[] = [];
   private readonly worldLabels: WorldLabel[] = [];
   private readonly worldPos: Vec2 = { x: 0, z: 0 };
+  private readonly screenPt = { x: 0, y: 0 };
   private worldBlockerAge = BLOCKER_REFRESH;
   private spans: HTMLSpanElement[] = [];
   /** Label sizes, re-measured with the blockers so a HUD-scale change is picked up. */
@@ -128,9 +154,10 @@ export class MapLabels {
   private blockers: Box[] = [];
   /** Scratch reused by every `update` so label placement allocates no arrays. */
   private readonly items: LabelItem[] = [];
-  private readonly view = { w: 0, h: 0 };
+  private readonly view = { w: 1, h: 1 };
   private readonly placedOut: (Box | null)[] = [];
   private readonly placedScratch: Box[] = [];
+  private readonly placedPool: Box[] = [];
   private readonly blips: Blip[] = [];
   private blipSpans: HTMLSpanElement[] = [];
   /** How many leading `spans` are named bodies (station + planets); the rest are belts. */
@@ -150,6 +177,13 @@ export class MapLabels {
     this.worldEl = document.createElement('div');
     this.worldEl.className = 'world-labels';
     container.append(this.el, this.worldEl);
+    this.setViewport(container.clientWidth, container.clientHeight);
+  }
+
+  /** Updates the cached viewport size in CSS pixels (called by the renderer on resize). */
+  setViewport(w: number, h: number): void {
+    this.view.w = Math.max(1, w);
+    this.view.h = Math.max(1, h);
   }
 
   private build(sys: StarSystem): void {
@@ -170,7 +204,7 @@ export class MapLabels {
   }
 
   /** `halfH` is the view half-height; `wpp` world units per CSS pixel. */
-  update(run: Run, halfH: number, wpp: number, dt: number, toScreen: (p: Vec2) => { x: number; y: number }): void {
+  update(run: Run, halfH: number, wpp: number, dt: number, toScreen: ToScreen): void {
     const sys = run.system;
     if (this.built !== sys) {
       this.build(sys);
@@ -212,7 +246,15 @@ export class MapLabels {
     for (let i = 0; i < n; i++) {
       const planet = i > 0 && i < this.bodies ? sys.planets[i - 1]! : null;
       const belt = i >= this.bodies ? sys.belts[i - this.bodies]! : null;
-      const s = toScreen(planet ? planetPos(planet) : belt ? this.star : sys.station.pos);
+      let target: Vec2;
+      if (planet) {
+        this.worldPos.x = Math.cos(planet.angle) * planet.orbitR;
+        this.worldPos.z = Math.sin(planet.angle) * planet.orbitR;
+        target = this.worldPos;
+      } else {
+        target = belt ? this.star : sys.station.pos;
+      }
+      const s = toScreen(target, this.screenPt);
       const r = planet ? planet.radius * (planet.ringed ? 2 : 1.2) : TUNING.dockRadius;
       const sz = this.sizes[i]!;
       const it = items[i]!;
@@ -234,9 +276,7 @@ export class MapLabels {
       it.w = sz.w;
       it.h = sz.h;
     }
-    this.view.w = this.container.clientWidth;
-    this.view.h = this.container.clientHeight;
-    const placed = placeLabels(items, this.blockers, this.view, this.placedOut, this.placedScratch);
+    const placed = placeLabels(items, this.blockers, this.view, this.placedOut, this.placedScratch, this.placedPool);
     for (let i = 0; i < placed.length; i++) {
       const b = placed[i]!;
       const span = this.spans[i]!;
@@ -250,7 +290,7 @@ export class MapLabels {
    * Play-zoom labels for revealed derelicts and rich rocks. The map layer is faded out here, so this layer places
    * its own labels against the same HUD blockers and pools its spans and scratch arrays.
    */
-  private updateWorld(run: Run, wpp: number, dt: number, toScreen: (p: Vec2) => { x: number; y: number }): void {
+  private updateWorld(run: Run, wpp: number, dt: number, toScreen: ToScreen): void {
     const n = collectWorldLabels(run, this.worldLabels);
     for (let i = this.worldSpans.length; i < n; i++) {
       const s = document.createElement('span');
@@ -286,7 +326,7 @@ export class MapLabels {
       }
       this.worldPos.x = lbl.x;
       this.worldPos.z = lbl.z;
-      const at = toScreen(this.worldPos);
+      const at = toScreen(this.worldPos, this.screenPt);
       const sz = this.worldSizes[i]!;
       const it = this.worldItems[i]!;
       it.x = at.x;
@@ -296,9 +336,14 @@ export class MapLabels {
       it.h = sz.h;
       if (it.alts) it.alts.length = 0;
     }
-    this.view.w = this.container.clientWidth;
-    this.view.h = this.container.clientHeight;
-    const placed = placeLabels(this.worldItems, this.blockers, this.view, this.worldPlacedOut, this.worldPlacedScratch);
+    const placed = placeLabels(
+      this.worldItems,
+      this.blockers,
+      this.view,
+      this.worldPlacedOut,
+      this.worldPlacedScratch,
+      this.worldPlacedPool,
+    );
     for (let i = 0; i < placed.length; i++) {
       const b = placed[i]!;
       const span = this.worldSpans[i]!;
@@ -314,7 +359,7 @@ export class MapLabels {
 
   private readonly star: Vec2 = { x: 0, z: 0 };
 
-  private updateBlips(run: Run, toScreen: (p: Vec2) => { x: number; y: number }): void {
+  private updateBlips(run: Run, toScreen: ToScreen): void {
     const n = collectBlips(run, this.blips);
     while (this.blipSpans.length < n) {
       const s = document.createElement('span');
@@ -333,7 +378,7 @@ export class MapLabels {
       const b = this.blips[i]!;
       tmp.x = b.x;
       tmp.z = b.z;
-      const s = toScreen(tmp);
+      const s = toScreen(tmp, this.screenPt);
       // The HUD covers a blip the same way it covers a label: hide, never draw over it.
       const hidden = pointHitsAny(s.x, s.y, this.blockers);
       span.style.visibility = hidden ? 'hidden' : 'visible';

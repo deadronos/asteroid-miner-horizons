@@ -77,7 +77,8 @@ export class Renderer {
     const s = this.curRun ? findShip(this.curRun, id) : undefined;
     return s && isAlive(s) ? s.pos : null;
   };
-  private readonly toScreen = (p: Vec2): { x: number; y: number } => this.cam.worldToScreen(p);
+  private readonly toScreen = (p: Vec2, out?: { x: number; y: number }): { x: number; y: number } =>
+    this.cam.worldToScreen(p, out);
   private readonly onScreen = (p: Vec2): boolean => this.cam.onScreen(p);
   private fx: FxView;
   /** 0..1 star-glow boost, eased toward 1 while a solar flare is active. */
@@ -248,6 +249,8 @@ export class Renderer {
   private resize(): void {
     const w = Math.max(1, this.container.clientWidth);
     const h = Math.max(1, this.container.clientHeight);
+    this.cam.setViewport(w, h);
+    this.labels.setViewport(w, h);
     this.gl.setSize(w, h, false);
     this.dirty = true;
     if (this.composer) {
@@ -282,8 +285,8 @@ export class Renderer {
   }
 
   /** World point → CSS pixels relative to the scene container. */
-  worldToScreen(p: Vec2): { x: number; y: number } {
-    return this.cam.worldToScreen(p);
+  worldToScreen(p: Vec2, out?: { x: number; y: number }): { x: number; y: number } {
+    return this.cam.worldToScreen(p, out);
   }
 
   /** Zooms by `factor`, keeping the world point under the cursor fixed (unless following). */

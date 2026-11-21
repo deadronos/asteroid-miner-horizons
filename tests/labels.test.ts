@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { LABEL_FADE, MapLabels, labelOpacity, placeLabels, planetPos } from '../src/render/labels';
+import { CameraRig } from '../src/render/camera';
+import { type Box, LABEL_FADE, MapLabels, labelOpacity, placeLabels, planetPos } from '../src/render/labels';
 import { generateSystem } from '../src/sim/generate';
 import { newProfile, newRun } from '../src/sim/create';
 import type { Run } from '../src/sim/types';
@@ -125,6 +126,91 @@ describe('MapLabels', () => {
     ]);
     expect(texts().slice(1 + b.system.planets.length, -1)).toEqual(b.system.belts.map(beltLabel));
   });
+
+  it('never reads container clientWidth/clientHeight during update or updateBlips', () => {
+    vi.stubGlobal('document', { createElement: fakeEl });
+    let layoutReads = 0;
+    let cw = view.w;
+    let ch = view.h;
+    const base = fakeEl();
+    const container = {
+      ...base,
+      get clientWidth() {
+        layoutReads++;
+        return cw;
+      },
+      get clientHeight() {
+        layoutReads++;
+        return ch;
+      },
+    } as unknown as HTMLElement;
+    const canvas = {} as unknown as HTMLCanvasElement;
+    const cam = new CameraRig(container, canvas);
+    const labels = new MapLabels(container, () => []);
+    const run = runIn(7, 2);
+    const project = (p: { x: number; z: number }, out?: { x: number; y: number }) => cam.worldToScreen(p, out);
+
+    // Construction initializes cached dimensions; per-frame updates must not read them again.
+    layoutReads = 0;
+    labels.update(run, LABEL_FADE[1], cam.wpp, 0.016, project);
+    labels.update(run, LABEL_FADE[1], cam.wpp, 0.016, project);
+    labels.update(run, 420, cam.wpp, 0.016, project);
+    expect(layoutReads).toBe(0);
+
+    // Resizing via setViewport updates cached size without touching the DOM getters.
+    cw = 800;
+    ch = 600;
+    cam.setViewport(cw, ch);
+    labels.setViewport(cw, ch);
+    labels.update(run, LABEL_FADE[1], cam.wpp, 0.016, project);
+    expect(layoutReads).toBe(0);
+  });
+});
+
+describe('CameraRig cached viewport', () => {
+  it('projects accurately before and after setViewport and reuses the out point', () => {
+    let layoutReads = 0;
+    const container = {
+      get clientWidth() {
+        layoutReads++;
+        return 1280;
+      },
+      get clientHeight() {
+        layoutReads++;
+        return 720;
+      },
+    } as unknown as HTMLElement;
+    const cam = new CameraRig(container, {} as unknown as HTMLCanvasElement);
+    layoutReads = 0;
+
+    expect(cam.width).toBe(1280);
+    expect(cam.height).toBe(720);
+    expect(cam.aspect).toBeCloseTo(1280 / 720);
+    expect(cam.wpp).toBeCloseTo((cam.halfH * 2) / 720);
+
+    const scratch = { x: 0, y: 0 };
+    const centerPt = cam.worldToScreen({ x: 0, z: 0 }, scratch);
+    expect(centerPt).toBe(scratch);
+    expect(scratch.x).toBeCloseTo(640);
+    expect(scratch.y).toBeCloseTo(360);
+
+    const corner = cam.worldToScreen({ x: cam.halfH * cam.aspect, z: cam.halfH });
+    expect(corner.x).toBeCloseTo(1280);
+    expect(corner.y).toBeCloseTo(720);
+
+    cam.setViewport(800, 600);
+    expect(cam.width).toBe(800);
+    expect(cam.height).toBe(600);
+    expect(cam.aspect).toBeCloseTo(800 / 600);
+    expect(cam.wpp).toBeCloseTo((cam.halfH * 2) / 600);
+    expect(cam.worldToScreen({ x: 0, z: 0 }, scratch)).toBe(scratch);
+    expect(scratch.x).toBeCloseTo(400);
+    expect(scratch.y).toBeCloseTo(300);
+    const resizedCorner = cam.worldToScreen({ x: cam.halfH * cam.aspect, z: cam.halfH });
+    expect(resizedCorner.x).toBeCloseTo(800);
+    expect(resizedCorner.y).toBeCloseTo(600);
+    expect(layoutReads).toBe(0);
+  });
 });
 
 describe('label fallback anchors', () => {
@@ -132,5 +218,18 @@ describe('label fallback anchors', () => {
     const panel = { x: 300, y: 200, w: 200, h: 200 };
     const [b] = placeLabels([{ ...item(400, 300), alts: [700, 300] }], [panel], view);
     expect(b).toEqual({ x: 660, y: 300 - 10 - 4 - 16, w: 80, h: 16 });
+  });
+
+  it('reuses pooled Box instances across calls when a pool is provided', () => {
+    const out: (Box | null)[] = [];
+    const placed: Box[] = [];
+    const pool: Box[] = [];
+    const first = placeLabels([item(400, 300), item(600, 300)], [], view, out, placed, pool);
+    const [b0, b1] = first;
+    expect(pool).toHaveLength(2);
+    const second = placeLabels([item(450, 320), item(650, 320)], [], view, out, placed, pool);
+    expect(second[0]).toBe(b0);
+    expect(second[1]).toBe(b1);
+    expect(pool).toHaveLength(2);
   });
 });
