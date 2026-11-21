@@ -17,6 +17,7 @@ import {
   slotStatus,
 } from '../../sim/save';
 import type { GameState } from '../../sim/types';
+import { confirmAction } from '../confirm';
 import { h } from '../dom';
 import type { MenuCtx } from './context';
 
@@ -140,15 +141,20 @@ export class SavesTab {
               text: 'Restart',
               title: 'Start a brand-new game in this slot (erases it, including research)',
               onclick: () => {
-                if (
-                  !this.ctx.settings.value.confirmDestructive ||
-                  confirm(
-                    `Start a NEW GAME in slot ${i + 1}? This slot's progress, including research, will be erased.`,
-                  )
-                ) {
+                const run = (): void => {
                   this.saves.newGame(i);
                   this.ctx.close();
+                };
+                if (!this.ctx.settings.value.confirmDestructive) {
+                  run();
+                  return;
                 }
+                void confirmAction(
+                  `Start a NEW GAME in slot ${i + 1}? This slot's progress, including research, will be erased.`,
+                  { title: 'Restart slot', confirmLabel: 'Restart' },
+                ).then((ok) => {
+                  if (ok) run();
+                });
               },
             }),
           );
@@ -158,13 +164,20 @@ export class SavesTab {
               class: 'danger',
               text: 'Delete',
               onclick: () => {
-                if (
-                  !this.ctx.settings.value.confirmDestructive ||
-                  confirm(`Delete the save in slot ${i + 1}? Export it first if you might want it back.`)
-                ) {
+                const run = (): void => {
                   this.saves.remove(i);
                   this.ctx.rerender();
+                };
+                if (!this.ctx.settings.value.confirmDestructive) {
+                  run();
+                  return;
                 }
+                void confirmAction(`Delete the save in slot ${i + 1}? Export it first if you might want it back.`, {
+                  title: 'Delete save',
+                  confirmLabel: 'Delete',
+                }).then((ok) => {
+                  if (ok) run();
+                });
               },
             }),
           );
@@ -208,7 +221,12 @@ export class SavesTab {
     const replace =
       (what: string, act: () => void): (() => void) =>
       () => {
-        if (confirm(`${what} in slot ${i + 1}? The unreadable save there will be lost unless you exported it.`)) act();
+        void confirmAction(`${what} in slot ${i + 1}? The unreadable save there will be lost unless you exported it.`, {
+          title: 'Replace unreadable save',
+          confirmLabel: 'Replace',
+        }).then((ok) => {
+          if (ok) act();
+        });
       };
     const btns = h('div', { class: 'row' });
     btns.append(
@@ -239,10 +257,15 @@ export class SavesTab {
         text: 'Delete',
         onclick: () => {
           const then = running ? ' The running game will save there from now on.' : '';
-          if (confirm(`Delete the unreadable save in slot ${i + 1}? It is gone unless you exported it.${then}`)) {
-            this.saves.remove(i);
-            this.ctx.rerender();
-          }
+          void confirmAction(`Delete the unreadable save in slot ${i + 1}? It is gone unless you exported it.${then}`, {
+            title: 'Delete save',
+            confirmLabel: 'Delete',
+          }).then((ok) => {
+            if (ok) {
+              this.saves.remove(i);
+              this.ctx.rerender();
+            }
+          });
         },
       }),
     );

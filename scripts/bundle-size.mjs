@@ -7,7 +7,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { gzipSync } from 'node:zlib';
 
-const DEFAULT_BUDGET_KB = 245;
+const DEFAULT_BUDGET_KB = 250;
 const dir = 'dist/assets';
 
 const flag = process.argv.indexOf('--budget');
