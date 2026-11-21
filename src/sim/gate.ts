@@ -15,6 +15,7 @@ import {
   freshGate,
   gateOpen,
   gateRemainder,
+  gateStageCost,
   stageMet,
   type GateCost,
   type GateProject,
@@ -46,8 +47,8 @@ export function deliverable(state: GameState, resource: Resource, need: number):
 export function gatePayment(state: GameState, opts: { data?: boolean } = {}): GateCost | null {
   const gate = state.profile.gate;
   if (gateOpen(gate)) return null;
-  const stage = GATE_STAGES[gate.stage]!;
-  const due = gateRemainder(gate.paid, stage.cost);
+  const cost = gateStageCost(gate.stage, state.profile.ngPlus);
+  const due = gateRemainder(gate.paid, cost);
   const payBill = emptyGateCost();
   const data = opts.data === false ? 0 : Math.min(state.profile.data, due.data);
   if (data > 0) payBill.data = data;
@@ -59,9 +60,10 @@ export function gatePayment(state: GameState, opts: { data?: boolean } = {}): Ga
   return any ? payBill : null;
 }
 
-const oweText = (gate: GateProject): string => {
-  const stage = GATE_STAGES[Math.min(gate.stage, GATE_STAGES.length - 1)]!;
-  return `${stage.name} still needs ${formatGateCost(gateRemainder(gate.paid, stage.cost))}`;
+const oweText = (gate: GateProject, ngPlus: number): string => {
+  const idx = Math.min(gate.stage, GATE_STAGES.length - 1);
+  const stage = GATE_STAGES[idx]!;
+  return `${stage.name} still needs ${formatGateCost(gateRemainder(gate.paid, gateStageCost(idx, ngPlus)))}`;
 };
 
 /**
@@ -87,7 +89,7 @@ export function applyFundGate(state: GameState, opts: { data?: boolean } = {}): 
     spent.data += bill.data;
     for (const r of RESOURCES) spent[r] += bill[r];
     const stage = GATE_STAGES[gate.stage]!;
-    if (!stageMet(gate.paid, stage.cost)) break;
+    if (!stageMet(gate.paid, gateStageCost(gate.stage, profile.ngPlus))) break;
     finished.push(stage.name);
     gate.stage += 1;
     gate.paid = emptyGateCost();
@@ -100,7 +102,7 @@ export function applyFundGate(state: GameState, opts: { data?: boolean } = {}): 
   if (spent.data <= 0 && RESOURCES.every((r) => spent[r] <= 0)) {
     out.log.push({
       level: 'warn',
-      text: `Nothing to deliver toward the Horizon Gate. Warp fuel stays in the bank. ${oweText(profile.gate)}.`,
+      text: `Nothing to deliver toward the Horizon Gate. Warp fuel stays in the bank. ${oweText(profile.gate, profile.ngPlus)}.`,
     });
     return;
   }
@@ -118,14 +120,14 @@ export function applyFundGate(state: GameState, opts: { data?: boolean } = {}): 
     const name = finished[finished.length - 1]!;
     out.log.push({
       level: 'major',
-      text: `Horizon Gate: ${delivered}. ${name} complete (stage ${profile.gate.stage} of ${GATE_STAGES.length}). ${oweText(profile.gate)}.`,
+      text: `Horizon Gate: ${delivered}. ${name} complete (stage ${profile.gate.stage} of ${GATE_STAGES.length}). ${oweText(profile.gate, profile.ngPlus)}.`,
       event: 'research',
     });
     return;
   }
   out.log.push({
     level: 'info',
-    text: `Horizon Gate: ${delivered}. ${oweText(profile.gate)}.`,
+    text: `Horizon Gate: ${delivered}. ${oweText(profile.gate, profile.ngPlus)}.`,
     event: 'research',
   });
 }
@@ -191,6 +193,15 @@ const keptText = (perks: Record<PerkId, number>, doctrines: DoctrineChoice): str
   return kept.length ? kept.join(', ') : 'nothing';
 };
 
+/** Deterministically derives the next galaxy seed for New Game+ cycle `ngPlus` (>= 1). */
+export function nextNgPlusSeed(seed: number, ngPlus: number): number {
+  let t = ((seed >>> 0) ^ Math.imul(ngPlus, 0x9e3779b1)) >>> 0;
+  t = Math.imul(t ^ (t >>> 16), 0x85ebca6b) >>> 0;
+  t = Math.imul(t ^ (t >>> 13), 0xc2b2ae35) >>> 0;
+  const out = (t ^ (t >>> 16)) >>> 0;
+  return out === seed >>> 0 ? (out + 1) >>> 0 : out;
+}
+
 /** Resets the run and the profile's progression, copying the keep-rule subset first. */
 export function applyNewGamePlus(state: GameState): void {
   const { profile, out } = state;
@@ -200,6 +211,8 @@ export function applyNewGamePlus(state: GameState): void {
   }
   const perks = keptPerks(profile.perks);
   const doctrines = keptDoctrines(profile.doctrines);
+  profile.ngPlus += 1;
+  profile.seed = nextNgPlusSeed(profile.seed, profile.ngPlus);
   profile.perks = perks;
   profile.doctrines = doctrines;
   profile.warps = 0;
@@ -210,7 +223,7 @@ export function applyNewGamePlus(state: GameState): void {
   out.fx.push({ t: 'warp' });
   out.log.push({
     level: 'major',
-    text: `New Game+. Kept ${keptText(perks, doctrines)}. Warps, Horizon Data and the gate reset; lifetime stats stay.`,
+    text: `New Game+ ${profile.ngPlus}. Kept ${keptText(perks, doctrines)}. New galaxy seed; warps, Horizon Data and the gate reset; lifetime stats stay.`,
     event: 'research',
   });
   out.log.push({ level: 'info', text: doctrineRespecNotice() });

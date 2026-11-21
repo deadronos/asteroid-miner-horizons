@@ -289,6 +289,8 @@ export interface Profile {
   goalsDismissed: boolean;
   /** Horizon Gate progress. Survives warps; New Game+ clears it. */
   gate: GateProject;
+  /** New Game+ cycle count (0 on the initial run; incremented each New Game+). */
+  ngPlus: number;
 }
 
 export type Fx =

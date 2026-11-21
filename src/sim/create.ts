@@ -4,7 +4,7 @@
 import { makeRng } from '../core/rng';
 import { v } from '../core/vec';
 import { emptyDoctrines } from '../data/doctrines';
-import { freshGate } from '../data/gate';
+import { NG_PLUS_HAZARD_STEP, NG_PLUS_RICHNESS_STEP, freshGate } from '../data/gate';
 import { PERK_IDS, type PerkId } from '../data/perks';
 import { TUNING } from '../data/tuning';
 import { newStats } from './achievements';
@@ -18,7 +18,7 @@ import { newRefinery } from './refining';
 import { makeShip } from './ships';
 import type { GameState, Profile, Run } from './types';
 
-export const SAVE_VERSION = 17;
+export const SAVE_VERSION = 18;
 
 export function newProfile(seed: number): Profile {
   return {
@@ -32,6 +32,7 @@ export function newProfile(seed: number): Profile {
     achievements: [],
     goalsDismissed: false,
     gate: freshGate(),
+    ngPlus: 0,
   };
 }
 
@@ -39,6 +40,9 @@ export function newProfile(seed: number): Profile {
 export function newRun(profile: Profile, route = 0): Run {
   const number = profile.warps + 1;
   const system = generateSystem(profile.seed, number, route);
+  if (profile.ngPlus > 0) {
+    system.richness *= 1 + NG_PLUS_RICHNESS_STEP * profile.ngPlus;
+  }
   const kit = profile.perks.kit;
   const run: Run = {
     system,
@@ -64,6 +68,11 @@ export function newRun(profile: Profile, route = 0): Run {
     automation: newAutomation(),
     exploration: newExploration(profile.seed, number, route),
   };
+  if (profile.ngPlus > 0) {
+    const hazardScale = 1 / (1 + NG_PLUS_HAZARD_STEP * profile.ngPlus);
+    run.hazards.cometTimer *= hazardScale;
+    run.hazards.flareTimer *= hazardScale;
+  }
   populateBelts(run, profile.seed);
 
   const st = system.station.pos;

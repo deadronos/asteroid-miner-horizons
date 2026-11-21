@@ -10,6 +10,7 @@ import {
   formatGateCost,
   gateOpen,
   gateRemainder,
+  gateStageCost,
   stageMet,
 } from '../data/gate';
 import { gatePayment } from '../sim/gate';
@@ -61,11 +62,12 @@ export interface GatePanelView {
 
 /** Research-panel copy for the gate at `state`. */
 export function gatePanel(state: GameState): GatePanelView {
-  const gate = state.profile.gate;
+  const { gate, ngPlus } = state.profile;
   const total = GATE_STAGES.length;
+  const cyclePrefix = ngPlus > 0 ? `NG+${ngPlus} · ` : '';
   if (gateOpen(gate) && gate.summary) {
     return {
-      status: `Horizon Gate open. Stage ${total} of ${total}.`,
+      status: `${cyclePrefix}Horizon Gate open. Stage ${total} of ${total}.`,
       next: 'A new run can keep part of this one.',
       fraction: 1,
       bar: `${total} of ${total} stages`,
@@ -76,23 +78,24 @@ export function gatePanel(state: GameState): GatePanelView {
     };
   }
   const stage = GATE_STAGES[gate.stage]!;
-  const due = gateRemainder(gate.paid, stage.cost);
+  const cost = gateStageCost(gate.stage, ngPlus);
+  const due = gateRemainder(gate.paid, cost);
   // Share of this stage's priced columns already delivered, so the bar matches the words.
   const columns: [number, number][] = [
-    [gate.paid.data, stage.cost.data],
-    [gate.paid.ore, stage.cost.ore],
-    [gate.paid.ice, stage.cost.ice],
-    [gate.paid.crystal, stage.cost.crystal],
-    [gate.paid.alloy, stage.cost.alloy],
-    [gate.paid.fuel, stage.cost.fuel],
+    [gate.paid.data, cost.data],
+    [gate.paid.ore, cost.ore],
+    [gate.paid.ice, cost.ice],
+    [gate.paid.crystal, cost.crystal],
+    [gate.paid.alloy, cost.alloy],
+    [gate.paid.fuel, cost.fuel],
   ];
-  const priced = columns.filter(([, cost]) => cost > 0);
-  const filled = priced.reduce((sum, [paid, cost]) => sum + Math.min(1, paid / cost), 0);
+  const priced = columns.filter(([, c]) => c > 0);
+  const filled = priced.reduce((sum, [paid, c]) => sum + Math.min(1, paid / c), 0);
   const fraction = (gate.stage + (priced.length ? filled / priced.length : 0)) / total;
   const payment = gatePayment(state);
-  const ready = payment != null && stageMet(addGateCost(gate.paid, payment), stage.cost);
+  const ready = payment != null && stageMet(addGateCost(gate.paid, payment), cost);
   return {
-    status: `Stage ${gate.stage + 1} of ${total}: ${stage.name}. ${stage.detail}`,
+    status: `${cyclePrefix}Stage ${gate.stage + 1} of ${total}: ${stage.name}. ${stage.detail}`,
     next: `Still to deliver: ${formatGateCost(due)}.${ready ? ' The bank can finish this stage.' : ''}`,
     fraction,
     bar: `${gate.stage} of ${total} stages, ${stage.name} in progress`,
@@ -110,17 +113,19 @@ export function gatePanel(state: GameState): GatePanelView {
 
 /** Top-bar chip: progress and the next stage's cost, in words. */
 export function gateChip(state: GameState): { text: string; label: string } {
-  const gate = state.profile.gate;
+  const { gate, ngPlus } = state.profile;
   const total = GATE_STAGES.length;
+  const cyclePrefix = ngPlus > 0 ? `NG+${ngPlus} · ` : '';
   if (gateOpen(gate)) {
-    const label = 'Horizon Gate open. New Game+ is available in Research.';
-    return { text: 'Gate open', label };
+    const label = `${cyclePrefix}Horizon Gate open. New Game+ is available in Research.`;
+    return { text: `${cyclePrefix}Gate open`, label };
   }
   const stage = GATE_STAGES[gate.stage]!;
-  const due = formatGateCost(gateRemainder(gate.paid, stage.cost));
+  const cost = gateStageCost(gate.stage, ngPlus);
+  const due = formatGateCost(gateRemainder(gate.paid, cost));
   const payment = gatePayment(state);
-  const ready = payment != null && stageMet(addGateCost(gate.paid, payment), stage.cost);
-  const text = `Gate ${gate.stage}/${total} · next ${due}${ready ? ' · ready' : ''}`;
-  const label = `Horizon Gate, stage ${gate.stage + 1} of ${total}: ${stage.name}. Next: ${due}.${ready ? ' Ready to deliver.' : ''}`;
+  const ready = payment != null && stageMet(addGateCost(gate.paid, payment), cost);
+  const text = `${cyclePrefix}Gate ${gate.stage}/${total} · next ${due}${ready ? ' · ready' : ''}`;
+  const label = `${cyclePrefix}Horizon Gate, stage ${gate.stage + 1} of ${total}: ${stage.name}. Next: ${due}.${ready ? ' Ready to deliver.' : ''}`;
   return { text, label };
 }

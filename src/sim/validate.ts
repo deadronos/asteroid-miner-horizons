@@ -7,7 +7,7 @@ import { CONTRACTS } from '../data/contracts';
 import { HULLS } from '../data/hulls';
 import { MODIFIERS } from '../data/modifiers';
 import { DOCTRINE_PAIR_IDS, isDoctrineSide } from '../data/doctrines';
-import { GATE_STAGES, stageMet, type GateCost } from '../data/gate';
+import { GATE_STAGES, gateStageCost, stageMet, type GateCost } from '../data/gate';
 import { PERK_IDS } from '../data/perks';
 import { RECIPES, RECIPE_IDS } from '../data/refining';
 import { RAW_RESOURCES, RESOURCES } from '../data/resources';
@@ -227,7 +227,7 @@ function isGateCost(c: unknown): c is GateCost {
  */
 const GATE_FIELDS = ['acknowledged', 'paid', 'stage', 'summary'] as const;
 
-function isGate(g: unknown): boolean {
+function isGate(g: unknown, ngPlus: number): boolean {
   if (!isObj(g) || Array.isArray(g)) return false;
   const keys = Object.keys(g);
   if (keys.length !== GATE_FIELDS.length || GATE_FIELDS.some((k) => !Object.hasOwn(g, k))) return false;
@@ -246,7 +246,7 @@ function isGate(g: unknown): boolean {
     return isDoctrines(s.doctrines);
   }
   if (g.summary !== null || g.acknowledged) return false;
-  const cost = GATE_STAGES[g.stage]!.cost;
+  const cost = gateStageCost(g.stage, ngPlus);
   const over = (key: keyof GateCost): boolean => paid[key] > cost[key] + 1e-6;
   // A column above its bill, or a stage that is already fully paid, never leaves the handler.
   if (over('data') || RESOURCES.some((r) => over(r))) return false;
@@ -258,12 +258,13 @@ function isProfile(p: Profile | undefined): p is Profile {
   if (!p || !finite(p.seed) || !isObj(p.perks)) return false;
   // The next warp numbers its system from the warp count, and research spends data.
   if (!Number.isInteger(p.warps) || p.warps < 0 || !finite(p.data) || !finite(p.dataEarned)) return false;
+  if (!Number.isInteger(p.ngPlus) || p.ngPlus < 0) return false;
   // Stats, costs and the refinery read every perk level, so each must be a finite number.
   if (!PERK_IDS.every((k) => finite(p.perks[k]))) return false;
   // The tick reads every pair. A side from another pair would apply the wrong trade-off.
   if (!isDoctrines(p.doctrines)) return false;
   // The HUD reads the first-steps flag and the gate on every refresh.
-  if (typeof p.goalsDismissed !== 'boolean' || !isGate(p.gate)) return false;
+  if (typeof p.goalsDismissed !== 'boolean' || !isGate(p.gate, p.ngPlus)) return false;
   // The tick adds to every stat and the Stats tab looks up every unlocked achievement.
   return isLifetime(p);
 }

@@ -135,7 +135,6 @@ describe('exploration migration to v17', () => {
   it('adds an empty exploration seeded from the saved profile and system', () => {
     const state = current();
     expect(state.version).toBe(SAVE_VERSION);
-    expect(state.version).toBe(17);
     expect(state.run.exploration).toEqual(newExploration(state.profile.seed, state.run.system.number));
     expect(state.run.exploration.revealed).toEqual([]);
     expect(state.run.exploration.claimed).toEqual([]);

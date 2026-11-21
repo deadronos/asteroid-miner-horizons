@@ -146,6 +146,11 @@ export const migrations: Record<number, Migration> = {
     if (!d.run.exploration) d.run.exploration = newExploration(d.profile.seed, d.run.system.number);
     return d;
   },
+  // v18 added `profile.ngPlus` (#274). Old saves are on their initial cycle.
+  17: (d) => {
+    d.profile.ngPlus = 0;
+    return d;
+  },
 };
 
 export interface MigrateOptions {

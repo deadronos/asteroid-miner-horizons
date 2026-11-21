@@ -2,6 +2,7 @@
 // and opening Research must not focus a button that spends the starting wallet.
 
 import { afterEach, describe, expect, it } from 'vitest';
+import { GATE_STAGES } from '../src/data/gate';
 import type { SettingsStore } from '../src/settings';
 import { newGame } from '../src/sim/create';
 import type { GameState } from '../src/sim/types';
@@ -80,9 +81,9 @@ describe('stacked research and gate dialogs', () => {
     expect(active().closest('.doctrine')).not.toBeNull();
     expect(active().textContent).toBe('Choose');
 
-    state.profile.data = 1;
-    state.run.bank.ore = 40;
-    state.run.bank.ice = 15;
+    const anchor = GATE_STAGES[0]!.cost;
+    state.profile.data = anchor.data;
+    state.run.bank = { ore: anchor.ore, ice: anchor.ice, crystal: anchor.crystal, alloy: anchor.alloy, fuel: 0 };
     research.refresh();
     expect(deliver?.disabled).toBe(false);
     expect(deliver?.textContent).toBe('Deliver stage');

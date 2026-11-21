@@ -26,8 +26,9 @@ const cost = (data: number, ore: number, ice: number, crystal: number, alloy: nu
 });
 
 /**
- * Three stages. Horizon Data is one point a stage so the balance bot can pay it before a perk without
- * losing the perk the mid-game rows measure; the resources are what a warp would abandon.
+ * Three stages forming a mid-to-late-game resource and Horizon Data sink.
+ * Anchor takes ore, ice and early alloy; Ring adds crystal and heavier refining;
+ * Aperture demands late-game alloy, crystal, ice and Horizon Data.
  * Fuel is never a cost: the delivery leaves the fuel a warp needs.
  */
 export const GATE_STAGES: readonly GateStage[] = [
@@ -35,19 +36,19 @@ export const GATE_STAGES: readonly GateStage[] = [
     id: 'anchor',
     name: 'Anchor',
     detail: 'Sink the first pylons at the edge of the system.',
-    cost: cost(1, 40, 15, 0, 0),
+    cost: cost(3, 300, 40, 0, 25),
   },
   {
     id: 'ring',
     name: 'Ring',
-    detail: 'Frame the aperture with crystal and a second load of ore.',
-    cost: cost(1, 80, 20, 20, 0),
+    detail: 'Frame the aperture with crystal and refined alloy.',
+    cost: cost(6, 200, 0, 45, 45),
   },
   {
     id: 'aperture',
     name: 'Aperture',
     detail: 'Charge the ring and open the gate.',
-    cost: cost(1, 100, 0, 30, 15),
+    cost: cost(8, 300, 20, 65, 50),
   },
 ];
 
@@ -55,6 +56,12 @@ export const GATE_STAGES: readonly GateStage[] = [
 export const NG_PLUS_PERK_LEVELS = 3;
 /** Doctrine pairs New Game+ copies, in pair-id order, skipping pairs left unset. */
 export const NG_PLUS_DOCTRINE_PAIRS = 1;
+/** Gate stage cost multiplier added per New Game+ cycle (1× on cycle 0, 1.5× on NG+1, 2× on NG+2, …). */
+export const NG_PLUS_COST_STEP = 0.5;
+/** System richness bonus added per New Game+ cycle (+15% per cycle). */
+export const NG_PLUS_RICHNESS_STEP = 0.15;
+/** Hazard timer tightening per New Game+ cycle (timers scale by 1 / (1 + step × ngPlus)). */
+export const NG_PLUS_HAZARD_STEP = 0.15;
 
 /**
  * The keep rule, in the words the summary and the research panel show.
@@ -62,7 +69,7 @@ export const NG_PLUS_DOCTRINE_PAIRS = 1;
  * the first set pair in Fleet, Hold, Beam order, copied by its stable side id.
  */
 export const NG_PLUS_RULE =
-  'New Game+ keeps 3 perk levels in total, on your highest perks (ties follow the perk list, Refined Assays first), and 1 doctrine pair: the first one set, in Fleet, Hold, Beam order, copied by its side id. Warps, Horizon Data, every other perk and doctrine, and the gate reset. Lifetime stats and achievements stay, and the galaxy seed stays.';
+  'New Game+ keeps 3 perk levels in total, on your highest perks (ties follow the perk list, Refined Assays first), and 1 doctrine pair: the first one set, in Fleet, Hold, Beam order, copied by its side id. Warps, Horizon Data, every other perk and doctrine, and the gate reset. Lifetime stats and achievements stay; a new galaxy seed is rolled, systems grow richer and more hazardous, and Horizon Gate costs scale up each cycle.';
 
 export interface GateSummary {
   warps: number;
@@ -96,6 +103,22 @@ export function freshGate(): GateProject {
 }
 
 export const gateOpen = (gate: GateProject): boolean => gate.stage >= GATE_STAGES.length;
+
+/** Cost of gate stage `stageIndex` on New Game+ cycle `ngPlus` (0 for the initial run). */
+export function gateStageCost(stageIndex: number, ngPlus = 0): GateCost {
+  const base = GATE_STAGES[stageIndex]!.cost;
+  if (ngPlus <= 0) return base;
+  const mul = 1 + NG_PLUS_COST_STEP * ngPlus;
+  const scale = (n: number): number => (n > 0 ? Math.max(1, Math.round(n * mul)) : 0);
+  return {
+    data: scale(base.data),
+    ore: scale(base.ore),
+    ice: scale(base.ice),
+    crystal: scale(base.crystal),
+    alloy: scale(base.alloy),
+    fuel: scale(base.fuel),
+  };
+}
 
 /** What is still owed on `cost` after `paid`. */
 export function gateRemainder(paid: GateCost, costOf: GateCost): GateCost {
