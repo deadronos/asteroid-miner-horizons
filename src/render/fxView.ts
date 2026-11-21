@@ -47,6 +47,11 @@ export class FxView {
     this.ping.setQuality(low);
   }
 
+  /** Scales particle sprite size with the renderer's pixel ratio. */
+  setPixelRatio(dpr: number): void {
+    this.particles.setPixelRatio(dpr);
+  }
+
   /** True while the ping pulse is still fading. */
   get busy(): boolean {
     return this.ping.busy;
@@ -86,8 +91,16 @@ export class FxView {
           P.emit(fx.pos.x, fx.pos.z, col.setHex(palette().resource[fx.kind]), 4, 60, 0.35);
           this.floaters.add(fx.shipId, fx.kind, fx.amount, fx.pos);
           break;
-        case 'dock':
+        case 'dock': {
+          const st = state.run.system.station.pos;
+          const dir = Math.atan2(st.z - fx.pos.z, st.x - fx.pos.x);
+          const count = Math.min(20, 6 + Math.round(Math.sqrt(fx.value) * 0.6));
+          P.emit(fx.pos.x, fx.pos.z, col.setHex(palette().ok), count, 95, 0.55, { dir, spread: 0.7, drag: 2.2 });
+          P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffffff), Math.max(4, Math.round(count * 0.4)), 55, 0.35, {
+            drag: 2.8,
+          });
           break;
+        }
         case 'impact':
           P.emit(fx.pos.x, fx.pos.z, col.setHex(0xffd0a0), 14, 120, 0.4);
           this.ships.flashNear(fx.pos);
@@ -145,15 +158,20 @@ export class FxView {
   }
 
   /** Advances particles, debris and the ping pulse. */
-  update(dt: number, reducedMotion = false): void {
+  update(dt: number, reducedMotion = false, wpp = 1): void {
     this.particles.update(dt);
     this.debris.update(dt);
-    this.ping.update(dt, reducedMotion);
+    this.ping.update(dt, reducedMotion, wpp);
   }
 
   /** Moves floating pickup text; `anchor` gives a live ship's position (null once it is gone). */
-  updateText(dt: number, toScreen: (p: Vec2) => { x: number; y: number }, anchor: (id: number) => Vec2 | null): void {
-    this.floaters.update(dt, toScreen, anchor);
+  updateText(
+    dt: number,
+    toScreen: (p: Vec2) => { x: number; y: number },
+    anchor: (id: number) => Vec2 | null,
+    halfH = 0,
+  ): void {
+    this.floaters.update(dt, toScreen, anchor, halfH);
   }
 
   setVisible(on: boolean): void {

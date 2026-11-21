@@ -2,7 +2,7 @@
 // a hint for the current blocker, and a close button that hides it for this save.
 // Built once; refresh only flips classes and text. The rules live in `../goals`.
 
-import { GOALS, goalDone, goalHint, goalProgress, goalsVisible, type HintEnv } from '../goals';
+import { GOALS, goalDone, goalHint, goalHow, goalProgress, goalsVisible, type HintEnv } from '../goals';
 import { Panel, h, setText } from '../dom';
 import type { PanelCtx } from './context';
 
@@ -25,7 +25,7 @@ export function createGoalsPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         const progress = h('small', { class: 'dim' });
         const how = h('div', { class: 'how', text: g.how });
         const row = h('li', { class: 'goal' }, mark, h('span', { text: g.label }), ' ', progress, how);
-        return { g, row, mark, progress };
+        return { g, row, mark, progress, how };
       });
       const hint = h('div', { class: 'notice hint' });
       hint.setAttribute('role', 'status');
@@ -35,6 +35,7 @@ export function createGoalsPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         const show = goalsVisible(s);
         el.classList.toggle('hidden', !show);
         if (!show) return;
+        const mode = ctx.inputMode?.() ?? 'pointer';
         const done = rows.map((r) => goalDone(s, r.g.id));
         const cur = done.indexOf(false);
         rows.forEach((r, i) => {
@@ -42,12 +43,14 @@ export function createGoalsPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           r.row.classList.toggle('cur', i === cur);
           setText(r.mark, done[i] ? '✓' : i === cur ? '▸' : '○');
           setText(r.progress, done[i] ? '' : (goalProgress(s, r.g.id) ?? ''));
+          setText(r.how, goalHow(r.g.id, mode));
         });
         setText(count, `${done.filter(Boolean).length}/${GOALS.length}`);
         const v = ctx.settings.value;
         const env: HintEnv = {
           assists: { autoDock: v.assistAutoDock },
           auto: { repairAt: v.autoRepairAt, reserve: v.autoReserve, builderReserve: v.builderReserve },
+          inputMode: mode,
         };
         const text = goalHint(s, env);
         hint.classList.toggle('hidden', !text);

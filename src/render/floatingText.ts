@@ -6,6 +6,7 @@ import { RESOURCE_INFO, type Resource } from '../data/resources';
 import type { Vec2 } from '../core/vec';
 import { cssColour } from '../data/palette';
 import { palette, paletteGeneration } from './activePalette';
+import { labelOpacity } from './labels';
 
 const POOL = 48;
 /** Seconds after the last pickup during which more pickups add to the same label. */
@@ -94,8 +95,20 @@ export class FloatingText {
   }
 
   /** `anchor` returns the ship's current position (labels follow it), or null if it's gone. */
-  update(dt: number, toScreen: (p: Vec2) => { x: number; y: number }, anchor: (shipId: number) => Vec2 | null): void {
+  update(
+    dt: number,
+    toScreen: (p: Vec2) => { x: number; y: number },
+    anchor: (shipId: number) => Vec2 | null,
+    halfH = 0,
+  ): void {
     ageFloaters(this.pool, dt);
+    const overlayAlpha = 1 - labelOpacity(halfH);
+    this.el.style.opacity = overlayAlpha.toFixed(3);
+    if (overlayAlpha <= 0) {
+      this.el.style.visibility = 'hidden';
+      return;
+    }
+    this.el.style.visibility = 'visible';
     this.pool.forEach((f, i) => {
       const span = this.spans[i]!;
       if (!f.live) {

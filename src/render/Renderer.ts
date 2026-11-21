@@ -90,6 +90,8 @@ export class Renderer {
   private fx: FxView;
   /** 0..1 star-glow boost, eased toward 1 while a solar flare is active. */
   private flareGlow = 0;
+  /** 0..1 warning telegraph intensity, eased toward 1 while a solar flare is imminent. */
+  private flareWarn = 0;
   private labels: MapLabels;
   /** Client rectangles map labels must not cover; main.ts points this at the HUD panels. */
   labelBlockers: () => Box[] = () => [];
@@ -183,7 +185,9 @@ export class Renderer {
     const quality = automatic ? automatic.quality : s.quality === 'auto' ? 'high' : s.quality;
     const q = QUALITY[quality];
     this.lowQuality = quality === 'low';
-    this.gl.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatioCap) * s.renderScale * (automatic?.scale ?? 1));
+    const pixelRatio = Math.min(window.devicePixelRatio, q.pixelRatioCap) * s.renderScale * (automatic?.scale ?? 1);
+    this.gl.setPixelRatio(pixelRatio);
+    this.fx.setPixelRatio(pixelRatio);
     this.bloomOn = q.bloom > 0;
     this.viaComposer = useComposer(this.bloomOn, this.msaa > 0, this.contextAA, this.lowQuality);
     // Bloom off but still via the composer (runtime fallback, until reload): close to the canvas look, not identical.
@@ -317,6 +321,7 @@ export class Renderer {
     if (this.system.sync(sys)) {
       this.warmup = true;
       this.flareGlow = 0;
+      this.flareWarn = 0;
       this.backdrop.setSystem(state.profile.seed + sys.number);
       this.cam.resetSnap();
     }
@@ -340,23 +345,25 @@ export class Renderer {
 
     this.backdrop.update(v.x, v.z, v.halfH, 1 - w.stretch);
     this.streaks.update(w.stretch, v.x, v.z, v.halfW, v.halfH);
-    this.flareGlow += ((run.hazards.flare?.phase === 'active' ? 1 : 0) - this.flareGlow) * (1 - damp(4, dt));
-    this.system.update(sys, run.time, this.flareGlow);
+    const flarePhase = run.hazards.flare?.phase;
+    this.flareGlow += ((flarePhase === 'active' ? 1 : 0) - this.flareGlow) * (1 - damp(4, dt));
+    this.flareWarn += ((flarePhase === 'warning' ? 1 : 0) - this.flareWarn) * (1 - damp(6, dt));
+    this.system.update(sys, run.time, this.flareGlow, this.flareWarn, this.reducedMotion);
     this.rocks.update(run.rocks, run.pickups, run.time, v, index);
     this.curRun = run;
     this.curIndex = index ?? null;
-    this.outpostView.update(run.automation.outposts, this.rockOf, run.time);
-    this.explorationView.update(run);
     const wpp = this.wpp;
-    const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars, motionK, index);
+    this.outpostView.update(run.automation.outposts, this.rockOf, run.time, wpp);
+    this.explorationView.update(run, wpp, run.time, this.reducedMotion);
+    const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars, motionK, index, this.cam.halfH);
     this.hazardView.update(run.hazards, run.time, wpp);
 
     if (this.fx.consume(state, hits, dt, this.onScreen, index)) this.follow = true;
-    this.fx.update(dt, this.reducedMotion);
+    this.fx.update(dt, this.reducedMotion, wpp);
     this.updateMarkers(state, moveMark, wpp);
     this.setPlayfieldVisible(!w.hidden);
     this.labels.update(run, w.hidden ? 0 : this.cam.halfH, this.wpp, dt, this.toScreen);
-    this.fx.updateText(dt, this.toScreen, this.anchorOf);
+    this.fx.updateText(dt, this.toScreen, this.anchorOf, this.cam.halfH);
 
     if (this.warmup) {
       this.warmup = false;
@@ -419,11 +426,16 @@ export class Renderer {
     const h = this.hover;
     let target: { pos: Vec2; r: number; color: number } | null = null;
     if (h?.kind === 'rock')
-      target = { pos: h.rock.pos, r: h.rock.radius + 6 * wpp, color: palette().resource[h.rock.kind] };
-    else if (h?.kind === 'station') target = { pos: state.run.system.station.pos, r: 60, color: palette().ok };
+      target = {
+        pos: h.rock.pos,
+        r: Math.max(h.rock.radius + 6 * wpp, 18 * wpp),
+        color: palette().resource[h.rock.kind],
+      };
+    else if (h?.kind === 'station')
+      target = { pos: state.run.system.station.pos, r: Math.max(60, 18 * wpp), color: palette().ok };
     else if (h?.kind === 'ship') {
       const s = findShip(state.run, h.id);
-      if (s) target = { pos: s.pos, r: HULLS[s.hullId].size * 2.4 + 6 * wpp, color: 0xffffff };
+      if (s) target = { pos: s.pos, r: Math.max(HULLS[s.hullId].size * 2.4 + 6 * wpp, 18 * wpp), color: 0xffffff };
     }
     this.hoverRing.visible = !!target;
     if (target) {

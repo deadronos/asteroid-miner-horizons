@@ -1,4 +1,4 @@
-import type * as THREE from 'three';
+import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PALETTES } from '../src/data/palette';
 import type { RawResource } from '../src/data/resources';
@@ -27,6 +27,8 @@ interface SystemParts {
   dockRing: THREE.LineLoop | null;
   heatRing: THREE.LineLoop | null;
   beltBands: { mesh: THREE.Mesh; kind: RawResource }[];
+  starGlow: THREE.Sprite[];
+  planets: { body: THREE.Mesh; moons: THREE.Mesh[]; ring: THREE.Mesh | null }[];
 }
 
 const partsOf = (view: SystemView): SystemParts => view as unknown as SystemParts;
@@ -88,5 +90,49 @@ describe('SystemView', () => {
     setColourVision('tritan');
     view.update(sys, 2);
     expectMode('tritan');
+  });
+
+  it('pulses star glow and heat-zone ring during solar flare warning and respects reducedMotion', () => {
+    const sys = qutha1();
+    const view = new SystemView();
+    view.sync(sys);
+    const parts = partsOf(view);
+    const heatMat = parts.heatRing!.material as THREE.LineBasicMaterial;
+
+    // Idle baseline.
+    view.update(sys, 0, 0, 0, false);
+    const baseOpacity = heatMat.opacity;
+    const baseGlow = parts.starGlow[0]!.scale.x;
+
+    // Warning telegraph raises both heat-ring opacity and star glow, pulsing over time.
+    view.update(sys, Math.PI / 14, 0, 1, false);
+    const peakOpacity = heatMat.opacity;
+    const peakGlow = parts.starGlow[0]!.scale.x;
+    expect(peakOpacity).toBeGreaterThan(baseOpacity);
+    expect(peakGlow).toBeGreaterThan(baseGlow);
+    expect(parts.heatRing!.scale.x).toBeGreaterThan(1);
+
+    // Reduced motion keeps the heat ring elevated without pulsing its scale.
+    view.update(sys, Math.PI / 14, 0, 1, true);
+    const rmOpacityA = heatMat.opacity;
+    expect(rmOpacityA).toBeGreaterThan(baseOpacity);
+    expect(parts.heatRing!.scale.x).toBe(1);
+    view.update(sys, 1.1, 0, 1, true);
+    expect(heatMat.opacity).toBeCloseTo(rmOpacityA, 5);
+  });
+
+  it('applies a procedural radial-band texture to ringed planets and disposes it on rebuild', () => {
+    const sys = qutha1();
+    sys.planets[0]!.ringed = true;
+    const view = new SystemView();
+    view.sync(sys);
+    const ring = partsOf(view).planets[0]!.ring;
+    expect(ring).not.toBeNull();
+    const mat = ring!.material as THREE.MeshLambertMaterial;
+    expect(mat.map).toBeInstanceOf(THREE.CanvasTexture);
+    const disposeSpy = vi.spyOn(mat.map!, 'dispose');
+
+    view.sync(qutha21());
+    expect(disposeSpy).toHaveBeenCalledTimes(1);
   });
 });

@@ -7,6 +7,7 @@ import type { SaveActions } from '../session';
 import { slotStatus } from '../sim/save';
 import type { GameState } from '../sim/types';
 import type { SettingsStore } from '../settings';
+import { confirmAction } from './confirm';
 import { nextFocusIndex } from './focus';
 
 export interface TitleActions {
@@ -49,14 +50,20 @@ export class TitleScreen {
     this.newBtn.addEventListener('click', () => {
       // The active slot may have changed under the title; only start a new game when it still holds a readable save.
       const slot = saves.active();
-      if (slotStatus(slot).kind === 'ok') {
-        if (
-          !settings.value.confirmDestructive ||
-          confirm(`Start a new game in slot ${slot + 1}? Its progress, including research, will be erased.`)
-        )
-          saves.newGame(slot);
+      const start = (): void => {
+        if (slotStatus(slot).kind === 'ok') saves.newGame(slot);
+        this.dismiss();
+      };
+      if (slotStatus(slot).kind === 'ok' && settings.value.confirmDestructive) {
+        void confirmAction(`Start a new game in slot ${slot + 1}? Its progress, including research, will be erased.`, {
+          title: 'Start new game',
+          confirmLabel: 'Start new game',
+        }).then((ok) => {
+          if (ok) start();
+        });
+        return;
       }
-      this.dismiss();
+      start();
     });
     this.settingsBtn.addEventListener('click', () => this.actions.openSettings());
 

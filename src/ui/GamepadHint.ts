@@ -6,9 +6,9 @@ const LINES = [
   ['Left stick / D-pad', 'Fly'],
   ['A', 'Mine nearest · dock'],
   ['B', 'Stop · back'],
-  ['RT', 'Sensor ping'],
-  ['X', 'Next ship'],
-  ['Y', 'Warp routes'],
+  ['LT · RT', 'Research · sensor ping'],
+  ['X · Y', 'Next ship · warp routes'],
+  ['R3', 'Deploy outpost'],
   ['LB / RB · right stick', 'Zoom'],
   ['Select · Start', 'Map · menu'],
 ];

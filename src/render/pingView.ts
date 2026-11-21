@@ -6,10 +6,22 @@ import type { Vec2 } from '../core/vec';
 
 /** Seconds a ping pulse takes to fade out. */
 export const PING_LIFE = 1;
+/** Minimum screen-space stroke width (CSS pixels) for the ping ring. */
+export const PING_MIN_PX = 2;
+
+/** Inner-to-outer radius ratio so the ping ring stays at least 1.5% of radius and `PING_MIN_PX` CSS pixels wide. */
+export function pingInnerRatio(radius: number, wpp: number): number {
+  if (radius <= 0) return 0.985;
+  const stroke = Math.max(radius * 0.015, PING_MIN_PX * wpp);
+  return Math.max(0.05, 1 - stroke / radius);
+}
 
 /** A thin ground-plane ring geometry (authored in XY, laid onto XZ). */
-const ringGeometry = (segments: number): THREE.BufferGeometry =>
-  new THREE.RingGeometry(0.985, 1, segments).rotateX(-Math.PI / 2);
+const ringGeometry = (segments: number): THREE.BufferGeometry => {
+  const geo = new THREE.RingGeometry(0.985, 1, segments).rotateX(-Math.PI / 2);
+  (geo.getAttribute('position') as THREE.BufferAttribute).setUsage(THREE.DynamicDrawUsage);
+  return geo;
+};
 
 /** Ring radius and opacity at a point in the pulse. Reused so the frame loop allocates nothing. */
 export interface PingShape {
@@ -58,6 +70,8 @@ export class PingRing {
   private range = 0;
   private elapsed = PING_LIFE;
   private low: boolean | null = null;
+  private segments = pingSegments(false);
+  private lastInner = 0.985;
   private enabled = true;
   private reduced = false;
 
@@ -81,7 +95,9 @@ export class PingRing {
     if (this.low === low) return;
     this.low = low;
     const old = this.geo;
-    this.geo = ringGeometry(pingSegments(low));
+    this.segments = pingSegments(low);
+    this.geo = ringGeometry(this.segments);
+    this.lastInner = 0.985;
     this.mesh.geometry = this.geo;
     old.dispose();
     this.mat.blending = low ? THREE.NormalBlending : THREE.AdditiveBlending;
@@ -99,7 +115,7 @@ export class PingRing {
   }
 
   /** Advances the pulse; call once per rendered frame. */
-  update(dt: number, reducedMotion = this.reduced): void {
+  update(dt: number, reducedMotion = this.reduced, wpp = 1): void {
     this.reduced = reducedMotion;
     if (this.elapsed >= PING_LIFE) return;
     this.elapsed += dt;
@@ -108,6 +124,14 @@ export class PingRing {
     if (!s.visible) return;
     this.mesh.scale.setScalar(s.radius);
     this.mat.opacity = s.opacity;
+    const inner = pingInnerRatio(s.radius, wpp);
+    if (Math.abs(inner - this.lastInner) > 1e-4) {
+      this.lastInner = inner;
+      const pos = this.geo.getAttribute('position') as THREE.BufferAttribute;
+      const stride = this.segments + 1;
+      for (let i = 0; i < stride; i++) pos.setXYZ(i, pos.getX(stride + i) * inner, 0, pos.getZ(stride + i) * inner);
+      pos.needsUpdate = true;
+    }
   }
 
   /** Hide the pulse while the playfield is hidden (warp) without cancelling it. */

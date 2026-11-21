@@ -1,7 +1,22 @@
 import { describe, expect, it } from 'vitest';
-import { BATCH_WINDOW, addPickup, ageFloaters, emptyFloater, formatAmount } from '../src/render/floatingText';
+import {
+  BATCH_WINDOW,
+  FloatingText,
+  addPickup,
+  ageFloaters,
+  emptyFloater,
+  formatAmount,
+} from '../src/render/floatingText';
 
 const at = { x: 0, z: 0 };
+const makeEl = () => ({
+  className: '',
+  style: { opacity: '', visibility: '', transform: '', color: '' },
+  textContent: '',
+  append: () => {},
+});
+const toScreen = () => ({ x: 100, y: 100 });
+const anchor = () => at;
 
 describe('floating pickup text', () => {
   it('merges pickups for the same ship and resource inside the batch window', () => {
@@ -51,5 +66,32 @@ describe('floating pickup text', () => {
     expect(formatAmount(0.5)).toBe('0.5');
     expect(formatAmount(3)).toBe('3');
     expect(formatAmount(12.4)).toBe('12');
+  });
+
+  it('fades and hides the floating text layer as camera enters map zoom', () => {
+    const prevDoc = globalThis.document;
+    Object.defineProperty(globalThis, 'document', {
+      value: { createElement: () => makeEl() },
+      configurable: true,
+    });
+    try {
+      const container = makeEl() as unknown as HTMLElement;
+      const ft = new FloatingText(container);
+      ft.add(1, 'ore', 5, at);
+
+      ft.update(0.05, toScreen, anchor, 420);
+      expect(ft.el.style.opacity).toBe('1.000');
+      expect(ft.el.style.visibility).toBe('visible');
+
+      ft.update(0.05, toScreen, anchor, 1100);
+      expect(Number(ft.el.style.opacity)).toBeCloseTo(0.5, 2);
+      expect(ft.el.style.visibility).toBe('visible');
+
+      ft.update(0.05, toScreen, anchor, 1300);
+      expect(ft.el.style.opacity).toBe('0.000');
+      expect(ft.el.style.visibility).toBe('hidden');
+    } finally {
+      Object.defineProperty(globalThis, 'document', { value: prevDoc, configurable: true });
+    }
   });
 });

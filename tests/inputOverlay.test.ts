@@ -147,4 +147,123 @@ describe('gamepad overlay precedence', () => {
     input.pollGamepad(0.016);
     expect(doc.activeElement).toBe(bootBtn);
   });
+
+  it('triggers Research on LT and deploys an outpost on the nearest large rock on R3', () => {
+    const state = newGame(5);
+    const fs = state.run.ships[0]!;
+    state.run.rocks = [
+      {
+        id: 10,
+        kind: 'ore',
+        size: 1,
+        pos: { x: fs.pos.x + 20, z: fs.pos.z },
+        vel: { x: 0, z: 0 },
+        radius: 15,
+        hp: 10,
+        maxHp: 10,
+        units: 10,
+        belt: 0,
+      },
+      {
+        id: 20,
+        kind: 'ore',
+        size: 0,
+        pos: { x: fs.pos.x + 80, z: fs.pos.z },
+        vel: { x: 0, z: 0 },
+        radius: 30,
+        hp: 30,
+        maxHp: 30,
+        units: 30,
+        belt: 0,
+      },
+      {
+        id: 30,
+        kind: 'ice',
+        size: 0,
+        pos: { x: fs.pos.x + 300, z: fs.pos.z },
+        vel: { x: 0, z: 0 },
+        radius: 30,
+        hp: 30,
+        maxHp: 30,
+        units: 30,
+        belt: 0,
+      },
+    ];
+    const { input, sent, research } = mount(state);
+
+    setPad([]);
+    input.pollGamepad(0.016);
+    setPad([PAD.LT]);
+    input.pollGamepad(0.016);
+    expect(research()).toBe(1);
+
+    setPad([]);
+    input.pollGamepad(0.016);
+    setPad([PAD.R3]);
+    input.pollGamepad(0.016);
+    expect(sent).toEqual([{ t: 'deployOutpost', rockId: 20 }]);
+  });
+
+  it('steps a focused range slider with D-pad Left/Right instead of moving focus away', () => {
+    const { input, hud } = mount(newGame(5));
+    const doc = document as unknown as {
+      createElement: (tag: string) => FakeEl;
+      body: FakeEl;
+      activeElement: FakeEl | null;
+    };
+    const modal = doc.createElement('div');
+    modal.className = 'modal';
+    const beforeBtn = doc.createElement('button');
+    const slider = doc.createElement('input');
+    slider.type = 'range';
+    slider.min = '0';
+    slider.max = '1';
+    slider.step = '0.25';
+    slider.value = '0.5';
+    const afterBtn = doc.createElement('button');
+    modal.append(beforeBtn, slider, afterBtn);
+    doc.body.append(modal);
+    hud.menu.open = true;
+
+    const events: string[] = [];
+    slider.addEventListener('input', () => events.push(`input:${slider.value}`));
+    slider.addEventListener('change', () => events.push(`change:${slider.value}`));
+    slider.focus();
+
+    setPad([]);
+    input.pollGamepad(0.016);
+    setPad([PAD.RIGHT]);
+    input.pollGamepad(0.016);
+    expect(doc.activeElement).toBe(slider);
+    expect(slider.value).toBe('0.75');
+    expect(events).toEqual(['input:0.75', 'change:0.75']);
+
+    // Stepping up to max clamps at 1; stepping further does not emit extra events.
+    setPad([]);
+    input.pollGamepad(0.016);
+    setPad([PAD.RIGHT]);
+    input.pollGamepad(0.016);
+    expect(slider.value).toBe('1');
+    events.length = 0;
+    setPad([]);
+    input.pollGamepad(0.016);
+    setPad([PAD.RIGHT]);
+    input.pollGamepad(0.016);
+    expect(slider.value).toBe('1');
+    expect(events).toEqual([]);
+
+    // Stepping left decrements cleanly, while Down still moves focus to the next control.
+    setPad([]);
+    input.pollGamepad(0.016);
+    setPad([PAD.LEFT]);
+    input.pollGamepad(0.016);
+    expect(slider.value).toBe('0.75');
+    expect(doc.activeElement).toBe(slider);
+
+    setPad([]);
+    input.pollGamepad(0.016);
+    setPad([PAD.DOWN]);
+    input.pollGamepad(0.016);
+    expect(doc.activeElement).toBe(afterBtn);
+  });
 });

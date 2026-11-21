@@ -11,6 +11,7 @@ import type { SimIndex } from '../sim/index';
 import { isAlive, shipStats } from '../sim/ships';
 import type { Fitted, GameState, Rock, Ship } from '../sim/types';
 import { buildFittings, fitLayout, type FitLayout, sameFit, snapshotFit } from './fittings';
+import { labelOpacity } from './labels';
 import { additive, flat, glowTexture } from './util';
 import { palette, paletteGeneration } from './activePalette';
 
@@ -87,6 +88,7 @@ interface Visual {
   body: THREE.Group;
   /** The slots the attachments were built from; compared each frame, rebuilt on change. */
   fit: (Fitted | null)[];
+  laserVariant: 'focused' | 'wide';
   fittings: THREE.Group;
   layout: FitLayout;
   flame: THREE.Mesh;
@@ -113,8 +115,26 @@ const shieldGeo = flat(new THREE.CircleGeometry(1, 40));
 const selectGeo = flat(new THREE.RingGeometry(0.92, 1, 48));
 // Shared by every ship and never disposed. `cargoBarMat` re-colours in place on palette switches.
 const barBgMat = new THREE.MeshBasicMaterial({ color: 0x0b1424, transparent: true, opacity: 0.8, depthWrite: false });
-const cargoBarMat = new THREE.MeshBasicMaterial({ color: palette().resource.ore, depthWrite: false });
+const cargoBarMat = new THREE.MeshBasicMaterial({
+  color: palette().resource.ore,
+  transparent: true,
+  opacity: 1,
+  depthWrite: false,
+});
 const beamGlowMat = additive(0xff5e30, 0.42);
+const wideBeamGlowMat = additive(0x9b3dff, 0.44);
+
+/** Picks a ship's dominant laser variant from its fitted slots (tier-weighted; defaults to `'focused'`). */
+export function dominantLaserVariant(slots: readonly (Fitted | null)[]): 'focused' | 'wide' {
+  let focused = 0;
+  let wide = 0;
+  for (const s of slots) {
+    if (!s || s.type !== 'laser') continue;
+    if (s.variant === 'wide') wide += s.tier;
+    else focused += s.tier;
+  }
+  return wide > focused ? 'wide' : 'focused';
+}
 
 export class ShipView {
   readonly group = new THREE.Group();
@@ -127,9 +147,16 @@ export class ShipView {
    */
   private flameMat = additive(0xff8a3a, 0.9);
   private beamMat = additive(0xff905c, 1);
+  private wideBeamMat = additive(0xd46bff, 1);
   private tipMat = new THREE.SpriteMaterial({
     map: glowTexture,
     color: 0xffc28e,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  });
+  private wideTipMat = new THREE.SpriteMaterial({
+    map: glowTexture,
+    color: 0xf0b8ff,
     blending: THREE.AdditiveBlending,
     depthWrite: false,
   });
@@ -181,16 +208,20 @@ export class ShipView {
     root.add(select);
 
     const barBg = new THREE.Mesh(barPlane, barBgMat);
-    const hpBar = new THREE.Mesh(barPlane, new THREE.MeshBasicMaterial({ color: pal.ok, depthWrite: false }));
+    const hpBar = new THREE.Mesh(
+      barPlane,
+      new THREE.MeshBasicMaterial({ color: pal.ok, transparent: true, opacity: 1, depthWrite: false }),
+    );
     const cargoBar = new THREE.Mesh(barPlane, cargoBarMat);
     for (const b of [barBg, hpBar, cargoBar]) {
       b.renderOrder = 20;
       root.add(b);
     }
 
-    const beam = new THREE.Mesh(unitPlane, this.beamMat);
-    const beamGlow = new THREE.Mesh(unitPlane, beamGlowMat);
-    const tip = new THREE.Sprite(this.tipMat);
+    const laserVariant = dominantLaserVariant(ship.slots);
+    const beam = new THREE.Mesh(unitPlane, laserVariant === 'wide' ? this.wideBeamMat : this.beamMat);
+    const beamGlow = new THREE.Mesh(unitPlane, laserVariant === 'wide' ? wideBeamGlowMat : beamGlowMat);
+    const tip = new THREE.Sprite(laserVariant === 'wide' ? this.wideTipMat : this.tipMat);
     for (const o of [beam, beamGlow, tip]) {
       o.visible = false;
       o.renderOrder = 15;
@@ -202,6 +233,7 @@ export class ShipView {
       root,
       body,
       fit: snapshotFit(ship.slots),
+      laserVariant,
       fittings,
       layout,
       flame,
@@ -222,6 +254,10 @@ export class ShipView {
   private refit(v: Visual, ship: Ship): void {
     v.body.remove(v.fittings);
     v.fit = snapshotFit(ship.slots);
+    v.laserVariant = dominantLaserVariant(ship.slots);
+    v.beam.material = v.laserVariant === 'wide' ? this.wideBeamMat : this.beamMat;
+    v.beamGlow.material = v.laserVariant === 'wide' ? wideBeamGlowMat : beamGlowMat;
+    v.tip.material = v.laserVariant === 'wide' ? this.wideTipMat : this.tipMat;
     v.layout = fitLayout(ship.slots, HULLS[ship.hullId].size);
     v.fittings = buildFittings(v.layout);
     v.body.add(v.fittings);
@@ -260,6 +296,7 @@ export class ShipView {
     alwaysBars: boolean,
     motion = 1,
     index?: SimIndex,
+    halfH = 0,
   ): { x: number; z: number; ship: Ship }[] {
     const { run, profile } = state;
     const seen = this.seen;
@@ -267,6 +304,9 @@ export class ShipView {
     const hits = this.hits;
     hits.length = 0;
     const motionK = Math.min(1, Math.max(0.35, motion));
+    const barAlpha = 1 - labelOpacity(halfH);
+    barBgMat.opacity = 0.8 * barAlpha;
+    cargoBarMat.opacity = barAlpha;
     // Share the sim's rock map when available; otherwise fall back to a reused
     // map filled only on frames where some ship is actually firing.
     let rockById: ReadonlyMap<number, Rock>;
@@ -281,6 +321,8 @@ export class ShipView {
     this.flameMat.color.setHex(0xff8a3a).multiplyScalar(this.glow);
     this.beamMat.color.setHex(0xff905c).multiplyScalar(this.glow);
     this.tipMat.color.setHex(0xffc28e).multiplyScalar(this.glow);
+    this.wideBeamMat.color.setHex(0xd46bff).multiplyScalar(this.glow);
+    this.wideTipMat.color.setHex(0xf0b8ff).multiplyScalar(this.glow);
     const pal = palette();
     if (this.paletteGen !== paletteGeneration()) {
       this.paletteGen = paletteGeneration();
@@ -331,7 +373,7 @@ export class ShipView {
       v.select.visible = selected;
       const hullF = Math.max(0, ship.hull / st.maxHull);
       const cargoF = Math.min(1, walletTotal(ship.cargo) / st.cargoCap);
-      const showBars = alwaysBars || selected || hullF < 0.999 || cargoF > 0.01;
+      const showBars = barAlpha > 0 && (alwaysBars || selected || hullF < 0.999 || cargoF > 0.01);
       v.barBg.visible = v.hpBar.visible = v.cargoBar.visible = showBars;
       if (selected || showBars) {
         const ringR = Math.max(h.size * 1.9 + 4 * wpp, 14 * wpp);
@@ -348,9 +390,9 @@ export class ShipView {
           v.barBg.scale.set(bw + 2 * wpp, 1, bh * 2 + 3 * wpp);
           v.hpBar.position.set(-bw / 2, 2, -by);
           v.hpBar.scale.set(bw * hullF, 1, bh);
-          (v.hpBar.material as THREE.MeshBasicMaterial).color.setHex(
-            hullF > 0.5 ? pal.ok : hullF > 0.25 ? pal.warn : pal.bad,
-          );
+          const hpMat = v.hpBar.material as THREE.MeshBasicMaterial;
+          hpMat.color.setHex(hullF > 0.5 ? pal.ok : hullF > 0.25 ? pal.warn : pal.bad);
+          hpMat.opacity = barAlpha;
           v.cargoBar.position.set(-bw / 2, 2, -by + bh + wpp);
           v.cargoBar.scale.set(Math.max(0.0001, bw * cargoF), 1, bh);
         }
@@ -374,15 +416,18 @@ export class ShipView {
           1 +
           (Math.sin(time * 73 + ship.id * 2.7) * 0.55 + Math.sin(time * 121 + ship.id * 5.1) * 0.45) *
             (0.05 + 0.05 * motionK);
+        const widthScale = (v.laserVariant === 'wide' ? 1.45 : 1) * (1 + Math.max(0, st.laserTier - 1) * 0.22);
         v.beam.position.set(mx, 18, mz);
         v.beam.rotation.y = ang;
-        v.beam.scale.set(L, 1, Math.max(2, 2.9 * wpp) * pulse * noise);
+        v.beam.scale.set(L, 1, Math.max(2, 2.9 * wpp) * widthScale * pulse * noise);
         v.beamGlow.position.set(mx, 17, mz);
         v.beamGlow.rotation.y = ang;
-        v.beamGlow.scale.set(L, 1, Math.max(6.2, 10 * wpp) * (0.9 + 0.14 * pulse) * (0.92 + 0.08 * noise));
+        v.beamGlow.scale.set(L, 1, Math.max(6.2, 10 * wpp) * widthScale * (0.9 + 0.14 * pulse) * (0.92 + 0.08 * noise));
         v.tip.position.set(tx, 22, tz);
         const tipPulse = 1 + Math.sin(time * 62 + ship.id * 1.7) * (0.06 + 0.08 * motionK);
-        v.tip.scale.setScalar(Math.max(21, 32 * wpp) * tipPulse * (0.9 + Math.random() * 0.2 * motionK));
+        v.tip.scale.setScalar(
+          Math.max(21, 32 * wpp) * (0.85 + 0.15 * widthScale) * tipPulse * (0.9 + Math.random() * 0.2 * motionK),
+        );
         v.beam.visible = v.beamGlow.visible = v.tip.visible = true;
         hits.push({ x: tx, z: tz, ship });
       } else {

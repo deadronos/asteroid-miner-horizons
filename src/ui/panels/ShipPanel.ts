@@ -15,8 +15,13 @@ import { isDocked, refitBlock, repairCost, scrapValue, slotCost, upgradeCost } f
 import { applySystemStats } from '../../sim/modifiers';
 import { findShip, isAlive, isFlagship, selectedShip, shipStats } from '../../sim/ships';
 import type { Fitted, GameState, Ship } from '../../sim/types';
+import { confirmAction } from '../confirm';
 import { Panel, bar, h, setBlocked, setDisabled, setText, slotRow } from '../dom';
 import type { PanelCtx } from './context';
+
+/** Tooltip defining every abbreviation on the ship stat summary line. */
+export const STAT_LEGEND =
+  'SPD: max speed · DPS: mining laser damage/sec · RNG: mining beam range · MAG: debris magnet range · ARM: hull damage reduction';
 
 /** One `<option>` of an empty slot's install select. */
 export interface InstallOption {
@@ -110,7 +115,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       const shield = bar('shield');
       const cargo = bar('cargo');
       const cargoDetail = h('div', { class: 'dim small' });
-      const stats = h('div', { class: 'dim small' });
+      const stats = h('div', { class: 'dim small', title: STAT_LEGEND });
 
       const dockBtn = h('button', { text: 'Dock & unload', onclick: () => send({ t: 'dock', shipId: id }) });
       const repairBtn = h('button', { onclick: () => send({ t: 'repair', shipId: id }) });
@@ -119,8 +124,16 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         const scrap = h('button', {
           text: 'Scrap',
           onclick: () => {
-            if (!ctx.settings.value.confirmDestructive || confirm(`Scrap ${ship0.name} for half its value?`))
+            if (!ctx.settings.value.confirmDestructive) {
               send({ t: 'scrap', shipId: id });
+              return;
+            }
+            void confirmAction(`Scrap ${ship0.name} for half its value?`, {
+              title: 'Scrap ship',
+              confirmLabel: 'Scrap',
+            }).then((ok) => {
+              if (ok) send({ t: 'scrap', shipId: id });
+            });
           },
         });
         actions.append(scrap);

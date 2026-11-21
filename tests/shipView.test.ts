@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PALETTES } from '../src/data/palette';
 import { setColourVision } from '../src/render/activePalette';
 import { FxView } from '../src/render/fxView';
-import { ShipView } from '../src/render/shipView';
+import { ShipView, dominantLaserVariant } from '../src/render/shipView';
 import { newGame } from '../src/sim/create';
 import { SimIndex } from '../src/sim/index';
 import { makeShip } from '../src/sim/ships';
@@ -339,5 +339,64 @@ describe('ShipView GPU disposal', () => {
     index.rebuild(state);
     fx.consume(state, [], DT, () => true, index);
     expect(emitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('fades ship status bars across map-zoom transition and hides them at map zoom', () => {
+    const { state, view, a } = setup();
+    const pa = partsOf(view, a.id);
+
+    // Play zoom (halfH <= 900): fully opaque and visible when alwaysBars is on.
+    view.update(state, 1, DT, 1, true, 1, undefined, 420);
+    expect(pa.barBg.visible).toBe(true);
+    expect(pa.hpBar.visible).toBe(true);
+    expect((pa.hpBar.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(1, 3);
+    expect((pa.cargoBar.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(1, 3);
+
+    // Mid-transition (halfH = 1100): faded to 50%.
+    view.update(state, 2, DT, 2, true, 1, undefined, 1100);
+    expect(pa.barBg.visible).toBe(true);
+    expect((pa.hpBar.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(0.5, 3);
+    expect((pa.cargoBar.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(0.5, 3);
+    expect((pa.barBg.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(0.4, 3);
+
+    // Map zoom (halfH >= 1300): cleanly hidden.
+    view.update(state, 3, DT, 4, true, 1, undefined, 1300);
+    expect(pa.barBg.visible).toBe(false);
+    expect(pa.hpBar.visible).toBe(false);
+    expect(pa.cargoBar.visible).toBe(false);
+  });
+
+  it('tints and scales mining beams by dominant laser variant and tier', () => {
+    const { state, view, ship } = setupBeam();
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+    // Default focused T1 beam.
+    expect(dominantLaserVariant(ship.slots)).toBe('focused');
+    view.update(state, 1, DT, 1, false);
+    const p = partsOf(view, ship.id);
+    const focusedColor = colorOf(p.beam).getHex();
+    const focusedWidthT1 = p.beam.scale.z;
+
+    // Upgrade to wide T3: beam switches to violet/magenta and widens.
+    ship.slots[0] = { type: 'laser', variant: 'wide', tier: 3 };
+    expect(dominantLaserVariant(ship.slots)).toBe('wide');
+    view.update(state, 1, DT, 1, false);
+    expect(colorOf(p.beam).getHex()).not.toBe(focusedColor);
+    expect(p.beam.scale.z).toBeGreaterThan(focusedWidthT1 * 1.8);
+  });
+
+  it('emits dock transfer burst particles on dock fx events', () => {
+    const { state, view, a } = setup();
+    const container = { append: () => {} } as unknown as HTMLElement;
+    const fx = new FxView(container, view);
+    const emitted: number[] = [];
+    vi.spyOn(fx.particles, 'emit').mockImplementation((_x, _z, col) => {
+      emitted.push(col.getHex());
+    });
+
+    state.out.fx.push({ t: 'dock', pos: { x: 10, z: 20 }, shipId: a.id, value: 40 });
+    fx.consume(state, [], DT, () => true);
+
+    expect(emitted).toEqual([PALETTES.default.ok, 0xffffff]);
   });
 });

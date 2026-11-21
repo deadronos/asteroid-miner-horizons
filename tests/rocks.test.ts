@@ -3,12 +3,14 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { PALETTES } from '../src/data/palette';
 import { setColourVision } from '../src/render/activePalette';
 import {
+  MAX_ROCK_Y,
   ROCK_POOLS,
   ROCK_TINT,
   RockView,
   rockMaterial,
   rockShapeIndex,
   rockStyleOf,
+  rockYScale,
   syncRockTints,
   traitIndex,
 } from '../src/render/rocks';
@@ -358,5 +360,27 @@ describe('RockView partial GPU uploads', () => {
     view.update([survivor], [], 1, VIEW, index);
     expect(hasSpy).toHaveBeenCalled();
     expect((view as unknown as { lastHp: Map<number, number> }).lastHp.size).toBe(1);
+  });
+
+  it('clamps asteroid vertical thickness so large rocks stay below y = 0 regardless of tumble', () => {
+    expect(rockYScale(10)).toBeCloseTo(8, 5);
+    expect(rockYScale(40)).toBe(MAX_ROCK_Y);
+
+    const view = new RockView();
+    const huge = { ...rock(0, 'ore'), radius: 50 };
+    const mat = new THREE.Matrix4();
+    const v = new THREE.Vector3();
+    for (let t = 0; t < 10; t += 1.3) {
+      view.update([huge], [], t, VIEW);
+      const pool = view.group.children[0] as THREE.InstancedMesh;
+      pool.getMatrixAt(0, mat);
+      const pos = pool.geometry.getAttribute('position') as THREE.BufferAttribute;
+      let maxY = -Infinity;
+      for (let i = 0; i < pos.count; i++) {
+        v.set(pos.getX(i), pos.getY(i), pos.getZ(i)).applyMatrix4(mat);
+        if (v.y > maxY) maxY = v.y;
+      }
+      expect(maxY).toBeLessThanOrEqual(0);
+    }
   });
 });

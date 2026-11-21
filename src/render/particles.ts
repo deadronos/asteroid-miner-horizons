@@ -6,6 +6,30 @@
 import * as THREE from 'three';
 
 const CAP = 6000;
+/** Base particle sprite size in CSS pixels (scaled by DPR via `setPixelRatio`). */
+const BASE_SIZE = 5;
+
+let sparkTex: THREE.Texture | null | undefined;
+
+/** Crisp-core soft radial sprite so particles read as glowing sparks rather than hard squares. */
+function sparkTexture(): THREE.Texture | null {
+  if (sparkTex !== undefined) return sparkTex;
+  if (typeof document === 'undefined') return (sparkTex = null);
+  const c = document.createElement('canvas');
+  c.width = c.height = 32;
+  const g = c.getContext?.('2d');
+  if (!g) return (sparkTex = null);
+  const grad = g.createRadialGradient(16, 16, 0, 16, 16, 16);
+  grad.addColorStop(0, 'rgba(255,255,255,1)');
+  grad.addColorStop(0.35, 'rgba(255,255,255,0.85)');
+  grad.addColorStop(0.7, 'rgba(255,255,255,0.25)');
+  grad.addColorStop(1, 'rgba(255,255,255,0)');
+  g.fillStyle = grad;
+  g.fillRect(0, 0, 32, 32);
+  const t = new THREE.CanvasTexture(c);
+  t.colorSpace = THREE.SRGBColorSpace;
+  return (sparkTex = t);
+}
 
 export class Particles {
   readonly points: THREE.Points;
@@ -30,8 +54,9 @@ export class Particles {
     this.points = new THREE.Points(
       geo,
       new THREE.PointsMaterial({
-        size: 3,
+        size: BASE_SIZE,
         sizeAttenuation: false,
+        map: sparkTexture(),
         vertexColors: true,
         transparent: true,
         blending: THREE.AdditiveBlending,
@@ -41,6 +66,11 @@ export class Particles {
     this.points.frustumCulled = false;
     this.points.renderOrder = 10;
     geo.setDrawRange(0, 0);
+  }
+
+  /** Scales particle sprite size with the renderer's pixel ratio. */
+  setPixelRatio(dpr: number): void {
+    (this.points.material as THREE.PointsMaterial).size = BASE_SIZE * Math.max(1, dpr);
   }
 
   /** How many particles are alive (for tests and debugging). */

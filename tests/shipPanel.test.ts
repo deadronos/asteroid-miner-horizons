@@ -1,12 +1,20 @@
 import { afterEach, describe, expect, it } from 'vitest';
 import { COMPONENTS, COMPONENT_IDS, variantDef, type ComponentId, type VariantId } from '../src/data/components';
 import { formatCost } from '../src/data/resources';
-import type { SettingsStore } from '../src/settings';
+import { SettingsStore } from '../src/settings';
 import { newGame } from '../src/sim/create';
 import { halve, investedCost } from '../src/sim/economy';
 import { makeShip, flagship } from '../src/sim/ships';
-import { autoToggleCommand, createFleetPanel, fleetControls } from '../src/ui/panels/FleetPanel';
-import { installOptions, parseInstallValue, removeRefundTitle, shipPanelKey } from '../src/ui/panels/ShipPanel';
+import { autoToggleCommand, createFleetPanel, fleetControls, outpostHintText } from '../src/ui/panels/FleetPanel';
+import {
+  STAT_LEGEND,
+  createShipPanel,
+  installOptions,
+  parseInstallValue,
+  removeRefundTitle,
+  shipPanelKey,
+} from '../src/ui/panels/ShipPanel';
+import { memStorage } from './memStorage';
 import { resetDom } from './domStub';
 
 // The refit panel's empty slot offers every (component, variant) pair; these
@@ -158,5 +166,34 @@ describe('fleet row controls', () => {
     expect(mode?.textContent).toBe('ASSIST');
     expect(mode?.getAttribute('aria-pressed')).toBe('false');
     expect(repair?.getAttribute('aria-pressed')).toBe('false');
+  });
+
+  it('adapts the outpost hint to live keybinds, touch and gamepad modes (#273)', () => {
+    expect(outpostHintText(['KeyO', null], 'pointer')).toContain('press O over it');
+    expect(outpostHintText(['KeyB', null], 'pointer')).toContain('press B over it');
+    expect(outpostHintText([null, null], 'pointer')).toContain('press the outpost key over it');
+    expect(outpostHintText(['KeyO', null], 'touch')).toContain('tap Outpost');
+    expect(outpostHintText(['KeyO', null], 'gamepad')).toContain('press R3');
+  });
+
+  it('adds a stat legend tooltip defining SPD/DPS/RNG/MAG/ARM on ShipPanel (#273)', () => {
+    resetDom();
+    const state = newGame(2);
+    const root = document.createElement('div');
+    const panel = createShipPanel(root, {
+      getState: () => state,
+      send: () => {},
+      settings: new SettingsStore(memStorage()),
+    });
+    panel.refresh();
+
+    const divs = [...root.querySelectorAll('div')];
+    const statLine = divs.find((d) => d.textContent?.includes('SPD') && d.textContent?.includes('ARM'));
+    expect(statLine?.title).toBe(STAT_LEGEND);
+    expect(STAT_LEGEND).toContain('SPD:');
+    expect(STAT_LEGEND).toContain('DPS:');
+    expect(STAT_LEGEND).toContain('RNG:');
+    expect(STAT_LEGEND).toContain('MAG:');
+    expect(STAT_LEGEND).toContain('ARM:');
   });
 });
