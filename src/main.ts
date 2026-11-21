@@ -195,7 +195,7 @@ function step(now: number): void {
   renderAcc += dt;
   const busy = renderNow || renderer.busy || state.out.fx.length > 0 || (now - lastInput) / 1000 < INPUT_GRACE;
   if (renderDue(paused, renderAcc, busy)) {
-    renderer.render(state, Math.min(0.25, renderAcc), input.moveMark);
+    renderer.render(state, Math.min(0.25, renderAcc), input.moveMark, session.sim);
     if (s.quality === 'auto' && !paused) {
       const level = autoQuality.update(dt * 1000);
       if (level !== null) renderer.applySettings(s, level);

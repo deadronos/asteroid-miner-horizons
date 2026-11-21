@@ -7,6 +7,7 @@ import * as THREE from 'three';
 import type { Vec2 } from '../core/vec';
 import { HULLS, type HullId } from '../data/hulls';
 import { walletTotal } from '../data/resources';
+import type { SimIndex } from '../sim/index';
 import { isAlive, shipStats } from '../sim/ships';
 import type { Fitted, GameState, Rock, Ship } from '../sim/types';
 import { buildFittings, fitLayout, type FitLayout, sameFit, snapshotFit } from './fittings';
@@ -137,6 +138,7 @@ export class ShipView {
   /** Per-frame scratch, reused so `update` allocates no collections. */
   private seen = new Set<number>();
   private rockById = new Map<number, Rock>();
+  private hits: { x: number; z: number; ship: Ship }[] = [];
   private paletteGen = -1;
 
   private geo(id: HullId): THREE.BufferGeometry {
@@ -257,17 +259,25 @@ export class ShipView {
     wpp: number,
     alwaysBars: boolean,
     motion = 1,
+    index?: SimIndex,
   ): { x: number; z: number; ship: Ship }[] {
     const { run, profile } = state;
     const seen = this.seen;
     seen.clear();
-    const hits: { x: number; z: number; ship: Ship }[] = [];
+    const hits = this.hits;
+    hits.length = 0;
     const motionK = Math.min(1, Math.max(0.35, motion));
-    // Beam targets are looked up through a reused map, filled only on frames
-    // where some ship is actually firing.
-    const rockById = this.rockById;
-    rockById.clear();
-    if (run.ships.some((s) => s.beamOn && s.beamTargetId != null)) for (const r of run.rocks) rockById.set(r.id, r);
+    // Share the sim's rock map when available; otherwise fall back to a reused
+    // map filled only on frames where some ship is actually firing.
+    let rockById: ReadonlyMap<number, Rock>;
+    if (index && index.rockById.size === run.rocks.length) {
+      rockById = index.rockById;
+    } else {
+      this.rockById.clear();
+      if (run.ships.some((s) => s.beamOn && s.beamTargetId != null))
+        for (const r of run.rocks) this.rockById.set(r.id, r);
+      rockById = this.rockById;
+    }
     this.flameMat.color.setHex(0xff8a3a).multiplyScalar(this.glow);
     this.beamMat.color.setHex(0xff905c).multiplyScalar(this.glow);
     this.tipMat.color.setHex(0xffc28e).multiplyScalar(this.glow);
@@ -297,48 +307,54 @@ export class ShipView {
         v.beam.visible = v.beamGlow.visible = v.tip.visible = false;
         continue;
       }
-      const st = shipStats(ship, profile);
+      const st = index?.stats.get(ship.id) ?? shipStats(ship, profile);
       const h = HULLS[ship.hullId];
       v.root.position.set(ship.pos.x, 20, ship.pos.z);
       v.body.rotation.y = -ship.angle;
 
-      const flick = 0.75 + Math.random() * 0.5;
       v.flame.visible = ship.thrusting;
-      v.flame.scale.set(flick * v.layout.flameLength, 1, (0.8 + Math.random() * 0.3) * v.layout.flameWidth);
+      if (ship.thrusting) {
+        const flick = 0.75 + Math.random() * 0.5;
+        v.flame.scale.set(flick * v.layout.flameLength, 1, (0.8 + Math.random() * 0.3) * v.layout.flameWidth);
+      }
 
       if (ship.shield < v.shieldPrev - 0.5) v.hitFlash = 1;
       v.shieldPrev = ship.shield;
       v.hitFlash = Math.max(0, v.hitFlash - dt * 3);
       const sf = st.maxShield > 0 ? ship.shield / st.maxShield : 0;
       // Hulls without a shield still flash a bubble on impact.
-      v.shield.visible = sf > 0.02 || v.hitFlash > 0;
-      (v.shield.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.1 * sf + 0.4 * v.hitFlash;
+      const showShield = sf > 0.02 || v.hitFlash > 0;
+      v.shield.visible = showShield;
+      if (showShield) (v.shield.material as THREE.MeshBasicMaterial).opacity = 0.05 + 0.1 * sf + 0.4 * v.hitFlash;
 
       const selected = ship.id === run.selectedId;
       v.select.visible = selected;
-      const ringR = Math.max(h.size * 1.9 + 4 * wpp, 14 * wpp);
-      v.select.scale.setScalar(ringR * (1 + Math.sin(time * 4) * 0.03));
-      (v.select.material as THREE.MeshBasicMaterial).color.setHex(
-        h.role === 'flagship' ? palette().flagship : palette().fleet,
-      );
-
-      // Status bars: hull on top, cargo below; ~34 px wide regardless of zoom.
-      const bw = 34 * wpp;
-      const bh = 3 * wpp;
-      const by = ringR + 8 * wpp;
       const hullF = Math.max(0, ship.hull / st.maxHull);
       const cargoF = Math.min(1, walletTotal(ship.cargo) / st.cargoCap);
-      v.barBg.position.set(-bw / 2 - wpp, 1, -by + (bh + wpp) / 2);
-      v.barBg.scale.set(bw + 2 * wpp, 1, bh * 2 + 3 * wpp);
-      v.hpBar.position.set(-bw / 2, 2, -by);
-      v.hpBar.scale.set(bw * hullF, 1, bh);
-      (v.hpBar.material as THREE.MeshBasicMaterial).color.setHex(
-        hullF > 0.5 ? palette().ok : hullF > 0.25 ? palette().warn : palette().bad,
-      );
-      v.cargoBar.position.set(-bw / 2, 2, -by + bh + wpp);
-      v.cargoBar.scale.set(Math.max(0.0001, bw * cargoF), 1, bh);
       const showBars = alwaysBars || selected || hullF < 0.999 || cargoF > 0.01;
       v.barBg.visible = v.hpBar.visible = v.cargoBar.visible = showBars;
+      if (selected || showBars) {
+        const ringR = Math.max(h.size * 1.9 + 4 * wpp, 14 * wpp);
+        if (selected) {
+          v.select.scale.setScalar(ringR * (1 + Math.sin(time * 4) * 0.03));
+          (v.select.material as THREE.MeshBasicMaterial).color.setHex(h.role === 'flagship' ? pal.flagship : pal.fleet);
+        }
+        if (showBars) {
+          // Status bars: hull on top, cargo below; ~34 px wide regardless of zoom.
+          const bw = 34 * wpp;
+          const bh = 3 * wpp;
+          const by = ringR + 8 * wpp;
+          v.barBg.position.set(-bw / 2 - wpp, 1, -by + (bh + wpp) / 2);
+          v.barBg.scale.set(bw + 2 * wpp, 1, bh * 2 + 3 * wpp);
+          v.hpBar.position.set(-bw / 2, 2, -by);
+          v.hpBar.scale.set(bw * hullF, 1, bh);
+          (v.hpBar.material as THREE.MeshBasicMaterial).color.setHex(
+            hullF > 0.5 ? pal.ok : hullF > 0.25 ? pal.warn : pal.bad,
+          );
+          v.cargoBar.position.set(-bw / 2, 2, -by + bh + wpp);
+          v.cargoBar.scale.set(Math.max(0.0001, bw * cargoF), 1, bh);
+        }
+      }
 
       // Mining beam: bright core + wide glow from ship to rock, with subtle
       // noise so it reads as energetic without overpowering the scene.

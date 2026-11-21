@@ -12,6 +12,7 @@ import { damp, type Vec2 } from '../core/vec';
 import { HULLS } from '../data/hulls';
 import { QUALITY, SHAKE_SCALE, type Settings } from '../settings';
 import { findRock } from '../sim/generate';
+import type { SimIndex } from '../sim/index';
 import { findShip, isAlive, selectedShip } from '../sim/ships';
 import type { GameState, Rock, Run, StarSystem } from '../sim/types';
 import { autoQualitySettings } from './autoQuality';
@@ -70,9 +71,15 @@ export class Renderer {
   private hazardView = new HazardView();
   private outpostView = new OutpostView();
   private explorationView = new ExplorationView();
-  /** The run being drawn this frame, read by the hoisted callbacks below so `render` allocates no closures. */
+  /** The run and optional sim index being drawn this frame, read by hoisted callbacks so `render` allocates no closures. */
   private curRun: Run | null = null;
-  private readonly rockOf = (id: number): Rock | undefined => (this.curRun ? findRock(this.curRun, id) : undefined);
+  private curIndex: SimIndex | null = null;
+  private readonly rockOf = (id: number): Rock | undefined => {
+    if (!this.curRun) return undefined;
+    if (this.curIndex && this.curIndex.rockById.size === this.curRun.rocks.length)
+      return this.curIndex.rockById.get(id);
+    return findRock(this.curRun, id);
+  };
   private readonly anchorOf = (id: number): Vec2 | null => {
     const s = this.curRun ? findShip(this.curRun, id) : undefined;
     return s && isAlive(s) ? s.pos : null;
@@ -175,9 +182,10 @@ export class Renderer {
     const automatic = s.quality === 'auto' ? autoQualitySettings(autoLevel) : null;
     const quality = automatic ? automatic.quality : s.quality === 'auto' ? 'high' : s.quality;
     const q = QUALITY[quality];
+    this.lowQuality = quality === 'low';
     this.gl.setPixelRatio(Math.min(window.devicePixelRatio, q.pixelRatioCap) * s.renderScale * (automatic?.scale ?? 1));
     this.bloomOn = q.bloom > 0;
-    this.viaComposer = useComposer(this.bloomOn, this.msaa > 0, this.contextAA);
+    this.viaComposer = useComposer(this.bloomOn, this.msaa > 0, this.contextAA, this.lowQuality);
     // Bloom off but still via the composer (runtime fallback, until reload): close to the canvas look, not identical.
     // The half-float buffer does not clamp per blend and PRESENT keeps hue above 1. The disabled bloom pass keeps
     // its targets allocated, which is deliberate for a state that lasts only until reload.
@@ -205,7 +213,6 @@ export class Renderer {
     this.fx.density = q.particles;
     this.shakeScale = SHAKE_SCALE[s.shake];
     this.alwaysBars = s.alwaysShowBars;
-    this.lowQuality = quality === 'low';
     this.fx.setQuality(this.lowQuality);
     this.syncMapPulse();
   }
@@ -303,7 +310,7 @@ export class Renderer {
     this.cam.toggleMap(sys);
   }
 
-  render(state: GameState, dt: number, moveMark: Vec2 | null): void {
+  render(state: GameState, dt: number, moveMark: Vec2 | null, index?: SimIndex): void {
     this.gl.info.reset();
     const { run } = state;
     const sys = run.system;
@@ -335,15 +342,16 @@ export class Renderer {
     this.streaks.update(w.stretch, v.x, v.z, v.halfW, v.halfH);
     this.flareGlow += ((run.hazards.flare?.phase === 'active' ? 1 : 0) - this.flareGlow) * (1 - damp(4, dt));
     this.system.update(sys, run.time, this.flareGlow);
-    this.rocks.update(run.rocks, run.pickups, run.time, v);
+    this.rocks.update(run.rocks, run.pickups, run.time, v, index);
     this.curRun = run;
+    this.curIndex = index ?? null;
     this.outpostView.update(run.automation.outposts, this.rockOf, run.time);
     this.explorationView.update(run);
     const wpp = this.wpp;
-    const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars, motionK);
+    const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars, motionK, index);
     this.hazardView.update(run.hazards, run.time, wpp);
 
-    if (this.fx.consume(state, hits, dt, this.onScreen)) this.follow = true;
+    if (this.fx.consume(state, hits, dt, this.onScreen, index)) this.follow = true;
     this.fx.update(dt, this.reducedMotion);
     this.updateMarkers(state, moveMark, wpp);
     this.setPlayfieldVisible(!w.hidden);

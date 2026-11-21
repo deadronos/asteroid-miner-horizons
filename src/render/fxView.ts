@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import type { Vec2 } from '../core/vec';
 import { HULLS } from '../data/hulls';
+import type { SimIndex } from '../sim/index';
 import { isAlive } from '../sim/ships';
 import type { GameState } from '../sim/types';
 import { Debris } from './debris';
@@ -17,6 +18,8 @@ import { palette } from './activePalette';
 
 /** A beam's hit point this frame, from `ShipView.update`. */
 export type BeamHit = { x: number; z: number; ship: { id: number; thrusting: boolean } };
+
+const col = new THREE.Color();
 
 export class FxView {
   readonly particles = new Particles();
@@ -59,9 +62,14 @@ export class FxView {
    * particles. `onScreen` gates shake to events the player can see. Returns
    * true when a warp fx arrived.
    */
-  consume(state: GameState, hits: BeamHit[], dt: number, onScreen: (p: Vec2) => boolean): boolean {
+  consume(
+    state: GameState,
+    hits: readonly BeamHit[],
+    dt: number,
+    onScreen: (p: Vec2) => boolean,
+    index?: SimIndex,
+  ): boolean {
     const P = this.particles;
-    const col = new THREE.Color();
     let warped = false;
     for (const fx of state.out.fx) {
       switch (fx.t) {
@@ -112,7 +120,8 @@ export class FxView {
       }
     }
     // Comets trail a pale tail opposite their velocity.
-    for (const r of state.run.rocks) {
+    const comets = index && index.rockById.size === state.run.rocks.length ? index.comets : state.run.rocks;
+    for (const r of comets) {
       if (!r.comet) continue;
       P.emit(r.pos.x, r.pos.z, col.setHex(palette().hazard), dt * 90, 60, 1.2, {
         dir: Math.atan2(-r.vel.z, -r.vel.x),

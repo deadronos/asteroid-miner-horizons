@@ -8,6 +8,7 @@ import { hash01 } from '../core/rng';
 import { RAW_RESOURCES, type RawResource } from '../data/resources';
 import type { RockTrait } from '../data/traits';
 import { TUNING } from '../data/tuning';
+import type { SimIndex } from '../sim/index';
 import type { Pickup, Rock } from '../sim/types';
 import { inView, type ViewRect } from './cull';
 import { rockGeometry, type RockStyle } from './util';
@@ -78,6 +79,13 @@ const p = new THREE.Vector3();
 const s = new THREE.Vector3();
 const c = new THREE.Color();
 
+/** Marks only the packed `[0, n)` instance range for GPU upload. */
+function uploadRange(attr: THREE.BufferAttribute, n: number): void {
+  attr.clearUpdateRanges();
+  attr.addUpdateRange(0, n * attr.itemSize);
+  attr.needsUpdate = true;
+}
+
 class InstancePool {
   mesh: THREE.InstancedMesh;
   /** Per-instance (damage 0..1, crack seed, self-glow), only when `withDamage`. */
@@ -106,6 +114,7 @@ class InstancePool {
     const mesh = new THREE.InstancedMesh(this.geo, this.mat, capacity);
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     mesh.setColorAt(0, c.set(0xffffff)); // allocate instanceColor
+    mesh.instanceColor!.setUsage(THREE.DynamicDrawUsage);
     mesh.frustumCulled = false;
     mesh.count = 0;
     this.parent.add(mesh);
@@ -122,10 +131,12 @@ class InstancePool {
 
   commit(n: number): void {
     this.mesh.count = n;
-    this.mesh.instanceMatrix.needsUpdate = true;
-    if (this.mesh.instanceColor) this.mesh.instanceColor.needsUpdate = true;
-    if (this.damage) this.damage.needsUpdate = true;
-    if (this.trait) this.trait.needsUpdate = true;
+    // An empty pool draws nothing, so skip uploading any attribute buffer.
+    if (n === 0) return;
+    uploadRange(this.mesh.instanceMatrix, n);
+    if (this.mesh.instanceColor) uploadRange(this.mesh.instanceColor, n);
+    if (this.damage) uploadRange(this.damage, n);
+    if (this.trait) uploadRange(this.trait, n);
   }
 }
 
@@ -303,6 +314,8 @@ export class RockView {
   /** Cosmetic hit tracking: last seen hp and when the rock last lost some. */
   private lastHp = new Map<number, number>();
   private hitAt = new Map<number, number>();
+  /** Scratch set for stale-hit pruning when no `SimIndex` is available. */
+  private liveIds = new Set<number>();
 
   constructor() {
     // Two shape pools per kind (`ore` 0–1, `ice` 2–3, `crystal` 4–5), each pair
@@ -341,7 +354,7 @@ export class RockView {
    * else is skipped, so a zoomed-in camera composes and uploads a handful of
    * matrices instead of the whole belt.
    */
-  update(rocks: readonly Rock[], pickups: readonly Pickup[], time: number, view: ViewRect): void {
+  update(rocks: readonly Rock[], pickups: readonly Pickup[], time: number, view: ViewRect, index?: SimIndex): void {
     if (this.paletteGen !== paletteGeneration()) this.syncPalette();
     crackTime.value = time;
     for (const b of this.buckets) b.length = 0;
@@ -355,7 +368,14 @@ export class RockView {
     }
     // Forget rocks that no longer exist (cracked or despawned).
     if (this.lastHp.size > rocks.length + 64) {
-      const live = new Set(rocks.map((r) => r.id));
+      let live: { has(id: number): boolean };
+      if (index && index.rockById.size === rocks.length) {
+        live = index.rockById;
+      } else {
+        this.liveIds.clear();
+        for (const r of rocks) this.liveIds.add(r.id);
+        live = this.liveIds;
+      }
       for (const id of this.lastHp.keys()) if (!live.has(id)) this.lastHp.delete(id);
       for (const id of this.hitAt.keys()) if (!live.has(id)) this.hitAt.delete(id);
     }

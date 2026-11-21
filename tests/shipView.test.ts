@@ -5,6 +5,7 @@ import { setColourVision } from '../src/render/activePalette';
 import { FxView } from '../src/render/fxView';
 import { ShipView } from '../src/render/shipView';
 import { newGame } from '../src/sim/create';
+import { SimIndex } from '../src/sim/index';
 import { makeShip } from '../src/sim/ships';
 import type { GameState, Ship } from '../src/sim/types';
 import { DT } from './helpers';
@@ -277,5 +278,66 @@ describe('ShipView GPU disposal', () => {
     fx.consume(state, [], DT, () => true);
 
     expect(emitted).toEqual([PALETTES.deutan.hazard, PALETTES.deutan.hazard]);
+  });
+
+  it('reuses SimIndex.rockById, SimIndex.stats and the scratch hits array', () => {
+    const { state, ship } = setupBeam();
+    const view = new ShipView();
+    const index = new SimIndex();
+    index.rebuild(state);
+
+    // Override cached maxHull in SimIndex so we can prove ShipView reads from it.
+    const cached = index.stats.get(ship.id)!;
+    cached.maxHull = ship.hull * 2;
+
+    const hits1 = view.update(state, 1, DT, 1, true, 1, index);
+    expect(hits1).toHaveLength(1);
+    // Internal rockById map was never populated when SimIndex provided rockById.
+    expect((view as unknown as { rockById: Map<number, unknown> }).rockById.size).toBe(0);
+    // hpBar width reflects 50% hull from the overridden SimIndex stats (bw = 34 * wpp).
+    expect(partsOf(view, ship.id).hpBar.scale.x).toBeCloseTo(17, 5);
+
+    const hits2 = view.update(state, 2, DT, 1, true, 1, index);
+    expect(hits2).toBe(hits1);
+  });
+
+  it('skips transform updates on hidden flame, select ring and status bars', () => {
+    const { state, view, a } = setup();
+    a.thrusting = false;
+    state.run.selectedId = -1;
+    const pa = partsOf(view, a.id);
+
+    pa.flame.scale.set(99, 99, 99);
+    pa.select.scale.set(88, 88, 88);
+    pa.barBg.scale.set(77, 77, 77);
+
+    view.update(state, 1, DT, 2, false);
+    expect(pa.flame.visible).toBe(false);
+    expect(pa.flame.scale.x).toBe(99);
+    expect(pa.select.visible).toBe(false);
+    expect(pa.select.scale.x).toBe(88);
+    expect(pa.barBg.visible).toBe(false);
+    expect(pa.barBg.scale.x).toBe(77);
+  });
+
+  it('iterates SimIndex.comets in FxView.consume instead of scanning all rocks', () => {
+    const { state, view } = setup();
+    const container = { append: () => {} } as unknown as HTMLElement;
+    const fx = new FxView(container, view);
+    const index = new SimIndex();
+    index.rebuild(state);
+
+    // Mutate comet flag on a rock after rebuild: SimIndex.comets is empty, so
+    // FxView using index.comets emits nothing while the fallback path would emit.
+    state.run.rocks[0]!.comet = true;
+    const emitSpy = vi.spyOn(fx.particles, 'emit').mockImplementation(() => {});
+
+    fx.consume(state, [], DT, () => true, index);
+    expect(emitSpy).not.toHaveBeenCalled();
+
+    // After rebuild, index.comets includes the comet and emits its tail.
+    index.rebuild(state);
+    fx.consume(state, [], DT, () => true, index);
+    expect(emitSpy).toHaveBeenCalledTimes(1);
   });
 });

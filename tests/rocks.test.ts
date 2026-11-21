@@ -15,7 +15,8 @@ import {
 import { rockGeometry } from '../src/render/util';
 import type { RawResource } from '../src/data/resources';
 import type { RockTrait } from '../src/data/traits';
-import type { Rock } from '../src/sim/types';
+import { SimIndex } from '../src/sim/index';
+import type { Pickup, Rock } from '../src/sim/types';
 
 // `util.ts` builds `glowTexture` at import time, which needs a canvas. Vitest
 // runs in the node env, so stub just enough of `document` before the imports
@@ -283,5 +284,79 @@ describe('RockView trait attribute', () => {
     expect(firstTrait(rock(0, 'ore', 'volatile'))).toBe(1);
     expect(firstTrait(rock(0, 'ore', 'dense'))).toBe(2);
     expect(firstTrait(rock(0, 'ore', 'magnetic'))).toBe(3);
+  });
+});
+
+const pickup = (id: number): Pickup => ({
+  id,
+  kind: 'ore',
+  amount: 5,
+  pos: { x: 0, z: 0 },
+  vel: { x: 0, z: 0 },
+  age: 0,
+});
+
+describe('RockView partial GPU uploads', () => {
+  it('sets partial updateRanges matching only the visible instance count', () => {
+    const view = new RockView();
+    // Three even-id ore rocks all land in pool 0; two pickups land in the pickup pool (index 6).
+    view.update([rock(0, 'ore'), rock(2, 'ore'), rock(4, 'ore')], [pickup(1), pickup(2)], 1, VIEW);
+
+    const orePool = view.group.children[0] as THREE.InstancedMesh;
+    expect(orePool.count).toBe(3);
+    expect(orePool.instanceMatrix.updateRanges).toEqual([{ start: 0, count: 3 * 16 }]);
+    expect(orePool.instanceColor!.updateRanges).toEqual([{ start: 0, count: 3 * 3 }]);
+    expect((orePool.geometry.getAttribute('aDamage') as THREE.BufferAttribute).updateRanges).toEqual([
+      { start: 0, count: 3 * 3 },
+    ]);
+    expect((orePool.geometry.getAttribute('aTrait') as THREE.BufferAttribute).updateRanges).toEqual([
+      { start: 0, count: 3 },
+    ]);
+
+    const pickupPool = view.group.children[6] as THREE.InstancedMesh;
+    expect(pickupPool.count).toBe(2);
+    expect(pickupPool.instanceMatrix.updateRanges).toEqual([{ start: 0, count: 2 * 16 }]);
+    expect(pickupPool.instanceColor!.updateRanges).toEqual([{ start: 0, count: 2 * 3 }]);
+  });
+
+  it('skips uploading attribute buffers when a pool has zero visible instances', () => {
+    const view = new RockView();
+    const orePool = view.group.children[0] as THREE.InstancedMesh;
+    const icePool = view.group.children[2] as THREE.InstancedMesh;
+    const dmg = orePool.geometry.getAttribute('aDamage') as THREE.BufferAttribute;
+    const trait = orePool.geometry.getAttribute('aTrait') as THREE.BufferAttribute;
+
+    const iceMatVer0 = icePool.instanceMatrix.version;
+    view.update([rock(0, 'ore')], [], 1, VIEW);
+    // Pool 2 stayed empty -> never uploaded.
+    expect(icePool.count).toBe(0);
+    expect(icePool.instanceMatrix.version).toBe(iceMatVer0);
+
+    // Now clear pool 0 -> count drops to 0 without bumping attribute versions.
+    const matVer = orePool.instanceMatrix.version;
+    const colVer = orePool.instanceColor!.version;
+    const dmgVer = dmg.version;
+    const traitVer = trait.version;
+    view.update([], [], 2, VIEW);
+    expect(orePool.count).toBe(0);
+    expect(orePool.instanceMatrix.version).toBe(matVer);
+    expect(orePool.instanceColor!.version).toBe(colVer);
+    expect(dmg.version).toBe(dmgVer);
+    expect(trait.version).toBe(traitVer);
+  });
+
+  it('prunes stale hit tracking using SimIndex.rockById when provided', () => {
+    const view = new RockView();
+    const initial = Array.from({ length: 80 }, (_, i) => rock(i, 'ore'));
+    view.update(initial, [], 0, VIEW);
+
+    const survivor = initial[0]!;
+    const index = new SimIndex();
+    index.rockById.set(survivor.id, survivor);
+    const hasSpy = vi.spyOn(index.rockById, 'has');
+
+    view.update([survivor], [], 1, VIEW, index);
+    expect(hasSpy).toHaveBeenCalled();
+    expect((view as unknown as { lastHp: Map<number, number> }).lastHp.size).toBe(1);
   });
 });
