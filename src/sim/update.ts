@@ -38,16 +38,6 @@ export interface TickInput {
   hazards?: HazardLevel;
 }
 
-/** Reused across ticks: the tick is not reentrant, so one context object avoids a per-tick allocation. */
-const TICK_CTX = {
-  state: null as unknown as GameState,
-  index: null as unknown as SimIndex,
-  dt: 0,
-  assists: DEFAULT_ASSISTS,
-  auto: DEFAULT_FLEET_AUTO,
-  hazards: 'off' as HazardLevel,
-};
-
 /** Applies and clears queued commands. Also used while paused so menus still work. */
 export function applyCommands(state: GameState, commands: Command[]): void {
   for (const c of commands) applyCommand(state, c);
@@ -93,32 +83,36 @@ export function tick(state: GameState, dt: number, input: TickInput, index: SimI
   index.rebuild(state);
   updateOutposts(state, index, dt);
 
-  TICK_CTX.state = state;
-  TICK_CTX.index = index;
-  TICK_CTX.dt = dt;
-  TICK_CTX.assists = input.assists ?? DEFAULT_ASSISTS;
-  TICK_CTX.auto = input.automation ?? DEFAULT_FLEET_AUTO;
-  TICK_CTX.hazards = level;
-  const ctx = TICK_CTX;
+  const ctx = index.beginTick(
+    state,
+    dt,
+    input.assists ?? DEFAULT_ASSISTS,
+    input.automation ?? DEFAULT_FLEET_AUTO,
+    level,
+  );
 
   // Index-based so a ship removed in `updateShip` (an in-place `removeItem`)
   // does not shift the next ship into an already-visited slot. A volatile blast
   // can remove several ships in one call, so a removal rewinds the scan and
   // `updatedShipIds` keeps an already-ticked ship from running twice.
-  const updated = index.updatedShipIds;
-  updated.clear();
-  for (let i = 0; i < run.ships.length; i++) {
-    const ship = run.ships[i]!;
-    if (updated.has(ship.id)) continue;
-    updated.add(ship.id);
-    const before = run.ships.length;
-    updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
-    if (run.ships.length !== before) i = -1;
+  try {
+    const updated = index.updatedShipIds;
+    updated.clear();
+    for (let i = 0; i < run.ships.length; i++) {
+      const ship = run.ships[i]!;
+      if (updated.has(ship.id)) continue;
+      updated.add(ship.id);
+      const before = run.ships.length;
+      updateShip(ctx, ship, index.stats.get(ship.id)!, input.thrust);
+      if (run.ships.length !== before) i = -1;
+    }
+  } finally {
+    index.endTick();
   }
 
   updateExploration(state);
   updatePickups(state, index, dt);
-  regrowBelts(state, dt);
+  regrowBelts(state, index, dt);
   updateContracts(state, dt);
   updateRefinery(state, dt);
   updateAchievements(state);
@@ -310,13 +304,13 @@ function updatePickups(state: GameState, index: SimIndex, dt: number): void {
 }
 
 /** Belts slowly regrow so long sessions (and idle drones) never run dry. */
-function regrowBelts(state: GameState, dt: number): void {
+function regrowBelts(state: GameState, index: SimIndex, dt: number): void {
   const { run } = state;
   run.regrowTimer += dt;
   if (run.regrowTimer < TUNING.beltRegrowInterval * systemEffects(run.system.modifiers).regrowInterval) return;
   run.regrowTimer = 0;
   const belts = run.system.belts;
-  const counts = beltCounts;
+  const counts = index.beltCounts;
   counts.length = belts.length;
   counts.fill(0);
   for (const r of run.rocks) counts[r.belt] = (counts[r.belt] ?? 0) + 1;
@@ -330,9 +324,6 @@ function regrowBelts(state: GameState, dt: number): void {
     }
   }
 }
-
-/** Scratch for `regrowBelts`: live rocks per belt. */
-const beltCounts: number[] = [];
 
 const clearOfShips = (run: Run, rock: Rock): boolean => {
   for (const s of run.ships) if (dist(s.pos, rock.pos) <= 900) return false;

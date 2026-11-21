@@ -16,11 +16,6 @@ import { setStatus } from './status';
 import { canMine, volatileSafeDistance } from './traits';
 import type { GameState, Rock, Ship } from './types';
 
-/** Scratch vectors for the hot per-ship steering path; callers consume them before the next call. */
-const AVOID = { x: 0, z: 0 };
-const ESCAPE = { x: 0, z: 0 };
-const SHELTER = { x: 0, z: 0 };
-
 export interface TickCtx {
   state: GameState;
   index: SimIndex;
@@ -138,9 +133,10 @@ export function steer(
       px = wx / w;
       pz = wz / w;
     }
-    const danger = avoidance(ctx, ship, st, px, pz, ignoreId, AVOID);
-    x += AVOID.x * Math.max(want, 0.5);
-    z += AVOID.z * Math.max(want, 0.5);
+    const avoidVec = ctx.index.scratchAvoid;
+    const danger = avoidance(ctx, ship, st, px, pz, ignoreId, avoidVec);
+    x += avoidVec.x * Math.max(want, 0.5);
+    z += avoidVec.z * Math.max(want, 0.5);
     want *= 1 - 0.7 * danger; // ease off the throttle while threading a cluster
   }
   const l = hypot2(x, z);
@@ -398,16 +394,18 @@ export function unsafe(ctx: TickCtx, pos: Vec2): boolean {
  */
 export function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: boolean): boolean {
   const { run } = ctx.state;
-  if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, ESCAPE)) {
+  const escape = ctx.index.scratchEscape;
+  if (cometPathEscape(run, ctx.index.comets, ship.pos, TUNING.cometDodgePad + st.size, escape)) {
     setStatus(ctx.state.out, ship.id, 'avoidComet');
-    steer(ctx, ship, st, ESCAPE.x, ESCAPE.z, ctx.assists.avoid, null, false);
+    steer(ctx, ship, st, escape.x, escape.z, ctx.assists.avoid, null, false);
     return true;
   }
   if (!inFlareZone(run, ship.pos)) return false;
   setStatus(ctx.state.out, ship.id, 'flare');
-  if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, SHELTER) === 'dock')
+  const shelter = ctx.index.scratchShelter;
+  if (flareShelter(run, ship.pos, full && ctx.assists.autoDock, shelter) === 'dock')
     arrive(ctx, ship, st, run.system.station.pos, TUNING.dockRadius * 0.5, null, false);
-  else arrive(ctx, ship, st, SHELTER, 20, null, false);
+  else arrive(ctx, ship, st, shelter, 20, null, false);
   return true;
 }
 

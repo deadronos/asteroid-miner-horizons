@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import { DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO } from '../src/sim/assists';
 import { newGame } from '../src/sim/create';
 import { SimIndex } from '../src/sim/index';
 import { makeShip, shipStats } from '../src/sim/ships';
+import { tick } from '../src/sim/update';
 
 describe('SimIndex', () => {
   it('rebuild reuses the same Map and hash instances', () => {
@@ -87,5 +89,22 @@ describe('SimIndex', () => {
     index.rebuild(state);
     expect(index.stats.get(ship.id)!.magnet).toBeCloseTo(once);
     expect(once).toBeCloseTo(shipStats(ship, state.profile).magnet * 0.85);
+  });
+
+  it('reuses its tick context and drops the GameState reference after tick()', () => {
+    const state = newGame(7);
+    const index = new SimIndex();
+    const ctx1 = index.beginTick(state, 1 / 60, DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO, 'off');
+    expect(ctx1.state).toBe(state);
+    expect(ctx1.index).toBe(index);
+    index.endTick();
+    expect((ctx1 as { state: unknown }).state).toBeUndefined();
+
+    const ctx2 = index.beginTick(state, 1 / 60, DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO, 'off');
+    expect(ctx2).toBe(ctx1);
+    index.endTick();
+
+    tick(state, 1 / 60, { thrust: { x: 0, z: 0 }, commands: [] }, index);
+    expect((ctx1 as { state: unknown }).state).toBeUndefined();
   });
 });

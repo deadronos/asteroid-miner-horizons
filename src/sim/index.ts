@@ -1,6 +1,10 @@
 import { SpatialHash } from '../core/spatialHash';
+import type { Vec2 } from '../core/vec';
+import type { HazardLevel } from '../data/hazards';
 import { TUNING } from '../data/tuning';
+import { DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO, type Assists, type FleetAuto } from './assists';
 import { applyEffects, systemEffects } from './modifiers';
+import type { TickCtx } from './pilot';
 import { emptyStats, writeShipStats, type ShipStats } from './ships';
 import type { ShipStatus } from './status';
 import type { GameState, Rock } from './types';
@@ -37,6 +41,28 @@ export class SimIndex {
   readonly builderClaims = new Map<number, number>();
   /** Run time each construction drone may deploy its next outpost. Transient, like `upgradeReadyAt`. */
   readonly buildReadyAt = new Map<number, number>();
+  /** Scratch for `regrowBelts`: live rocks per belt. */
+  readonly beltCounts: number[] = [];
+  /** Scratch vectors for hot per-ship steering and hazard reflexes; callers consume them before the next call. */
+  readonly scratchAvoid: Vec2 = { x: 0, z: 0 };
+  readonly scratchEscape: Vec2 = { x: 0, z: 0 };
+  readonly scratchShelter: Vec2 = { x: 0, z: 0 };
+  /** Reusable tick context, populated by `beginTick` and cleared by `endTick` so no GameState lingers. */
+  private readonly tickCtxState: {
+    state: GameState | undefined;
+    index: SimIndex;
+    dt: number;
+    assists: Assists;
+    auto: FleetAuto;
+    hazards: HazardLevel;
+  } = {
+    state: undefined,
+    index: this,
+    dt: 0,
+    assists: DEFAULT_ASSISTS,
+    auto: DEFAULT_FLEET_AUTO,
+    hazards: 'off',
+  };
   /** Ids seen in the last `rebuild`, so the next one can prune the departed. */
   private readonly liveShipIds = new Set<number>();
   /** The state's status map during `rebuild`, so the bound prune callback can reach it. */
@@ -110,8 +136,25 @@ export class SimIndex {
     if (this.builderClaims.size > 0) this.builderClaims.forEach(this.pruneClaim);
   }
 
+  /** Populate and return the reusable tick context for `state`. Call `endTick()` when the tick finishes. */
+  beginTick(state: GameState, dt: number, assists: Assists, auto: FleetAuto, hazards: HazardLevel): TickCtx {
+    const ctx = this.tickCtxState;
+    ctx.state = state;
+    ctx.dt = dt;
+    ctx.assists = assists;
+    ctx.auto = auto;
+    ctx.hazards = hazards;
+    return ctx as TickCtx;
+  }
+
+  /** Drop the transient `GameState` reference held during a tick. */
+  endTick(): void {
+    this.tickCtxState.state = undefined;
+  }
+
   /** Drop every reference; used when the running game is swapped. */
   clear(): void {
+    this.endTick();
     this.rockHash.rebuild([]);
     this.rockById.clear();
     this.comets.length = 0;
@@ -123,5 +166,6 @@ export class SimIndex {
     this.repairWait.clear();
     this.buildReadyAt.clear();
     this.builderClaims.clear();
+    this.beltCounts.length = 0;
   }
 }
