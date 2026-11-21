@@ -4,8 +4,9 @@
 // replaying the entries in order instead of being rejected outright.
 
 import { defaultVariant } from '../data/components';
-import { freshGate } from '../data/gate';
+import { GATE_STAGES, freshGate, gateStageCost } from '../data/gate';
 import { HULLS } from '../data/hulls';
+import { RESOURCES } from '../data/resources';
 import { newStats } from './achievements';
 import { newAutomation } from './automation';
 import { newBoard } from './contracts';
@@ -146,9 +147,25 @@ export const migrations: Record<number, Migration> = {
     if (!d.run.exploration) d.run.exploration = newExploration(d.profile.seed, d.run.system.number);
     return d;
   },
-  // v18 added `profile.ngPlus` (#274). Old saves are on their initial cycle.
+  // v18 added `profile.ngPlus` and rescaled gate stage costs (#274). Old saves
+  // start on cycle 0, and any mid-stage payments above the new stage caps (e.g.
+  // ice on stage 1 Ring, which dropped from 20 to 0) are clamped and refunded.
   17: (d) => {
     d.profile.ngPlus = 0;
+    const { gate } = d.profile;
+    if (gate.stage < GATE_STAGES.length) {
+      const cap = gateStageCost(gate.stage, 0);
+      if (gate.paid.data > cap.data) {
+        d.profile.data += gate.paid.data - cap.data;
+        gate.paid.data = cap.data;
+      }
+      for (const r of RESOURCES) {
+        if (gate.paid[r] > cap[r]) {
+          d.run.bank[r] += gate.paid[r] - cap[r];
+          gate.paid[r] = cap[r];
+        }
+      }
+    }
     return d;
   },
 };

@@ -47,9 +47,8 @@ export const TUNING = {
   // Prestige.
   /** Bank fuel the first warp costs: long enough in system 1 for a drone and a tier-2 laser (#197). */
   firstWarpFuel: 70,
-  /** Base of the later warps' fuel cost, which grows per warp; every warp is cut by the warp perk. */
-  warpBaseFuel: 50,
-  warpCostGrowth: 1.3,
+  /** Per-warp fuel growth multiplier; every warp is cut by the warp perk. */
+  warpCostGrowth: 1.26,
   /** Horizon Data = floor(sqrt(runValue / dataDivisor)). */
   dataDivisor: 60,
   /**

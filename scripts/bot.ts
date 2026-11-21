@@ -46,7 +46,7 @@
 import { dist, distSq, type Vec2 } from '../src/core/vec';
 import { variantDef, type ComponentId, type VariantId } from '../src/data/components';
 import { CONTRACTS } from '../src/data/contracts';
-import { GATE_STAGES, gateOpen, gateRemainder } from '../src/data/gate';
+import { gateOpen, gateRemainder, gateStageCost } from '../src/data/gate';
 import { HULLS, type HullId } from '../src/data/hulls';
 import { DOCTRINE_PAIR_IDS, DOCTRINE_PAIRS } from '../src/data/doctrines';
 import type { PerkId } from '../src/data/perks';
@@ -524,8 +524,7 @@ function nextPerk(state: GameState): PerkId | null {
 function gateDataClaim(state: GameState): Command | null {
   const { profile } = state;
   if (profile.warps < DATA_DELIVERY_WARPS || gateOpen(profile.gate)) return null;
-  const stage = GATE_STAGES[profile.gate.stage]!;
-  const due = gateRemainder(profile.gate.paid, stage.cost);
+  const due = gateRemainder(profile.gate.paid, gateStageCost(profile.gate.stage, profile.ngPlus));
   if (due.data <= 0 || profile.data <= 0) return null;
   for (const r of RESOURCES) if (due[r] > 0) return null;
   return { t: 'fundGate', data: true };

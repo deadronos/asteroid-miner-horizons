@@ -1266,4 +1266,20 @@ describe('construction drone migration to v14', () => {
     raw.state.run.ships.push({ ...raw.state.run.ships[1]!, id: 9999, hullId: 'constructionDrone' });
     expect(loadFrozen(JSON.stringify(raw)).profile.stats.miningDrones).toBe(base);
   });
+
+  it('v17 saves mid-stage on Ring clamp and refund paid ice above the v18 cap', () => {
+    const raw = JSON.parse(V17_FIXTURE) as { state: SaveData };
+    const bankIceBefore = raw.state.run.bank.ice;
+    raw.state.profile.gate = {
+      ...raw.state.profile.gate,
+      stage: 1,
+      paid: { data: 0, ore: 20, ice: 15, crystal: 5, alloy: 0, fuel: 0 },
+    };
+    const state = loadFrozen(JSON.stringify(raw));
+    expect(state.profile.ngPlus).toBe(0);
+    expect(state.profile.gate.stage).toBe(1);
+    expect(state.profile.gate.paid.ice).toBe(0);
+    expect(state.profile.gate.paid.ore).toBe(20);
+    expect(state.run.bank.ice).toBe(bankIceBefore + 15);
+  });
 });

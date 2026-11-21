@@ -72,12 +72,10 @@ export function hullBlock(state: GameState, hullId: HullId): string | null {
   return null;
 }
 
-const WARP_COST_GROWTH = 1.26;
-
 /** Bank fuel needed to warp; rises monotonically with each warp, cut by the warp perk. */
 export function warpCost(state: GameState): number {
   const { profile } = state;
-  const base = TUNING.firstWarpFuel * WARP_COST_GROWTH ** profile.warps;
+  const base = TUNING.firstWarpFuel * TUNING.warpCostGrowth ** profile.warps;
   return Math.round(base * (1 - 0.08 * profile.perks.warp));
 }
 
