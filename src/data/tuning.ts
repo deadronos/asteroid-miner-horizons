@@ -30,8 +30,8 @@ export const TUNING = {
   starRoutePad: 120,
   flagshipRespawn: 4,
   repairOrePerHull: 0.3,
-  /** Cost of a ship's 3rd slot; each later slot costs slotCostGrowth× the one before (#141). */
-  slotBaseCost: { ore: 120, ice: 60 },
+  /** Cost of a ship's 3rd slot; each later slot costs slotCostGrowth× the one before (#141, #275). */
+  slotBaseCost: { ore: 90, ice: 12 },
   slotCostGrowth: 1.7,
   /** Sim seconds between one ship's autoupgrade steps while docked, so purchases read in the log (#140). */
   autoUpgradeInterval: 0.5,
