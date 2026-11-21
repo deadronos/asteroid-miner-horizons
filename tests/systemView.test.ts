@@ -1,4 +1,8 @@
-import { describe, expect, it, vi } from 'vitest';
+import type * as THREE from 'three';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PALETTES } from '../src/data/palette';
+import type { RawResource } from '../src/data/resources';
+import { setColourVision } from '../src/render/activePalette';
 import { SystemView } from '../src/render/systemView';
 import { generateSystem } from '../src/sim/generate';
 
@@ -13,8 +17,19 @@ vi.hoisted(() => {
   });
 });
 
+afterEach(() => setColourVision('default'));
+
 const planetsOf = (view: SystemView): { moons: unknown[] }[] =>
   (view as unknown as { planets: { moons: unknown[] }[] }).planets;
+
+interface SystemParts {
+  beacons: THREE.Mesh[];
+  dockRing: THREE.LineLoop | null;
+  heatRing: THREE.LineLoop | null;
+  beltBands: { mesh: THREE.Mesh; kind: RawResource }[];
+}
+
+const partsOf = (view: SystemView): SystemParts => view as unknown as SystemParts;
 
 // Seeds 1 and 21 both name their first system "Qutha", with different planets and moons.
 const qutha1 = () => generateSystem(1, 1);
@@ -45,5 +60,33 @@ describe('SystemView', () => {
     const view = new SystemView();
     view.sync(qutha1());
     expect(() => view.update(qutha21(), 1)).not.toThrow();
+  });
+
+  it('drives scenery colours from palette() and refreshes live on paletteGeneration() changes', () => {
+    const sys = qutha1();
+    const view = new SystemView();
+    view.sync(sys);
+    const parts = partsOf(view);
+
+    const expectMode = (mode: 'default' | 'deutan' | 'tritan') => {
+      const p = PALETTES[mode];
+      expect((parts.heatRing!.material as THREE.LineBasicMaterial).color.getHex()).toBe(p.bad);
+      expect((parts.dockRing!.material as THREE.LineBasicMaterial).color.getHex()).toBe(p.ok);
+      expect(parts.beacons.length).toBe(4);
+      for (const b of parts.beacons) expect((b.material as THREE.MeshBasicMaterial).color.getHex()).toBe(p.ok);
+      expect(parts.beltBands.length).toBe(sys.belts.length);
+      for (const b of parts.beltBands)
+        expect((b.mesh.material as THREE.MeshBasicMaterial).color.getHex()).toBe(p.resource[b.kind]);
+    };
+
+    expectMode('default');
+
+    setColourVision('deutan');
+    view.update(sys, 1);
+    expectMode('deutan');
+
+    setColourVision('tritan');
+    view.update(sys, 2);
+    expectMode('tritan');
   });
 });

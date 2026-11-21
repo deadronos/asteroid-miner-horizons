@@ -1,5 +1,8 @@
 import * as THREE from 'three';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PALETTES } from '../src/data/palette';
+import { setColourVision } from '../src/render/activePalette';
+import { FxView } from '../src/render/fxView';
 import { ShipView } from '../src/render/shipView';
 import { newGame } from '../src/sim/create';
 import { makeShip } from '../src/sim/ships';
@@ -12,12 +15,24 @@ import { DT } from './helpers';
 vi.hoisted(() => {
   const ctx = { fillStyle: '', createRadialGradient: () => ({ addColorStop: () => {} }), fillRect: () => {} };
   Object.defineProperty(globalThis, 'document', {
-    value: { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) },
+    value: {
+      createElement: () => ({
+        width: 0,
+        height: 0,
+        getContext: () => ctx,
+        className: '',
+        style: { opacity: '' },
+        append: () => {},
+      }),
+    },
     configurable: true,
   });
 });
 
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => {
+  vi.restoreAllMocks();
+  setColourVision('default');
+});
 
 /** The per-ship objects `ShipView` keeps; mirrors its private `Visual`. */
 interface Parts {
@@ -223,5 +238,44 @@ describe('ShipView GPU disposal', () => {
       return Math.max(...widths) - Math.min(...widths);
     };
     expect(swing(0.45)).toBeLessThan(swing(1) * 0.8);
+  });
+
+  it('drives cargoBar and shield bubble from palette() and refreshes live on colour-vision switches', () => {
+    const { state, view, a, b } = setup();
+    const pa = partsOf(view, a.id);
+    const pb = partsOf(view, b.id);
+
+    expect(colorOf(pa.cargoBar).getHex()).toBe(PALETTES.default.resource.ore);
+    expect(colorOf(pa.shield).getHex()).toBe(PALETTES.default.fleet);
+    expect(colorOf(pb.shield).getHex()).toBe(PALETTES.default.fleet);
+
+    setColourVision('deutan');
+    view.update(state, 1, DT, 1, false);
+    expect(colorOf(pa.cargoBar).getHex()).toBe(PALETTES.deutan.resource.ore);
+    expect(colorOf(pa.shield).getHex()).toBe(PALETTES.deutan.fleet);
+    expect(colorOf(pb.shield).getHex()).toBe(PALETTES.deutan.fleet);
+
+    setColourVision('tritan');
+    view.update(state, 2, DT, 1, false);
+    expect(colorOf(pa.cargoBar).getHex()).toBe(PALETTES.tritan.resource.ore);
+    expect(colorOf(pa.shield).getHex()).toBe(PALETTES.tritan.fleet);
+    expect(colorOf(pb.shield).getHex()).toBe(PALETTES.tritan.fleet);
+  });
+
+  it('emits comet spawn burst and tail particles using palette().hazard', () => {
+    const { state, view } = setup();
+    const container = { append: () => {} } as unknown as HTMLElement;
+    const fx = new FxView(container, view);
+    const emitted: number[] = [];
+    vi.spyOn(fx.particles, 'emit').mockImplementation((_x, _z, col) => {
+      emitted.push(col.getHex());
+    });
+
+    setColourVision('deutan');
+    state.out.fx.push({ t: 'hazard', kind: 'comet', phase: 'start', pos: { x: 10, z: 20 } });
+    state.run.rocks[0]!.comet = true;
+    fx.consume(state, [], DT, () => true);
+
+    expect(emitted).toEqual([PALETTES.deutan.hazard, PALETTES.deutan.hazard]);
   });
 });

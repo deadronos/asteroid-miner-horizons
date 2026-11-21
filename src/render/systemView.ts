@@ -3,8 +3,10 @@
 // new system: warp, load or new game.
 
 import * as THREE from 'three';
+import type { RawResource } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import type { StarSystem } from '../sim/types';
+import { palette, paletteGeneration } from './activePalette';
 import { planetPos } from './labels';
 import { HALO_SCALE, PlanetSurface, RIM_SCALE, atmosphereMaterial, planetKind, planetSeed } from './planetLook';
 import { additive, circleLoop, flat, glowTexture } from './util';
@@ -23,10 +25,14 @@ export class SystemView {
   private station = new THREE.Group();
   private stationRing!: THREE.Mesh;
   private beacons: THREE.Mesh[] = [];
+  private dockRing: THREE.LineLoop | null = null;
+  private heatRing: THREE.LineLoop | null = null;
+  private beltBands: { mesh: THREE.Mesh; kind: RawResource }[] = [];
   private starGlow: THREE.Sprite[] = [];
   private glowOpacity: number[] = [];
   /** The system this view was built from; compared by identity, since names repeat across games. */
   private shown: StarSystem | null = null;
+  private paletteGen = -1;
 
   constructor() {
     this.light = new THREE.PointLight(0xffffff, 3.2, 0, 0);
@@ -73,15 +79,21 @@ export class SystemView {
       this.starGlow.push(s);
       this.glowOpacity.push(op);
     }
-    const heat = circleLoop(sys.heatRadius, 0xff5a3a, 0.35, 120);
+    const pal = palette();
+    const heat = circleLoop(sys.heatRadius, pal.bad, 0.35, 120);
+    this.heatRing = heat;
     g.add(heat);
 
     // Belt haze: a faint band so the belts read even when zoomed out.
     for (const b of sys.belts) {
-      const tint = b.mix.crystal > 0.2 ? 0x9a5cff : b.mix.ice > b.mix.ore ? 0x5ab8ff : 0xc08a4a;
-      const band = new THREE.Mesh(flat(new THREE.RingGeometry(b.inner, b.outer, 160, 1)), additive(tint, 0.035));
+      const kind: RawResource = b.mix.crystal > 0.2 ? 'crystal' : b.mix.ice > b.mix.ore ? 'ice' : 'ore';
+      const band = new THREE.Mesh(
+        flat(new THREE.RingGeometry(b.inner, b.outer, 160, 1)),
+        additive(pal.resource[kind], 0.035),
+      );
       band.position.y = -20;
       g.add(band);
+      this.beltBands.push({ mesh: band, kind });
     }
 
     sys.planets.forEach((p, i) => {
@@ -128,10 +140,12 @@ export class SystemView {
     });
 
     this.buildStation(sys);
+    this.syncPalette();
   }
 
   private buildStation(sys: StarSystem): void {
     const st = this.station;
+    const ok = palette().ok;
     st.position.set(sys.station.pos.x, 0, sys.station.pos.z);
     const metal = new THREE.MeshLambertMaterial({ color: 0x9fb2c8, flatShading: true });
     const dark = new THREE.MeshLambertMaterial({ color: 0x4a5a70, flatShading: true });
@@ -144,18 +158,30 @@ export class SystemView {
       const arm = new THREE.Mesh(new THREE.BoxGeometry(70, 4, 6), metal);
       arm.rotation.set(Math.PI / 2, 0, (i * Math.PI) / 4);
       this.stationRing.add(arm);
-      const beacon = new THREE.Mesh(new THREE.SphereGeometry(3.2, 8, 6), additive(0x59ffa0));
+      const beacon = new THREE.Mesh(new THREE.SphereGeometry(3.2, 8, 6), additive(ok));
       beacon.position.set(Math.cos((i * Math.PI) / 2) * 42, 6, Math.sin((i * Math.PI) / 2) * 42);
       st.add(beacon);
       this.beacons.push(beacon);
     }
-    const dock = circleLoop(TUNING.dockRadius, 0x59ffa0, 0.3, 64);
+    const dock = circleLoop(TUNING.dockRadius, ok, 0.3, 64);
+    this.dockRing = dock;
     st.add(dock);
     this.group.add(st);
   }
 
+  /** Re-colours palette-driven scenery materials in place when colour vision changes. */
+  private syncPalette(): void {
+    const p = palette();
+    this.paletteGen = paletteGeneration();
+    if (this.heatRing) (this.heatRing.material as THREE.LineBasicMaterial).color.setHex(p.bad);
+    if (this.dockRing) (this.dockRing.material as THREE.LineBasicMaterial).color.setHex(p.ok);
+    for (const b of this.beacons) (b.material as THREE.MeshBasicMaterial).color.setHex(p.ok);
+    for (const b of this.beltBands) (b.mesh.material as THREE.MeshBasicMaterial).color.setHex(p.resource[b.kind]);
+  }
+
   /** `boost` (0..1) brightens and swells the star glow, e.g. during a solar flare. */
   update(sys: StarSystem, time: number, boost = 0): void {
+    if (this.paletteGen !== paletteGeneration()) this.syncPalette();
     // Planets show their flat colour until their surface finishes painting.
     const until = performance.now() + PAINT_BUDGET_MS;
     for (const s of this.surfaces) {
@@ -196,6 +222,9 @@ export class SystemView {
     this.surfaces = [];
     this.planets = [];
     this.beacons = [];
+    this.dockRing = null;
+    this.heatRing = null;
+    this.beltBands = [];
     this.starGlow = [];
     this.glowOpacity = [];
     this.station = new THREE.Group();

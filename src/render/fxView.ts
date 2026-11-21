@@ -98,7 +98,7 @@ export class FxView {
           break;
         case 'hazard':
           if (fx.phase !== 'start') break;
-          if (fx.kind === 'comet' && fx.pos) P.emit(fx.pos.x, fx.pos.z, col.setHex(0xa8dcff), 30, 160, 1);
+          if (fx.kind === 'comet' && fx.pos) P.emit(fx.pos.x, fx.pos.z, col.setHex(palette().hazard), 30, 160, 1);
           else if (fx.kind === 'flare') this.shake = Math.max(this.shake, 12);
           break;
       }
@@ -114,7 +114,7 @@ export class FxView {
     // Comets trail a pale tail opposite their velocity.
     for (const r of state.run.rocks) {
       if (!r.comet) continue;
-      P.emit(r.pos.x, r.pos.z, col.setHex(0x9fd4ff), dt * 90, 60, 1.2, {
+      P.emit(r.pos.x, r.pos.z, col.setHex(palette().hazard), dt * 90, 60, 1.2, {
         dir: Math.atan2(-r.vel.z, -r.vel.x),
         spread: 0.35,
         drag: 1,
