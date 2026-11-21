@@ -141,6 +141,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             onclick: () => send({ t: 'remove', shipId: id, slot: i }),
           });
           rm.dataset.title = rm.title;
+          rm.setAttribute('aria-label', `Remove ${def.name}`);
           const row = slotRow(
             def.name,
             [pips, h('small', { text: def.describe(f.tier) })],
@@ -161,6 +162,7 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           return row;
         }
         const sel = h('select');
+        sel.setAttribute('aria-label', `Install component in slot ${i + 1}`);
         sel.append(h('option', { text: 'Install…' }));
         const opts = installOptions();
         for (const o of opts) {

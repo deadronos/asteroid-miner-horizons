@@ -130,14 +130,18 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         const stat = h('span', { class: 'st' });
         const hb = bar('hull mini');
         const cb = bar('cargo mini');
-        const row = h(
-          'div',
-          { class: 'shiprow', onclick: () => ctx.send({ t: 'select', shipId: id }) },
-          name,
-          stat,
-          hb.el,
-          cb.el,
-        );
+        const select = (): void => ctx.send({ t: 'select', shipId: id });
+        const row = h('div', { class: 'shiprow', onclick: select }, name, stat, hb.el, cb.el);
+        row.setAttribute('tabindex', '0');
+        row.setAttribute('role', 'button');
+        row.addEventListener('keydown', (e) => {
+          if (e.target !== row) return;
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            e.stopPropagation();
+            select();
+          }
+        });
         let mode: HTMLButtonElement | null = null;
         let repair: HTMLButtonElement | null = null;
         let upgrade: HTMLButtonElement | null = null;
@@ -204,7 +208,10 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           const cur = ships[i];
           if (!cur || cur.id !== ref.id) continue;
           const stt = shipStats(cur, s.profile);
-          ref.row.classList.toggle('sel', s.run.selectedId === cur.id);
+          const selected = s.run.selectedId === cur.id;
+          ref.row.classList.toggle('sel', selected);
+          if (selected) ref.row.setAttribute('aria-current', 'true');
+          else ref.row.removeAttribute('aria-current');
           setText(ref.stat, fleetStatus(s, cur, stt.cargoCap));
           ref.hb.set(cur.hull / stt.maxHull);
           ref.cb.set(walletTotal(cur.cargo) / stt.cargoCap);
@@ -235,7 +242,7 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         const stat = h('span', { class: 'st' });
         const sb = bar('cargo mini');
         outRefs.push({ rockId: o0.rockId, stat, sb });
-        return h('div', { class: 'shiprow' }, label, stat, sb.el);
+        return h('div', { class: 'shiprow outpost' }, label, stat, sb.el);
       });
       if (outRefs.length) {
         bind(() => {

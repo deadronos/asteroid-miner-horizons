@@ -68,6 +68,7 @@ function groups(p: Palette): Record<string, number[]> {
   return {
     resources: RESOURCES.map((r) => p.resource[r]),
     rocks: [p.rock.ore, p.rock.ice, p.rock.crystal],
+    traits: [p.bad, p.resource.alloy, p.fleet],
     hullState: [p.ok, p.warn, p.bad],
     fleetRoles: [p.flagship, p.fleet],
   };

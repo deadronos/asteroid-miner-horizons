@@ -108,6 +108,7 @@ export class Hud {
     };
     const left = h('div', { class: 'hud-col left' });
     const right = h('div', { class: 'hud-col right' });
+    const stack = h('div', { class: 'hud-stack' });
     // A collapsible panel: a fixed toggle button over a body that the panel fills and that scrolls on its own.
     const fold = (id: HudPanelId, parent: HTMLElement, build: (body: HTMLElement) => Panel): Panel => {
       const el = mk(id, 'hud collapsible', parent);
@@ -126,8 +127,15 @@ export class Hud {
       return panel;
     };
     const topbar = mk('topbar');
-    root.append(left, right);
+    root.append(left, right, stack);
     const ctx: PanelCtx = { getState, send: actions.send, settings };
+    this.paused.setAttribute('role', 'status');
+    this.paused.setAttribute('aria-live', 'polite');
+    this.hazard.setAttribute('role', 'alert');
+    this.hazard.setAttribute('aria-live', 'assertive');
+    this.toasts.setAttribute('role', 'status');
+    this.toasts.setAttribute('aria-live', 'polite');
+    stack.append(this.paused, this.hazard, this.toasts);
     this.panels = [
       createTopBar(topbar, ctx, {
         toggleResearch: () => this.toggleResearch(),
@@ -140,9 +148,11 @@ export class Hud {
       fold('contracts', left, (body) => createContractsPanel(body, ctx)),
       fold('ship', right, (body) => createShipPanel(body, ctx)),
       fold('refinery', right, (body) => createRefineryPanel(body, ctx)),
-      createGoalsPanel(mk('goals', 'hud hidden'), ctx),
+      createGoalsPanel(mk('goals', 'hud hidden', stack), ctx),
     ];
     this.log.id = 'log';
+    this.log.setAttribute('role', 'status');
+    this.log.setAttribute('aria-live', 'polite');
     left.append(this.log);
     this.research = new ResearchPanel(mk('research', 'modal hidden'), ctx);
     this.gate = new GateDialog(mk('gate', 'modal hidden'), ctx);
@@ -152,7 +162,7 @@ export class Hud {
 
     this.touch = new TouchControls(root);
     this.menu = new Menu(root, actions.saves, settings, getState);
-    root.append(this.tooltip, this.flash, this.paused, this.hazard, this.fps, this.toasts);
+    root.append(this.tooltip, this.flash, this.fps);
     // The side columns start below the top bar, which wraps onto more lines on a phone.
     if (typeof ResizeObserver === 'function')
       new ResizeObserver(() =>
@@ -255,10 +265,11 @@ export class Hud {
     this.noticeShown = true;
     this.paused.classList.remove('hidden');
     this.paused.classList.add('gfx-reset');
-    this.paused.classList.toggle('actionable', list.length > 0);
-    if (list.length > 0) this.paused.setAttribute('role', 'alert');
-    else this.paused.removeAttribute('role');
-    if (list.length > 0)
+    const urgent = list.length > 0;
+    this.paused.classList.toggle('actionable', urgent);
+    this.paused.setAttribute('role', urgent ? 'alert' : 'status');
+    this.paused.setAttribute('aria-live', urgent ? 'assertive' : 'polite');
+    if (urgent)
       this.paused.replaceChildren(text, ...list.map((a) => h('button', { text: a.label, onclick: a.onClick })));
     else setText(this.paused, text);
     // The frame loop may have stopped, so a warp flash would otherwise stay frozen over the notice.
@@ -270,7 +281,8 @@ export class Hud {
     if (!this.noticeShown) return;
     this.noticeShown = false;
     this.paused.classList.remove('gfx-reset', 'actionable');
-    this.paused.removeAttribute('role');
+    this.paused.setAttribute('role', 'status');
+    this.paused.setAttribute('aria-live', 'polite');
     this.paused.replaceChildren();
     this.paused.classList.add('hidden');
   }
@@ -298,7 +310,7 @@ export class Hud {
   blockerRects(): { x: number; y: number; w: number; h: number }[] {
     const out: { x: number; y: number; w: number; h: number }[] = [];
     for (const e of this.root.querySelectorAll(
-      ':scope > .hud, :scope > .hud-col > .hud, :scope > .paused, :scope > .hazard, :scope > .touch-ctl > *',
+      ':scope > .hud, :scope > .hud-col > .hud, :scope > .hud-stack > .hud, :scope > .hud-stack > .paused, :scope > .hud-stack > .hazard, :scope > .touch-ctl > *',
     )) {
       const r = e.getBoundingClientRect();
       if (r.width > 0 && r.height > 0) out.push({ x: r.left, y: r.top, w: r.width, h: r.height });

@@ -64,6 +64,7 @@ export function createRefineryPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             title: 'Cancel and refund',
             onclick: () => ctx.send({ t: 'cancelRefine', jobId }),
           });
+          cancel.setAttribute('aria-label', `Cancel ${RECIPES[id].name} job`);
           bind(() => {
             const job = findJob(st().run, jobId);
             if (job) setText(done, `${job.total - job.count}/${job.total}`);

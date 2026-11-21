@@ -45,7 +45,7 @@ export class Input {
   /** While a tap's tooltip shows: when it hides, from `performance.now()`. 0 otherwise. */
   private tipUntil = 0;
   private readonly pad = new PadReader();
-  private readonly padHint = new GamepadHint(document.body);
+  private readonly padHint: GamepadHint;
   /** Thrust from the pad this frame; zero while a menu is open. */
   private padVec: Vec2 = { x: 0, z: 0 };
   /** Last click-to-move destination, shown as a marker until reached. */
@@ -60,6 +60,7 @@ export class Input {
     private readonly onPause: () => void,
     private readonly blocked: () => boolean = () => false,
   ) {
+    this.padHint = new GamepadHint(hud.root ?? document.body);
     const canvas = renderer.canvas;
     window.addEventListener('keydown', (e) => {
       delete document.body.dataset.pad;
