@@ -12,7 +12,7 @@ import type { Pickup, Rock } from '../sim/types';
 import { inView, type ViewRect } from './cull';
 import { rockGeometry, type RockStyle } from './util';
 import { PALETTES } from '../data/palette';
-import { palette } from './activePalette';
+import { palette, paletteGeneration } from './activePalette';
 
 /** Number of shared rock shape pools: two shapes for each of the three kinds. */
 export const ROCK_POOLS = 6;
@@ -36,12 +36,33 @@ export const ROCK_TINT: Record<RawResource, THREE.Color> = {
   crystal: new THREE.Color(PALETTES.default.rock.crystal),
 };
 
-/** Re-colours `ROCK_TINT` in place from the active palette. */
+const WHITE = new THREE.Color(0xffffff);
+const HOT = new THREE.Color(PALETTES.default.bad);
+
+/** Shared palette-driven uniforms bound by every rock material; mutated in place on palette switches. */
+const rockUniforms = {
+  uOreColor: { value: new THREE.Color(PALETTES.default.resource.ore) },
+  uIceColor: { value: new THREE.Color(PALETTES.default.resource.ice) },
+  uCrystalColor: { value: new THREE.Color(PALETTES.default.resource.crystal) },
+  uVolatileColor: { value: new THREE.Color(PALETTES.default.bad) },
+  uDenseColor: { value: new THREE.Color(PALETTES.default.resource.alloy) },
+  uMagneticColor: { value: new THREE.Color(PALETTES.default.fleet) },
+  uCrackColor: { value: new THREE.Color(PALETTES.default.bad) },
+};
+
+/** Re-colours `ROCK_TINT` and shared rock shader uniforms in place from the active palette. */
 export function syncRockTints(): void {
-  const t = palette().rock;
-  for (const k of RAW_RESOURCES) ROCK_TINT[k].setHex(t[k]);
+  const p = palette();
+  for (const k of RAW_RESOURCES) ROCK_TINT[k].setHex(p.rock[k]);
+  HOT.setHex(p.bad);
+  rockUniforms.uOreColor.value.setHex(p.resource.ore);
+  rockUniforms.uIceColor.value.setHex(p.resource.ice);
+  rockUniforms.uCrystalColor.value.setHex(p.resource.crystal);
+  rockUniforms.uVolatileColor.value.setHex(p.bad);
+  rockUniforms.uDenseColor.value.setHex(p.resource.alloy);
+  rockUniforms.uMagneticColor.value.setHex(p.fleet);
+  rockUniforms.uCrackColor.value.setHex(p.bad);
 }
-const HOT = new THREE.Color(0xff5a2a);
 /**
  * Cull radii. The `rock` style is the largest at 1.22× a rock's radius (see
  * `rockGeometry`), so it drives this bound; shudder adds 3.5%. A pickup's
@@ -110,20 +131,29 @@ class InstancePool {
 
 /** Fragment `uKind` value per kind; also the order of `RAW_RESOURCES`. */
 const KIND_INDEX: Record<RawResource, number> = { ore: 0, ice: 1, crystal: 2 };
-/** Per-kind highlight: ore is a dull warm sheen, ice a tight pale one. */
-const KIND_SURFACE: Record<RawResource, { shininess: number; specular: number; emissive?: number }> = {
-  ore: { shininess: 8, specular: 0x6b4a2a },
-  ice: { shininess: 70, specular: 0xcfeaff },
-  crystal: { shininess: 45, specular: 0xb98cff, emissive: 0x1a0a33 },
-};
+/** Per-kind highlight tightness: ore is a dull sheen, ice a crisp gem glint. */
+const KIND_SHININESS: Record<RawResource, number> = { ore: 8, ice: 70, crystal: 45 };
+
+/** Derives a kind material's specular and base emissive tint from the active palette. */
+function syncRockMaterialSurface(mat: THREE.MeshPhongMaterial, kind: RawResource): void {
+  const res = palette().resource;
+  if (kind === 'ore') {
+    mat.specular.setHex(res.ore).multiplyScalar(0.42);
+  } else if (kind === 'ice') {
+    mat.specular.setHex(res.ice).lerp(WHITE, 0.55);
+  } else {
+    mat.specular.setHex(res.crystal).lerp(WHITE, 0.15);
+    mat.emissive.setHex(res.crystal).multiplyScalar(0.14);
+  }
+}
 
 /**
  * Patches a Phong material with the shared rock shader: emissive crack lines
  * (thin bands of 3D value noise in object space that widen and spread as
  * `aDamage.x` rises) plus a `uKind` branch that shades ore veins, an icy
- * fresnel rim, or crystal facets, and a tint keyed on the per-instance
- * `aTrait`. `uKind` is a uniform rather than a define so all three kinds share
- * one program.
+ * fresnel rim, or crystal facets, and procedural patterns keyed on the
+ * per-instance `aTrait`. `uKind` is a uniform rather than a define so all
+ * three kinds share one program.
  */
 function patchRock(mat: THREE.MeshPhongMaterial, kind: RawResource): void {
   const kindIndex = KIND_INDEX[kind];
@@ -131,6 +161,13 @@ function patchRock(mat: THREE.MeshPhongMaterial, kind: RawResource): void {
     shader.uniforms.uTime = crackTime;
     shader.uniforms.uGlow = selfGlow;
     shader.uniforms.uKind = { value: kindIndex };
+    shader.uniforms.uOreColor = rockUniforms.uOreColor;
+    shader.uniforms.uIceColor = rockUniforms.uIceColor;
+    shader.uniforms.uCrystalColor = rockUniforms.uCrystalColor;
+    shader.uniforms.uVolatileColor = rockUniforms.uVolatileColor;
+    shader.uniforms.uDenseColor = rockUniforms.uDenseColor;
+    shader.uniforms.uMagneticColor = rockUniforms.uMagneticColor;
+    shader.uniforms.uCrackColor = rockUniforms.uCrackColor;
     shader.vertexShader = shader.vertexShader
       .replace(
         '#include <common>',
@@ -155,6 +192,13 @@ vTrait = aTrait;`,
 uniform float uTime;
 uniform float uGlow;
 uniform float uKind;
+uniform vec3 uOreColor;
+uniform vec3 uIceColor;
+uniform vec3 uCrystalColor;
+uniform vec3 uVolatileColor;
+uniform vec3 uDenseColor;
+uniform vec3 uMagneticColor;
+uniform vec3 uCrackColor;
 varying vec3 vDamage;
 varying vec3 vObj;
 varying float vTrait;
@@ -172,32 +216,43 @@ float vnoise(vec3 p) {
       .replace(
         '#include <emissivemap_fragment>',
         `#include <emissivemap_fragment>
+float viewDot = abs(dot(normalize(normal), normalize(vViewPosition)));
 if (uKind < 0.5) {
   // Ore: ridged object-space noise reads as warm metal veins.
   float r1 = 1.0 - abs(2.0 * vnoise(vObj * 2.4) - 1.0);
   float r2 = 1.0 - abs(2.0 * vnoise(vObj * 5.1 + 11.0) - 1.0);
   float vein = smoothstep(0.55, 0.95, r1 * 0.65 + r2 * 0.35);
-  diffuseColor.rgb = mix(diffuseColor.rgb, vec3(1.0, 0.66, 0.28), vein * 0.55);
-  totalEmissiveRadiance += vec3(1.0, 0.55, 0.2) * vein * 0.1;
+  diffuseColor.rgb = mix(diffuseColor.rgb, uOreColor, vein * 0.55);
+  totalEmissiveRadiance += uOreColor * vein * 0.12;
 } else if (uKind < 1.5) {
   // Ice: a fresnel rim fakes the pale glow of a translucent block.
-  float rim = pow(max(0.0, 1.0 - abs(dot(normalize(normal), normalize(vViewPosition)))), 3.0);
-  totalEmissiveRadiance += vec3(0.55, 0.88, 1.0) * rim * (0.4 + 0.35 * uGlow);
+  float rim = pow(max(0.0, 1.0 - viewDot), 3.0);
+  totalEmissiveRadiance += uIceColor * rim * (0.4 + 0.35 * uGlow);
 } else {
   // Crystal: hash the flat facet normal so whole facets light as units, gated
   // by an object-space mask and pulsed slowly.
   float facet = hash3(floor(normal * 9.0));
   float mask = smoothstep(0.42, 0.86, vnoise(vObj * 4.2));
   float pulse = 0.75 + 0.25 * sin(uTime * 1.6 + facet * 6.283185);
-  totalEmissiveRadiance += vec3(0.58, 0.3, 1.0) * facet * mask * pulse * (0.3 + 0.5 * uGlow);
+  totalEmissiveRadiance += uCrystalColor * facet * mask * pulse * (0.3 + 0.5 * uGlow);
 }
-// Trait accent: a steady tint so traited rocks read at a glance from any angle.
+// Trait patterns: distinct procedural cues so traits read on any rock kind and colour-vision mode.
 if (vTrait > 2.5) {
-  totalEmissiveRadiance += vec3(0.35, 0.82, 1.0) * 0.2;
+  // Magnetic: animated parallel field bands scrolling across the surface.
+  float wave = sin(vObj.y * 14.0 + vObj.x * 5.0 - uTime * 4.5 + vDamage.y * 12.0);
+  float bands = smoothstep(0.55, 0.92, wave);
+  totalEmissiveRadiance += uMagneticColor * (0.08 + bands * 0.55);
 } else if (vTrait > 1.5) {
-  totalEmissiveRadiance += vec3(0.56, 0.65, 0.72) * 0.2;
+  // Dense: darkened heavy body with a sharp metallic rim and specular sheen.
+  float dRim = pow(max(0.0, 1.0 - viewDot), 2.2);
+  float sheen = pow(max(0.0, viewDot), 4.0) * 0.22;
+  diffuseColor.rgb = mix(diffuseColor.rgb * 0.62, uDenseColor, dRim * 0.45);
+  totalEmissiveRadiance += uDenseColor * (dRim * 0.55 + sheen);
 } else if (vTrait > 0.5) {
-  totalEmissiveRadiance += vec3(1.0, 0.42, 0.23) * 0.2;
+  // Volatile: pulsing warning hotspots distributed across the rock.
+  float spots = smoothstep(0.56, 0.82, vnoise(vObj * 3.8 + vDamage.y * 9.0));
+  float vPulse = 0.55 + 0.45 * sin(uTime * 5.0 + vDamage.y * 19.0);
+  totalEmissiveRadiance += uVolatileColor * (0.08 + spots * 0.75 * vPulse);
 }
 totalEmissiveRadiance += diffuseColor.rgb * vDamage.z * uGlow * (0.85 + 0.15 * sin(uTime * 2.0 + vDamage.y * 20.0));
 if (vDamage.x > 0.001) {
@@ -208,7 +263,7 @@ if (vDamage.x > 0.001) {
   // Cracks start in a few places and spread over the rock as damage grows.
   float reach = smoothstep(vDamage.x * 1.25, vDamage.x * 1.25 - 0.15, vnoise(vObj * 1.3 + vDamage.y * 5.0));
   float glow = line * reach * (0.7 + 0.3 * sin(uTime * 9.0 + vDamage.y * 30.0));
-  totalEmissiveRadiance += vec3(1.0, 0.45, 0.12) * glow * (1.2 + 1.8 * vDamage.x);
+  totalEmissiveRadiance += uCrackColor * glow * (1.2 + 1.8 * vDamage.x);
 }`,
       );
   };
@@ -222,11 +277,9 @@ const selfGlow = { value: 0.22 };
  * `uKind`, not a define, so there is still a single program).
  */
 export function rockMaterial(kind: RawResource): THREE.MeshPhongMaterial {
-  const surface = KIND_SURFACE[kind];
   const mat = new THREE.MeshPhongMaterial({ color: 0xffffff, flatShading: true });
-  mat.specular = new THREE.Color(surface.specular);
-  mat.shininess = surface.shininess;
-  if (surface.emissive !== undefined) mat.emissive = new THREE.Color(surface.emissive);
+  mat.shininess = KIND_SHININESS[kind];
+  syncRockMaterialSurface(mat, kind);
   patchRock(mat, kind);
   return mat;
 }
@@ -234,6 +287,7 @@ export function rockMaterial(kind: RawResource): THREE.MeshPhongMaterial {
 export class RockView {
   readonly group = new THREE.Group();
   private rocks: InstancePool[] = [];
+  private mats: THREE.MeshPhongMaterial[];
   private pickups: InstancePool;
   private buckets: Rock[][] = Array.from({ length: ROCK_POOLS }, () => []);
   /**
@@ -245,6 +299,7 @@ export class RockView {
     selfGlow.value = 0.22 * k;
   }
   private glowK = 1;
+  private paletteGen = -1;
   /** Cosmetic hit tracking: last seen hp and when the rock last lost some. */
   private lastHp = new Map<number, number>();
   private hitAt = new Map<number, number>();
@@ -252,14 +307,14 @@ export class RockView {
   constructor() {
     // Two shape pools per kind (`ore` 0–1, `ice` 2–3, `crystal` 4–5), each pair
     // sharing its kind's material. `update` buckets by `rockShapeIndex`.
-    const mats = RAW_RESOURCES.map(rockMaterial);
+    this.mats = RAW_RESOURCES.map(rockMaterial);
     for (let i = 0; i < ROCK_POOLS; i++) {
       const kind = RAW_RESOURCES[Math.floor(i / 2)]!;
       this.rocks.push(
         new InstancePool(
           this.group,
           rockGeometry(1000 + i * 77, rockStyleOf(kind)),
-          mats[Math.floor(i / 2)]!,
+          this.mats[Math.floor(i / 2)]!,
           256,
           true,
         ),
@@ -271,6 +326,14 @@ export class RockView {
       new THREE.MeshBasicMaterial({ color: 0xffffff }),
       256,
     );
+    this.syncPalette();
+  }
+
+  /** Refreshes rock tints, shader uniforms and material surfaces from the active palette. */
+  private syncPalette(): void {
+    this.paletteGen = paletteGeneration();
+    syncRockTints();
+    RAW_RESOURCES.forEach((kind, i) => syncRockMaterialSurface(this.mats[i]!, kind));
   }
 
   /**
@@ -279,6 +342,7 @@ export class RockView {
    * matrices instead of the whole belt.
    */
   update(rocks: readonly Rock[], pickups: readonly Pickup[], time: number, view: ViewRect): void {
+    if (this.paletteGen !== paletteGeneration()) this.syncPalette();
     crackTime.value = time;
     for (const b of this.buckets) b.length = 0;
     for (const r of rocks) {

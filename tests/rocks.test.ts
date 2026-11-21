@@ -1,6 +1,17 @@
 import * as THREE from 'three';
-import { describe, expect, it, vi } from 'vitest';
-import { RockView, ROCK_POOLS, rockMaterial, rockShapeIndex, rockStyleOf, traitIndex } from '../src/render/rocks';
+import { afterEach, describe, expect, it, vi } from 'vitest';
+import { PALETTES } from '../src/data/palette';
+import { setColourVision } from '../src/render/activePalette';
+import {
+  ROCK_POOLS,
+  ROCK_TINT,
+  RockView,
+  rockMaterial,
+  rockShapeIndex,
+  rockStyleOf,
+  syncRockTints,
+  traitIndex,
+} from '../src/render/rocks';
 import { rockGeometry } from '../src/render/util';
 import type { RawResource } from '../src/data/resources';
 import type { RockTrait } from '../src/data/traits';
@@ -15,6 +26,11 @@ vi.hoisted(() => {
     value: { createElement: () => ({ width: 0, height: 0, getContext: () => ctx }) },
     configurable: true,
   });
+});
+
+afterEach(() => {
+  setColourVision('default');
+  syncRockTints();
 });
 
 const attr = (g: THREE.BufferGeometry): THREE.BufferAttribute => g.getAttribute('position') as THREE.BufferAttribute;
@@ -124,6 +140,66 @@ describe('per-kind rock materials', () => {
     expect(stub.vertexShader).toContain('vTrait');
     expect(stub.vertexShader).toContain('vTrait = aTrait;');
     expect(stub.fragmentShader).toContain('vTrait');
+  });
+
+  it('wires shared palette uniforms and procedural trait patterns without hardcoded RGB literals', () => {
+    const ore = compile(rockMaterial('ore'));
+    const ice = compile(rockMaterial('ice'));
+    const crystal = compile(rockMaterial('crystal'));
+    const names = [
+      'uOreColor',
+      'uIceColor',
+      'uCrystalColor',
+      'uVolatileColor',
+      'uDenseColor',
+      'uMagneticColor',
+      'uCrackColor',
+    ] as const;
+    for (const name of names) {
+      expect(ore.uniforms[name]).toBe(ice.uniforms[name]);
+      expect(ice.uniforms[name]).toBe(crystal.uniforms[name]);
+      expect(ore.fragmentShader).toContain(name);
+    }
+    // No hardcoded RGB colour literals left in the emissive fragment injection.
+    const emissiveBlock = ore.fragmentShader.slice(ore.fragmentShader.indexOf('#include <emissivemap_fragment>'));
+    expect(emissiveBlock).not.toMatch(/vec3\s*\(/);
+    // Procedural cues for all three traits (animated bands, metallic rim/sheen, pulsing spots).
+    expect(emissiveBlock).toContain('bands');
+    expect(emissiveBlock).toContain('dRim');
+    expect(emissiveBlock).toContain('spots');
+  });
+});
+
+describe('RockView live palette updates', () => {
+  it('updates shader uniforms, ROCK_TINT and material surfaces when colour vision changes', () => {
+    const view = new RockView();
+    const oreMat = (view.group.children[0] as THREE.InstancedMesh).material as THREE.MeshPhongMaterial;
+    const iceMat = (view.group.children[2] as THREE.InstancedMesh).material as THREE.MeshPhongMaterial;
+    const crystalMat = (view.group.children[4] as THREE.InstancedMesh).material as THREE.MeshPhongMaterial;
+    const stub = compile(oreMat);
+
+    const uniformColor = (name: string): THREE.Color => (stub.uniforms[name] as { value: THREE.Color }).value;
+    expect(uniformColor('uOreColor').getHex()).toBe(PALETTES.default.resource.ore);
+    expect(uniformColor('uVolatileColor').getHex()).toBe(PALETTES.default.bad);
+
+    setColourVision('deutan');
+    view.update([rock(0, 'ore', 'volatile')], [], 1, VIEW);
+
+    expect(ROCK_TINT.ore.getHex()).toBe(PALETTES.deutan.rock.ore);
+    expect(uniformColor('uOreColor').getHex()).toBe(PALETTES.deutan.resource.ore);
+    expect(uniformColor('uIceColor').getHex()).toBe(PALETTES.deutan.resource.ice);
+    expect(uniformColor('uCrystalColor').getHex()).toBe(PALETTES.deutan.resource.crystal);
+    expect(uniformColor('uVolatileColor').getHex()).toBe(PALETTES.deutan.bad);
+    expect(uniformColor('uDenseColor').getHex()).toBe(PALETTES.deutan.resource.alloy);
+    expect(uniformColor('uMagneticColor').getHex()).toBe(PALETTES.deutan.fleet);
+    expect(uniformColor('uCrackColor').getHex()).toBe(PALETTES.deutan.bad);
+
+    const expectedOreSpec = new THREE.Color(PALETTES.deutan.resource.ore).multiplyScalar(0.42);
+    const expectedIceSpec = new THREE.Color(PALETTES.deutan.resource.ice).lerp(new THREE.Color(0xffffff), 0.55);
+    const expectedCrystalEm = new THREE.Color(PALETTES.deutan.resource.crystal).multiplyScalar(0.14);
+    expect(oreMat.specular.equals(expectedOreSpec)).toBe(true);
+    expect(iceMat.specular.equals(expectedIceSpec)).toBe(true);
+    expect(crystalMat.emissive.equals(expectedCrystalEm)).toBe(true);
   });
 });
 

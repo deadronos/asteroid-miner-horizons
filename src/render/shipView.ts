@@ -11,7 +11,7 @@ import { isAlive, shipStats } from '../sim/ships';
 import type { Fitted, GameState, Rock, Ship } from '../sim/types';
 import { buildFittings, fitLayout, type FitLayout, sameFit, snapshotFit } from './fittings';
 import { additive, flat, glowTexture } from './util';
-import { palette } from './activePalette';
+import { palette, paletteGeneration } from './activePalette';
 
 const HULL_SHAPES: Record<HullId, [number, number][]> = {
   prospector: [
@@ -110,9 +110,9 @@ const flameGeo = flat(
 );
 const shieldGeo = flat(new THREE.CircleGeometry(1, 40));
 const selectGeo = flat(new THREE.RingGeometry(0.92, 1, 48));
-// Never written after creation, so every ship shares them and none disposes them.
+// Shared by every ship and never disposed. `cargoBarMat` re-colours in place on palette switches.
 const barBgMat = new THREE.MeshBasicMaterial({ color: 0x0b1424, transparent: true, opacity: 0.8, depthWrite: false });
-const cargoBarMat = new THREE.MeshBasicMaterial({ color: 0xffa040, depthWrite: false });
+const cargoBarMat = new THREE.MeshBasicMaterial({ color: palette().resource.ore, depthWrite: false });
 const beamGlowMat = additive(0xff5e30, 0.42);
 
 export class ShipView {
@@ -137,6 +137,7 @@ export class ShipView {
   /** Per-frame scratch, reused so `update` allocates no collections. */
   private seen = new Set<number>();
   private rockById = new Map<number, Rock>();
+  private paletteGen = -1;
 
   private geo(id: HullId): THREE.BufferGeometry {
     let g = this.geos.get(id);
@@ -170,14 +171,15 @@ export class ShipView {
     body.add(fittings);
     root.add(body);
 
-    const shield = new THREE.Mesh(shieldGeo, additive(0x4db8ff, 0.2, null));
+    const pal = palette();
+    const shield = new THREE.Mesh(shieldGeo, additive(pal.fleet, 0.2, null));
     shield.scale.setScalar(h.size * 1.9);
     root.add(shield);
-    const select = new THREE.Mesh(selectGeo, additive(0x59ffa0, 0.9));
+    const select = new THREE.Mesh(selectGeo, additive(pal.flagship, 0.9));
     root.add(select);
 
     const barBg = new THREE.Mesh(barPlane, barBgMat);
-    const hpBar = new THREE.Mesh(barPlane, new THREE.MeshBasicMaterial({ color: 0x59ffa0, depthWrite: false }));
+    const hpBar = new THREE.Mesh(barPlane, new THREE.MeshBasicMaterial({ color: pal.ok, depthWrite: false }));
     const cargoBar = new THREE.Mesh(barPlane, cargoBarMat);
     for (const b of [barBg, hpBar, cargoBar]) {
       b.renderOrder = 20;
@@ -269,6 +271,12 @@ export class ShipView {
     this.flameMat.color.setHex(0xff8a3a).multiplyScalar(this.glow);
     this.beamMat.color.setHex(0xff905c).multiplyScalar(this.glow);
     this.tipMat.color.setHex(0xffc28e).multiplyScalar(this.glow);
+    const pal = palette();
+    if (this.paletteGen !== paletteGeneration()) {
+      this.paletteGen = paletteGeneration();
+      cargoBarMat.color.setHex(pal.resource.ore);
+      for (const v of this.visuals.values()) (v.shield.material as THREE.MeshBasicMaterial).color.setHex(pal.fleet);
+    }
 
     for (const ship of run.ships) {
       seen.add(ship.id);
