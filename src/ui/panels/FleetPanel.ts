@@ -132,21 +132,24 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         if (controls.length) {
           const ctl = h('div', { class: 'ctl' });
           if (controls.includes('mode')) {
+            const title = 'Assist: work near the flagship · Auto: work near the station';
             mode = h('button', {
               class: 'mode',
+              title,
               onclick: (e) => {
                 e.stopPropagation();
                 const cur = findShip(st().run, id);
                 if (cur) ctx.send({ t: 'aiMode', shipId: id, mode: cur.aiMode === 'assist' ? 'auto' : 'assist' });
               },
             });
-            mode.dataset.title = 'Assist: work near the flagship · Auto: work near the station';
+            mode.dataset.title = title;
             ctl.append(mode);
           }
           const toggle = (kind: 'repair' | 'upgrade' | 'build', text: string, title: string): HTMLButtonElement => {
             const btn = h('button', {
               class: 'mode auto',
               text,
+              title,
               onclick: (e) => {
                 e.stopPropagation();
                 const cur = findShip(st().run, id);
@@ -184,10 +187,22 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           setText(stat, fleetStatus(s, cur));
           hb.set(cur.hull / stt.maxHull);
           cb.set(walletTotal(cur.cargo) / stt.cargoCap);
-          if (mode) setText(mode, cur.aiMode === 'assist' ? 'ASSIST' : 'AUTO');
-          repair?.classList.toggle('on', cur.autoRepair);
-          upgrade?.classList.toggle('on', cur.autoUpgrade);
-          build?.classList.toggle('on', cur.autoBuild);
+          if (mode) {
+            setText(mode, cur.aiMode === 'assist' ? 'ASSIST' : 'AUTO');
+            mode.setAttribute('aria-pressed', String(cur.aiMode === 'auto'));
+          }
+          if (repair) {
+            repair.classList.toggle('on', cur.autoRepair);
+            repair.setAttribute('aria-pressed', String(cur.autoRepair));
+          }
+          if (upgrade) {
+            upgrade.classList.toggle('on', cur.autoUpgrade);
+            upgrade.setAttribute('aria-pressed', String(cur.autoUpgrade));
+          }
+          if (build) {
+            build.classList.toggle('on', cur.autoBuild);
+            build.setAttribute('aria-pressed', String(cur.autoBuild));
+          }
         });
         return row;
       });

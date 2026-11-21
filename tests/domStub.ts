@@ -217,6 +217,8 @@ function matchAll(root: FakeEl, selector: string): FakeEl[] {
 
 function hit(el: FakeEl, selector: string): boolean {
   if (selector === '.modal') return el.classList.contains('modal');
+  if (selector === '.modal:not(.hidden)') return el.classList.contains('modal') && !el.classList.contains('hidden');
+  if (selector === '#boot:not([hidden])') return el.id === 'boot' && !el.hidden;
   if (selector === '.doctrine') return el.classList.contains('doctrine');
   if (selector === '.doctrine button')
     return el.tag === 'button' && el.closest('.doctrine') !== el && !!el.closest('.doctrine');

@@ -639,7 +639,8 @@ button.buy small {
   border-radius: 6px;
   padding: 4px 8px;
   font-size: 12px;
-  white-space: nowrap;
+  max-width: min(320px, calc(100vw - 16px));
+  white-space: normal;
   z-index: 20;
 }
 

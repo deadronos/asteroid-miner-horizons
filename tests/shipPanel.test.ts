@@ -1,11 +1,13 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { COMPONENTS, COMPONENT_IDS, variantDef, type ComponentId, type VariantId } from '../src/data/components';
 import { formatCost } from '../src/data/resources';
+import type { SettingsStore } from '../src/settings';
 import { newGame } from '../src/sim/create';
 import { halve, investedCost } from '../src/sim/economy';
 import { makeShip, flagship } from '../src/sim/ships';
-import { autoToggleCommand, fleetControls } from '../src/ui/panels/FleetPanel';
+import { autoToggleCommand, createFleetPanel, fleetControls } from '../src/ui/panels/FleetPanel';
 import { installOptions, parseInstallValue, removeRefundTitle, shipPanelKey } from '../src/ui/panels/ShipPanel';
+import { resetDom } from './domStub';
 
 // The refit panel's empty slot offers every (component, variant) pair; these
 // pure seams build and parse those options and the fitted row's refund title.
@@ -110,5 +112,51 @@ describe('fleet row controls', () => {
     b.autoBuild = false;
     expect(autoToggleCommand(b, 'build')).toMatchObject({ kind: 'build', on: true });
     expect(autoToggleCommand(b, 'repair')).toMatchObject({ kind: 'repair', on: !b.autoRepair });
+  });
+
+  afterEach(() => {
+    resetDom();
+  });
+
+  it('sets title and aria-pressed on ASSIST/AUTO, REPAIR, UPGRADE and BUILD toggle buttons', () => {
+    resetDom();
+    const state = newGame(2);
+    const drone = makeShip(state.run, state.profile, 'drone', 'Miner 1', at);
+    const builder = makeShip(state.run, state.profile, 'constructionDrone', 'Builder 1', at);
+    drone.aiMode = 'auto';
+    drone.autoRepair = true;
+    drone.autoUpgrade = false;
+    builder.autoBuild = true;
+    state.run.ships.push(drone, builder);
+
+    const root = document.createElement('div');
+    const panel = createFleetPanel(root, {
+      getState: () => state,
+      send: () => {},
+      settings: {} as SettingsStore,
+    });
+    panel.refresh();
+
+    const buttons = [...root.querySelectorAll('button')];
+    const mode = buttons.find((btn) => btn.textContent === 'AUTO');
+    const repair = buttons.find((btn) => btn.textContent === 'REPAIR');
+    const upgrade = buttons.find((btn) => btn.textContent === 'UPGRADE');
+    const build = buttons.find((btn) => btn.textContent === 'BUILD');
+
+    expect(mode?.title).toContain('Assist:');
+    expect(mode?.getAttribute('aria-pressed')).toBe('true');
+    expect(repair?.title).toContain('Autorepair:');
+    expect(repair?.getAttribute('aria-pressed')).toBe('true');
+    expect(upgrade?.title).toContain('Autoupgrade:');
+    expect(upgrade?.getAttribute('aria-pressed')).toBe('false');
+    expect(build?.title).toContain('Autobuild:');
+    expect(build?.getAttribute('aria-pressed')).toBe('true');
+
+    drone.aiMode = 'assist';
+    drone.autoRepair = false;
+    panel.refresh();
+    expect(mode?.textContent).toBe('ASSIST');
+    expect(mode?.getAttribute('aria-pressed')).toBe('false');
+    expect(repair?.getAttribute('aria-pressed')).toBe('false');
   });
 });
