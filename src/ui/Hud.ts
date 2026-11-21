@@ -345,6 +345,7 @@ export class Hud {
     this.applyCollapse();
     for (const p of this.panels) {
       if (!p.built || !this.collapsedPanels.has(p)) p.refresh();
+      else p.refreshHeader();
     }
     this.research.refresh();
     this.gate.refresh();

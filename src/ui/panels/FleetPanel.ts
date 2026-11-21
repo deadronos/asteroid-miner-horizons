@@ -98,6 +98,10 @@ export function fleetStatus(state: GameState, s: Ship, cargoCap?: number): strin
 
 export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
   const st = ctx.getState;
+  let head: HTMLElement | null = null;
+  const updateHead = (): void => {
+    if (head) setText(head, `Fleet · ${droneCount(st().run)}/${fleetCap(st().profile)} drones`);
+  };
   return new Panel(
     el,
     () => {
@@ -107,8 +111,8 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
     },
     (bind) => {
       const s0 = st();
-      const head = h('h3');
-      bind(() => setText(head, `Fleet · ${droneCount(st().run)}/${fleetCap(st().profile)} drones`));
+      head = h('h3');
+      bind(updateHead);
       const rowRefs: {
         id: number;
         row: HTMLElement;
@@ -275,5 +279,6 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       });
       return [head, ...rows, outHead, ...outRows, ...(outRows.length ? [] : [outHint]), yard, ...buys];
     },
+    updateHead,
   );
 }

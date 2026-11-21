@@ -27,6 +27,7 @@ export class Panel {
     readonly el: HTMLElement,
     private readonly key: () => string,
     private readonly build: (bind: (b: Binder) => void) => Node[],
+    private readonly header?: () => void,
   ) {}
 
   refresh(): void {
@@ -37,6 +38,11 @@ export class Panel {
       this.el.replaceChildren(...this.build((b) => this.binders.push(b)));
     }
     for (const b of this.binders) b();
+  }
+
+  /** Lightweight update for a collapsed panel's still-visible heading without refreshing its body. */
+  refreshHeader(): void {
+    this.header?.();
   }
 
   get built(): boolean {

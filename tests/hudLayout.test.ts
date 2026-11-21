@@ -1,6 +1,9 @@
 import { afterEach, describe, expect, it } from 'vitest';
+import { SettingsStore } from '../src/settings';
 import { newGame } from '../src/sim/create';
 import { queueRefine } from '../src/sim/refining';
+import { makeShip } from '../src/sim/ships';
+import { Hud } from '../src/ui/Hud';
 import { Panel, bar } from '../src/ui/dom';
 import {
   HELP_AUTO_HIDE_SEC,
@@ -10,7 +13,9 @@ import {
   toggledCollapse,
   touchControlsShown,
 } from '../src/ui/hudLayout';
-import { resetDom } from './domStub';
+import type { SaveActions } from '../src/session';
+import { resetDom, type FakeEl } from './domStub';
+import { memStorage } from './memStorage';
 
 describe('help box visibility', () => {
   it('auto shows help only for the first minutes of lifetime play', () => {
@@ -147,5 +152,35 @@ describe('HUD DOM perf helpers', () => {
     expect(p.built).toBe(true);
     p.invalidate();
     expect(p.built).toBe(false);
+  });
+
+  it('refreshes collapsed #fleet and #ship headings without rebuilding their bodies', () => {
+    resetDom();
+    const state = newGame(7);
+    const settings = new SettingsStore(memStorage());
+    settings.set({ hudCollapsed: { fleet: true, ship: true } });
+    const root = document.createElement('div');
+    document.body.append(root);
+    const hud = new Hud(root, () => state, { send: () => {}, saves: {} as SaveActions }, settings);
+    hud.refresh();
+
+    const fleetEl = (root as unknown as FakeEl).querySelectorAll('#fleet')[0]!;
+    const shipEl = (root as unknown as FakeEl).querySelectorAll('#ship')[0]!;
+    const fleetHead = fleetEl.querySelectorAll('h3')[0]!;
+    const shipHead = shipEl.querySelectorAll('h3')[0]!;
+    const initialShipRows = fleetEl.querySelectorAll('.shiprow').length;
+    expect(fleetHead.textContent).toContain('0/');
+    expect(shipHead.textContent).toContain(state.run.ships[0]!.name);
+
+    // Add a drone and select it while both panels stay collapsed.
+    const drone = makeShip(state.run, state.profile, 'drone', 'Drone Alpha', { x: 0, z: 0 });
+    state.run.ships.push(drone);
+    state.run.selectedId = drone.id;
+    hud.refresh();
+
+    // Headings update, while the collapsed fleet body is not rebuilt.
+    expect(fleetHead.textContent).toContain('1/');
+    expect(shipHead.textContent).toContain('Drone Alpha');
+    expect(fleetEl.querySelectorAll('.shiprow').length).toBe(initialShipRows);
   });
 });

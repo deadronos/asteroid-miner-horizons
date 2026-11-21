@@ -73,6 +73,19 @@ export function shipPanelKey(ship: Ship | undefined): string {
 }
 
 export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
+  let headName: HTMLElement | null = null;
+  let headMeta: HTMLElement | null = null;
+  const updateHead = (): void => {
+    if (!headName || !headMeta) return;
+    const ship = selectedShip(ctx.getState().run);
+    if (!ship) {
+      setText(headName, 'No ship selected');
+      setText(headMeta, '');
+      return;
+    }
+    setText(headName, ship.name);
+    setText(headMeta, ` ${HULLS[ship.hullId].name} · ${ship.slots.length}/${HULLS[ship.hullId].maxSlots} slots`);
+  };
   return new Panel(
     el,
     () => {
@@ -83,18 +96,16 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       const st = ctx.getState;
       const s0 = st();
       const ship0 = selectedShip(s0.run);
-      if (!ship0) return [h('h3', { text: 'No ship selected' })];
+      headName = h('span', { text: ship0 ? ship0.name : 'No ship selected' });
+      headMeta = h('small', {
+        text: ship0 ? ` ${HULLS[ship0.hullId].name} · ${ship0.slots.length}/${HULLS[ship0.hullId].maxSlots} slots` : '',
+      });
+      const title = h('h3', {}, headName, headMeta);
+      if (!ship0) return [title];
       const id = ship0.id;
       const send = ctx.send;
       const updaters: ((state: GameState, s: Ship, rb: string | null) => void)[] = [];
 
-      const title = h(
-        'h3',
-        { text: `${ship0.name}` },
-        h('small', {
-          text: ` ${HULLS[ship0.hullId].name} · ${ship0.slots.length}/${HULLS[ship0.hullId].maxSlots} slots`,
-        }),
-      );
       const hull = bar('hull');
       const shield = bar('shield');
       const cargo = bar('cargo');
@@ -218,5 +229,6 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
 
       return [title, hull.el, shield.el, cargo.el, cargoDetail, stats, actions, notice, slotsHead, ...slotRows];
     },
+    updateHead,
   );
 }

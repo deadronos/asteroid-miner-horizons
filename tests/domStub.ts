@@ -10,8 +10,15 @@ export interface FakeEl {
   disabled: boolean;
   type: string;
   title: string;
+  innerHTML: string;
   dataset: Record<string, string>;
-  style: { width: string };
+  style: {
+    width: string;
+    display: string;
+    opacity: string;
+    transform: string;
+    setProperty: (k: string, v: string) => void;
+  };
   classList: {
     contains: (name: string) => boolean;
     add: (name: string) => void;
@@ -23,22 +30,30 @@ export interface FakeEl {
   className: string;
   setAttribute: (name: string, value: string) => void;
   getAttribute: (name: string) => string | null;
+  removeAttribute: (name: string) => void;
   hasAttribute: (name: string) => boolean;
   addEventListener: (type: string, fn: (e: Event) => void) => void;
+  dispatch: (type: string, event: Event) => void;
   append: (...nodes: (FakeEl | string)[]) => void;
+  prepend: (...nodes: (FakeEl | string)[]) => void;
   replaceChildren: (...nodes: FakeEl[]) => void;
+  remove: () => void;
   querySelectorAll: (selector: string) => FakeEl[];
   getClientRects: () => { length: number };
   focus: () => void;
   closest: (selector: string) => FakeEl | null;
   contains: (node: FakeEl) => boolean;
   isConnected: boolean;
+  childElementCount: number;
+  lastElementChild: FakeEl | null;
+  options: FakeEl[];
 }
 
 export interface FakeDoc {
   body: FakeEl;
   activeElement: FakeEl | null;
   createElement: (tag: string) => FakeEl;
+  querySelector: (selector: string) => FakeEl | null;
   querySelectorAll: (selector: string) => FakeEl[];
 }
 
@@ -55,7 +70,7 @@ export function resetDom(): void {
     },
     removeEventListener: () => {},
   };
-  Object.assign(globalThis, { document: doc, window: win });
+  Object.assign(globalThis, { document: doc, window: win, HTMLElement: Object });
 }
 
 /** Fires a `keydown` for `key` (its `code` defaults to the key) on every window listener, in order. */
@@ -85,6 +100,9 @@ function createDoc(): FakeDoc {
     createElement(tag: string) {
       return createEl(doc, tag);
     },
+    querySelector(selector: string) {
+      return matchAll(doc.body, selector)[0] ?? null;
+    },
     querySelectorAll(selector: string) {
       return matchAll(doc.body, selector);
     },
@@ -96,6 +114,7 @@ function createDoc(): FakeDoc {
 function createEl(doc: FakeDoc, tag: string): FakeEl {
   const classes = new Set<string>();
   const attrs = new Map<string, string>();
+  const elListeners: { type: string; fn: (e: Event) => void }[] = [];
   let text = '';
   const el: FakeEl = {
     tag,
@@ -106,8 +125,9 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
     disabled: false,
     type: '',
     title: '',
+    innerHTML: '',
     dataset: {},
-    style: { width: '' },
+    style: { width: '', display: '', opacity: '', transform: '', setProperty: () => {} },
     ownerDocument: doc,
     classList: {
       contains: (name) => classes.has(name),
@@ -137,8 +157,16 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
     },
     setAttribute: (name, value) => attrs.set(name, value),
     getAttribute: (name) => attrs.get(name) ?? null,
+    removeAttribute: (name) => {
+      attrs.delete(name);
+    },
     hasAttribute: (name) => attrs.has(name),
-    addEventListener: () => {},
+    addEventListener: (type, fn) => {
+      elListeners.push({ type, fn });
+    },
+    dispatch(type, event) {
+      for (const l of elListeners) if (l.type === type) l.fn(event);
+    },
     append(...nodes) {
       for (const n of nodes) {
         const node = typeof n === 'string' ? textNode(doc, n) : n;
@@ -146,10 +174,33 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
         el.childNodes.push(node);
       }
     },
+    prepend(...nodes) {
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const n = nodes[i]!;
+        const node = typeof n === 'string' ? textNode(doc, n) : n;
+        node.parent = el;
+        el.childNodes.unshift(node);
+      }
+    },
     replaceChildren(...nodes) {
       for (const n of el.childNodes) n.parent = null;
       el.childNodes = [];
       el.append(...nodes);
+    },
+    remove() {
+      if (!el.parent) return;
+      const i = el.parent.childNodes.indexOf(el);
+      if (i >= 0) el.parent.childNodes.splice(i, 1);
+      el.parent = null;
+    },
+    get childElementCount() {
+      return el.childNodes.length;
+    },
+    get lastElementChild() {
+      return el.childNodes[el.childNodes.length - 1] ?? null;
+    },
+    get options() {
+      return el.childNodes;
     },
     querySelectorAll: (selector) => matchAll(el, selector),
     getClientRects: () => ({ length: shown(el) ? 1 : 0 }),
@@ -219,6 +270,14 @@ function hit(el: FakeEl, selector: string): boolean {
   if (selector === '.modal') return el.classList.contains('modal');
   if (selector === '.modal:not(.hidden)') return el.classList.contains('modal') && !el.classList.contains('hidden');
   if (selector === '#boot:not([hidden])') return el.id === 'boot' && !el.hidden;
+  if (selector === '.hud-stack') return el.classList.contains('hud-stack');
+  if (selector === '.shiprow') return el.classList.contains('shiprow');
+  if (selector === '.tabs') return el.classList.contains('tabs');
+  if (selector === 'select') return el.tag === 'select';
+  if (selector === 'h3') return el.tag === 'h3';
+  if (selector === '#log') return el.id === 'log';
+  if (selector === '#fleet') return el.id === 'fleet';
+  if (selector === '#ship') return el.id === 'ship';
   if (selector === '.doctrine') return el.classList.contains('doctrine');
   if (selector === '.doctrine button')
     return el.tag === 'button' && el.closest('.doctrine') !== el && !!el.closest('.doctrine');
