@@ -5,9 +5,9 @@ import { v, type Vec2 } from '../core/vec';
 import { variantDef, type ShipStatKey } from '../data/components';
 import { DOCTRINE_PAIR_IDS, DOCTRINE_SIDES, type DoctrineChoice } from '../data/doctrines';
 import { HULLS, type HullId } from '../data/hulls';
-import { emptyWallet, walletTotal } from '../data/resources';
+import { credit, emptyWallet, formatWallet, pay, walletTotal, type Cost } from '../data/resources';
 import { TUNING } from '../data/tuning';
-import type { GameState, Profile, Run, Ship } from './types';
+import type { Fitted, GameState, Profile, Run, Ship } from './types';
 
 /** Derived stats; the key list lives with the component effects that target it. */
 export type ShipStats = Record<ShipStatKey, number>;
@@ -214,5 +214,58 @@ export function damageShip(state: GameState, ship: Ship, raw: number): void {
     out.log.push({ level: 'major', text: `${ship.name} was destroyed.`, event: 'shipLoss' });
     removeItem(run.ships, ship);
     if (run.selectedId === ship.id) run.selectedId = flagship(run).id;
+  }
+}
+
+/**
+ * Purchases `hullId`: refits the flagship onto a new flagship hull (carrying over slots and refunding parts that no
+ * longer fit via `refundCost`) or launches a new fleet ship from the station. Callers must check `hullBlock` first.
+ */
+export function applyBuyHull(state: GameState, hullId: HullId, refundCost: (f: Fitted) => Cost): void {
+  const { run, profile, out } = state;
+  const h = HULLS[hullId];
+  pay(run.bank, h.cost);
+  if (h.role === 'flagship') {
+    const fs = flagship(run);
+    const frac = fs.hull / shipStats(fs, profile).maxHull;
+    const old = fs.slots;
+    // Bought slots carry over, up to the new hull's cap, and fitted parts keep their indices.
+    const n = Math.min(h.maxSlots, Math.max(h.slots, old.length));
+    fs.hullId = hullId;
+    const slots = Array.from({ length: n }, (_, i) => old[i] ?? null);
+    // Parts past the new cap move into free slots below it, in order; only what still has no room is
+    // refunded at half value.
+    const refund = emptyWallet();
+    let free = 0;
+    for (let i = n; i < old.length; i++) {
+      const extra = old[i];
+      if (!extra) continue;
+      while (free < n && slots[free]) free++;
+      if (free < n) slots[free++] = extra;
+      else credit(refund, refundCost(extra));
+    }
+    fs.slots = slots;
+    credit(run.bank, refund);
+    fs.hull = frac * shipStats(fs, profile).maxHull;
+    clampToStats(state, fs);
+    const parts = formatWallet(refund);
+    out.log.push({
+      level: 'major',
+      text: parts
+        ? `Flagship refitted onto a ${h.name} hull. Parts that no longer fit were scrapped for ${parts}.`
+        : `Flagship refitted onto a ${h.name} hull.`,
+    });
+  } else {
+    const st = run.system.station.pos;
+    const n = droneCount(run) + 1;
+    const prefix = h.name.split(' ').pop()!;
+    const taken = run.ships.map((s) =>
+      s.name.startsWith(`${prefix}-`) ? Number(s.name.slice(prefix.length + 1)) || 0 : 0,
+    );
+    const ship = makeShip(run, profile, hullId, `${prefix}-${Math.max(0, ...taken) + 1}`, v(st.x + n * 6, st.z - 20));
+    run.ships.push(ship);
+    profile.stats.drones += 1;
+    if (h.role === 'drone') profile.stats.miningDrones += 1;
+    out.log.push({ level: 'info', text: `${ship.name} launched from the station.` });
   }
 }

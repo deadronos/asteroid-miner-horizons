@@ -18,7 +18,7 @@ import {
 } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { ROCK_RADII, rockHp } from './generate';
-import { clampToStats, isAlive } from './ships';
+import { clampToStats, isAlive, isFlagship } from './ships';
 import type { Anomaly, Belt, Exploration, GameState, Rock, Run, Ship, StarSystem } from './types';
 
 /**
@@ -230,4 +230,41 @@ export function updateExploration(state: GameState): void {
       event: 'salvage',
     });
   }
+}
+
+/** Fires the flagship's sensor ping, revealing any anomalies within `TUNING.pingRange`. */
+export function applyPing(state: GameState): void {
+  const { run, out } = state;
+  const { exploration } = run;
+  const fs = run.ships.find(isFlagship);
+  if (!fs || !isAlive(fs)) {
+    out.log.push({ level: 'warn', text: 'The flagship is rebuilding at the station.' });
+    return;
+  }
+  if (exploration.pingCd > 0) {
+    out.log.push({ level: 'warn', text: `Sensors recharging (${Math.ceil(exploration.pingCd)}s).` });
+    return;
+  }
+
+  exploration.pingCd = TUNING.pingCooldown;
+  out.fx.push({ t: 'ping', pos: { ...fs.pos }, range: TUNING.pingRange });
+  const rangeSq = TUNING.pingRange * TUNING.pingRange;
+  const list = anomalies(run);
+  let found = 0;
+  for (let i = 0; i < list.length; i++) {
+    const a = list[i]!;
+    if (exploration.revealed.includes(a.id) || distSq(a.pos, fs.pos) > rangeSq) continue;
+    exploration.revealed.push(a.id);
+    found += 1;
+    if (a.kind === 'rich') spawnRichRock(run, a);
+    else out.log.push({ level: 'info', text: `Sensor contact: ${DERELICT_SALVAGE[a.salvage]!.label} derelict.` });
+  }
+  out.log.push({
+    level: 'info',
+    text:
+      found === 0
+        ? 'Sensor ping: nothing in range.'
+        : `Sensor ping: ${found} anomal${found === 1 ? 'y' : 'ies'} found.`,
+    event: 'ping',
+  });
 }

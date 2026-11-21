@@ -7,9 +7,10 @@ import { TUNING } from '../data/tuning';
 import { deployOutpostAt, haulStep, outpostBlock } from './automation';
 import { isDocked } from './economy';
 import { affordAbove, needsRepair } from './fleetAuto';
-import { arrive, dodgeBlast, dodgeHazards, nearBlast, unsafe, type TickCtx } from './pilot';
+import { dodgeBlast, dodgeHazards, nearBlast, unsafe } from './pilot';
 import { findShip, isHoldFull, type ShipStats } from './ships';
 import { setStatus, type IdleReason } from './status';
+import { arrive, type TickCtx } from './steering';
 import type { Rock, Ship } from './types';
 
 /** A rock a builder could still put an outpost on, ignoring who else is heading for it. */

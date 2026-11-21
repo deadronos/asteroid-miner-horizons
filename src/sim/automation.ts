@@ -10,8 +10,9 @@ import { isDocked } from './economy';
 import { needsRepair } from './fleetAuto';
 import type { SimIndex } from './index';
 import { yieldMul } from './mining';
-import { arrive, brakeForRocks, dodgeBlast, dodgeHazards, formationSlot, unsafe, type TickCtx } from './pilot';
+import { dodgeBlast, dodgeHazards, formationSlot, unsafe } from './pilot';
 import { setStatus, type IdleReason } from './status';
+import { arrive, brakeForRocks, type TickCtx } from './steering';
 import {
   cargoFree,
   findShip,

@@ -9,12 +9,14 @@ import { PERK_IDS, type PerkId } from '../data/perks';
 import { TUNING } from '../data/tuning';
 import { newStats } from './achievements';
 import { newAutomation } from './automation';
-import { fillBoard, newBoard } from './contracts';
-import { doctrineRespecNotice } from './economy';
+import { describeContract, fillBoard, newBoard } from './contracts';
+import { dataGain, doctrineRespecNotice, warpCost } from './economy';
 import { newExploration } from './exploration';
 import { newHazards } from './hazards';
 import { generateSystem, populateBelts } from './generate';
-import { newRefinery } from './refining';
+import { describeModifiers } from './modifiers';
+import { jobLabel, newRefinery } from './refining';
+import { isRoute } from './routes';
 import { makeShip } from './ships';
 import type { GameState, Profile, Run } from './types';
 
@@ -99,4 +101,45 @@ export function newGame(seed = (Math.random() * 2 ** 32) >>> 0): GameState {
   });
   state.out.log.push({ level: 'info', text: doctrineRespecNotice() });
   return state;
+}
+
+/** Validates warp route and fuel, awards Horizon Data, and rebuilds `state.run` in the next star system. */
+export function applyWarp(state: GameState, route: number): void {
+  const { run, profile, out } = state;
+  if (!isRoute(route)) {
+    out.log.push({ level: 'warn', text: 'Unknown warp route.' });
+    return;
+  }
+  const cost = warpCost(state);
+  if (run.bank.fuel < cost) {
+    out.log.push({ level: 'warn', text: `Warp needs ${cost} fuel in the station bank.` });
+    return;
+  }
+  const gain = dataGain(state);
+  profile.data += gain;
+  profile.dataEarned += gain;
+  profile.warps += 1;
+  profile.stats.warps += 1;
+  const dropped = run.contracts.active;
+  const left = run.refinery.queue;
+  const outposts = run.automation.outposts.length;
+  state.run = newRun(profile, route);
+  out.fx.push({ t: 'warp' });
+  out.log.push({
+    level: 'major',
+    text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.`,
+  });
+  out.log.push({ level: 'info', text: doctrineRespecNotice() });
+  const mods = state.run.system.modifiers;
+  if (mods.length > 0) out.log.push({ level: 'major', text: `System modifiers: ${describeModifiers(mods)}.` });
+  if (dropped) out.log.push({ level: 'warn', text: `Contract left behind: ${describeContract(dropped)}.` });
+  if (left.length > 0) {
+    const jobs = left.map((j) => jobLabel(j.recipe, j.count)).join(', ');
+    out.log.push({ level: 'warn', text: `Refinery queue left behind: ${jobs}.` });
+  }
+  if (outposts > 0)
+    out.log.push({
+      level: 'warn',
+      text: `Outposts left behind: ${outposts}. Their reserves stay in the old system.`,
+    });
 }

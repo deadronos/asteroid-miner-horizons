@@ -20,10 +20,11 @@ import { spawnBeltRock } from './generate';
 import { flareExposure, updateHazards } from './hazards';
 import type { CollideQuery, PickupShipQuery, SimIndex } from './index';
 import { systemEffects } from './modifiers';
-import { droneThink, runOrder, steer, type TickCtx } from './pilot';
+import { droneThink, runOrder } from './pilot';
 import { updateRefinery } from './refining';
 import { cargoFree, damageShip, isAlive, isBuilder, isFlagship, isHauler, type ShipStats } from './ships';
 import { setStatus } from './status';
+import { steer, type TickCtx } from './steering';
 import { magnetPull } from './traits';
 import type { GameState, Rock, Run, Ship } from './types';
 

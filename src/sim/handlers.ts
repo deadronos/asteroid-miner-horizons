@@ -3,9 +3,7 @@
 // behaviour is unchanged; the map type makes a missing variant a compile error.
 
 import { removeItem } from '../core/array';
-import { distSq, v } from '../core/vec';
 import { COMPONENTS, isVariant, variantDef, type Tier } from '../data/components';
-import { DERELICT_SALVAGE } from '../data/exploration';
 import { HULLS } from '../data/hulls';
 import {
   DOCTRINE_PAIR_IDS,
@@ -17,17 +15,15 @@ import {
   type DoctrinePairId,
 } from '../data/doctrines';
 import { PERKS } from '../data/perks';
-import { credit, emptyWallet, formatCost, formatWallet, pay } from '../data/resources';
+import { credit, formatCost, pay } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { deployOutpostAt, outpostAt, outpostBlock } from './automation';
 import type { Command } from './commands'; // type-only (erased): no runtime cycle
 import { describeContract, fillBoard } from './contracts';
-import { newRun } from './create';
+import { applyWarp } from './create';
 import {
-  dataGain,
   halve,
   hullBlock,
-  doctrineRespecNotice,
   doctrineWindowOpen,
   perkCost,
   refitBlock,
@@ -35,25 +31,12 @@ import {
   scrapValue,
   slotCost,
   upgradeCost,
-  warpCost,
 } from './economy';
-import { anomalies, spawnRichRock } from './exploration';
+import { applyPing } from './exploration';
 import { findRock } from './generate';
 import { applyDismissGate, applyFundGate, applyNewGamePlus } from './gate';
-import { describeModifiers } from './modifiers';
 import { batchCost, cancelRefine, jobLabel, queueRefine } from './refining';
-import { isRoute } from './routes';
-import {
-  clampToStats,
-  droneCount,
-  findShip,
-  flagship,
-  isAlive,
-  isBuilder,
-  isFlagship,
-  makeShip,
-  shipStats,
-} from './ships';
+import { applyBuyHull, clampToStats, findShip, flagship, isAlive, isBuilder, isFlagship, shipStats } from './ships';
 import { canMine } from './traits';
 import type { Fitted, GameState, Ship } from './types';
 
@@ -158,37 +141,7 @@ export const handlers: Handlers = {
   },
 
   warp: (state, cmd) => {
-    const { run, profile, out } = state;
-    if (!isRoute(cmd.route)) return fail(state, 'Unknown warp route.');
-    const cost = warpCost(state);
-    if (run.bank.fuel < cost) return fail(state, `Warp needs ${cost} fuel in the station bank.`);
-    const gain = dataGain(state);
-    profile.data += gain;
-    profile.dataEarned += gain;
-    profile.warps += 1;
-    profile.stats.warps += 1;
-    const dropped = run.contracts.active;
-    const left = run.refinery.queue;
-    const outposts = run.automation.outposts.length;
-    state.run = newRun(profile, cmd.route);
-    out.fx.push({ t: 'warp' });
-    out.log.push({
-      level: 'major',
-      text: `Warp complete: welcome to ${state.run.system.name} (system ${state.run.system.number}). +${gain} Horizon Data.`,
-    });
-    out.log.push({ level: 'info', text: doctrineRespecNotice() });
-    const mods = state.run.system.modifiers;
-    if (mods.length > 0) out.log.push({ level: 'major', text: `System modifiers: ${describeModifiers(mods)}.` });
-    if (dropped) out.log.push({ level: 'warn', text: `Contract left behind: ${describeContract(dropped)}.` });
-    if (left.length > 0) {
-      const jobs = left.map((j) => jobLabel(j.recipe, j.count)).join(', ');
-      out.log.push({ level: 'warn', text: `Refinery queue left behind: ${jobs}.` });
-    }
-    if (outposts > 0)
-      out.log.push({
-        level: 'warn',
-        text: `Outposts left behind: ${outposts}. Their reserves stay in the old system.`,
-      });
+    applyWarp(state, cmd.route);
   },
 
   refine: (state, cmd) => {
@@ -211,60 +164,9 @@ export const handlers: Handlers = {
   },
 
   buyHull: (state, cmd) => {
-    const { run, profile, out } = state;
     const block = hullBlock(state, cmd.hullId);
     if (block) return fail(state, block);
-    const h = HULLS[cmd.hullId];
-    pay(run.bank, h.cost);
-    if (h.role === 'flagship') {
-      const fs = flagship(run);
-      const frac = fs.hull / shipStats(fs, profile).maxHull;
-      const old = fs.slots;
-      // Bought slots carry over, up to the new hull's cap, and fitted parts keep their indices.
-      const n = Math.min(h.maxSlots, Math.max(h.slots, old.length));
-      fs.hullId = cmd.hullId;
-      const slots = Array.from({ length: n }, (_, i) => old[i] ?? null);
-      // Parts past the new cap move into free slots below it, in order; only what still has no room is
-      // refunded at half value.
-      const refund = emptyWallet();
-      let free = 0;
-      for (let i = n; i < old.length; i++) {
-        const extra = old[i];
-        if (!extra) continue;
-        while (free < n && slots[free]) free++;
-        if (free < n) slots[free++] = extra;
-        else credit(refund, scrapValue(extra));
-      }
-      fs.slots = slots;
-      credit(run.bank, refund);
-      fs.hull = frac * shipStats(fs, profile).maxHull;
-      clampToStats(state, fs);
-      const parts = formatWallet(refund);
-      out.log.push({
-        level: 'major',
-        text: parts
-          ? `Flagship refitted onto a ${h.name} hull. Parts that no longer fit were scrapped for ${parts}.`
-          : `Flagship refitted onto a ${h.name} hull.`,
-      });
-    } else {
-      const st = run.system.station.pos;
-      const n = droneCount(run) + 1;
-      const prefix = h.name.split(' ').pop()!;
-      const taken = run.ships.map((s) =>
-        s.name.startsWith(`${prefix}-`) ? Number(s.name.slice(prefix.length + 1)) || 0 : 0,
-      );
-      const ship = makeShip(
-        run,
-        profile,
-        cmd.hullId,
-        `${prefix}-${Math.max(0, ...taken) + 1}`,
-        v(st.x + n * 6, st.z - 20),
-      );
-      run.ships.push(ship);
-      profile.stats.drones += 1;
-      if (h.role === 'drone') profile.stats.miningDrones += 1;
-      out.log.push({ level: 'info', text: `${ship.name} launched from the station.` });
-    }
+    applyBuyHull(state, cmd.hullId, scrapValue);
   },
 
   select: withShip((state, ship) => {
@@ -419,33 +321,7 @@ export const handlers: Handlers = {
   },
 
   ping: (state) => {
-    const { run, out } = state;
-    const { exploration } = run;
-    const fs = run.ships.find(isFlagship);
-    if (!fs || !isAlive(fs)) return fail(state, 'The flagship is rebuilding at the station.');
-    if (exploration.pingCd > 0) return fail(state, `Sensors recharging (${Math.ceil(exploration.pingCd)}s).`);
-
-    exploration.pingCd = TUNING.pingCooldown;
-    out.fx.push({ t: 'ping', pos: { ...fs.pos }, range: TUNING.pingRange });
-    const rangeSq = TUNING.pingRange * TUNING.pingRange;
-    const list = anomalies(run);
-    let found = 0;
-    for (let i = 0; i < list.length; i++) {
-      const a = list[i]!;
-      if (exploration.revealed.includes(a.id) || distSq(a.pos, fs.pos) > rangeSq) continue;
-      exploration.revealed.push(a.id);
-      found += 1;
-      if (a.kind === 'rich') spawnRichRock(run, a);
-      else out.log.push({ level: 'info', text: `Sensor contact: ${DERELICT_SALVAGE[a.salvage]!.label} derelict.` });
-    }
-    out.log.push({
-      level: 'info',
-      text:
-        found === 0
-          ? 'Sensor ping: nothing in range.'
-          : `Sensor ping: ${found} anomal${found === 1 ? 'y' : 'ies'} found.`,
-      event: 'ping',
-    });
+    applyPing(state);
   },
 
   dismissGoals: (state) => {
