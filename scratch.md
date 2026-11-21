@@ -1,58 +1,75 @@
 # Suggested next issues
 
-Rewritten 2026-10-31 at v0.12.0 (unreleased work on `main` since then), after the 2026-10-30 wave landed: #159,
-#164, #174, #206–#212, #216, #217, #219, #220 (PRs #225–#238). Ordered by leverage, not size. The index of open
-work is #178; the category umbrellas are #42 (scope), #51 (balance), #28 (visuals) and #18 (performance). This file
-is the maintainer's notebook; agents do not edit it (see AGENTS.md).
+Rewritten 2026-11-21 at v0.14.1, following the November 2026 review (#282). Ordered into actionable batches by
+leverage and natural landing boundaries (shared CSS/layout, shared `balance:ci` pass, shared sim/render hot path).
+The index of review work is #282; category umbrellas are #277 (code), #278 (performance), #279 (visuals), #280
+(UI/UX & accessibility) and #281 (balance, complementing #51). Pre-existing scope work remains under #42 (#173,
+#175, #176) and #178. This file is the maintainer's notebook; agents do not edit it unless asked (see AGENTS.md).
 
-## 0. Housekeeping
+## Batch 1 — Quick-win bugs, save safety & layout thrashing (S)
 
-- **Cut a release.** `main` carries save v14, construction drones, gamepad, colour-vision palette, tab lock and the
-  balance pass, all since v0.12.0. Bump to 0.13.0 and tag.
-- **Close #18** (performance umbrella): every child is done. #28 is down to #27; #51 to #50, #173 and #176.
-- **Delete merged remote branches.** 13 `claude/*` branches from PRs #225–#237 (and `fix/frozen-save-v13-215`
-  from the closed #224) are still on origin.
+Low-risk, high-signal fixes with tight blast radius; safe to land in one PR wave.
 
-## 1. #239: small follow-ups from #174 (S)
+- **#261** — Harden `src/sim/validate.ts` against divide-by-zero (`radius <= 0`, `heatRadius <= starRadius`,
+  non-finite refinery totals) and hardcoded flagship hull IDs.
+- **#270** — Fix `FleetPanel` toggle tooltips (`btn.title`), gamepad title-screen modal routing (`.modal` before
+  `#boot` in `src/input.ts:262`), and `.tooltip` wrapping on narrow viewports.
+- **#264** — Cache viewport dimensions on `CameraRig` (eliminating `MapLabels` layout thrashing), cache
+  `helpVisible` in `Hud.ts`, dirty-check `bar().set()`, and skip collapsed panel refreshes.
 
-Filed as #239; each is a few lines plus a test.
+## Batch 2 — HUD layout, accessibility & 3D colour-vision parity (M)
 
-- A build order that is waiting (unsafe rock, outpost limit, reserve) has no status of its own; it reads as
-  hauling. Add a `buildWaiting` reason.
-- A hand-flown (WASD) drone keeps its last AI status in the fleet list.
-- The README doesn't mention scarcity-aware mining or autopilot rock braking.
-- `tests/alloc.test.ts`: its construction drone never builds (no alloy), so the build path's allocation is unmeasured.
+Touches `src/style.css`, HUD panels, and 3D palette wiring together for a cohesive UX/a11y pass.
 
-## 2. Balance watch (S, file if it bites)
+- **#271** — Stack `.paused`, `.hazard`, `.toasts`, and `#goals` in one flex container anchored to
+  `--topbar-bottom`, relocate `.pad-hint` out of `#log`/touch-stick, and fix medium-width `#topbar` overflow.
+- **#272** — Add global `:focus-visible`, `@media (prefers-reduced-motion: reduce)`, keyboard-focusable
+  `FleetPanel` rows, `Menu` `tablist`/`tab`, `aria-live` regions, `aria-pressed`, and icon-button `aria-label`s.
+- **#267** — Drive hardcoded 3D scenery, shader, FX, and ship-overlay colours from `palette()` with live updates,
+  and replace the flat `+0.2` rock trait tint with distinct procedural patterns.
 
-The opening target sits at exactly 24/30 (80%) in the Docker report and reads 23/30 natively. Any tuning that
-nudges the early game can flip it. Worth a short look at why 6 seeds miss the first drone + tier-2 laser before
-the first warp, before more pillar work moves the numbers again.
+## Batch 3 — Balance & progression pass (M–L, single `balance:ci` pass)
 
-## 3. The next pillar: #175 pirates and combat
+Group these so `docs/balance.md` is tuned and regenerated once via `npm run balance:ci`.
 
-Now well-founded: #208's report shows shields and armor absorb 0% of damage, and #174's rock braking cut
-collision damage from 165 to 42 per system, so defensive components have even less to do. Combat gives them a
-job. Large; spec first (brainstorm → design → plan, as #174 did). The hazards pillar (#37) and the construction
-drone (#174) are the templates for a new hull, a brain and a balance row. Keep hostile spawns out of system 1 and
-behind the hazard setting.
+- **#275** — Tighten `haulMiner` standoff to cut collision deaths, review slot-3 ice pressure vs disposable
+  drones, and add `autoRepair` / `buySlot` / `armor` / `shield` / variant coverage to `scripts/bot.ts`.
+- **#276** — Fix the System 2 fuel dip (70 → 65), clamp low-ice RNG outliers, scale derelict salvage with system
+  number, differentiate `constructionDrone` from `hauler`, and buff `Survey Array`.
+- **#274** — Re-scale Horizon Gate costs into a genuine late-game sink and add cycle scaling / differentiation to
+  New Game+.
 
-## 4. Then the economy and the ending
+## Batch 4 — Stress-scale sim & WebGL performance (M)
 
-- **#173 contracts and reputation**: survey, refined-goods, bounty and escort kinds; reputation per contractor.
-  Escort contracts want #175 first.
-- **#176 station market and trade routes**: per-system prices from the seed; warp routes (#172) are the hook.
-- **#177 Horizon Gate / New Game+**: the ending. Needs a target the bot can reach; best after #176 gives Horizon
-  Data and goods somewhere to go.
+Targets `npm run bench:stress` (2,000 rocks, 50 ships, 1,000 pickups) and large-fleet frame times.
 
-## 5. Small scope items with thin specs
+- **#265** — Add ship/pickup spatial hashing in `SimIndex`, skip pickup sweeps while mining, use `distSq` in
+  `magnetPull`, and remove per-tick `rockHash.query` closure & `formationSlot` allocations.
+- **#266** — Add `addUpdateRange` + `n === 0` skip to `RockView`'s `InstancePool.commit`, pass read-only
+  `SimIndex` views to `Renderer` (`ShipView`/`FxView`), and bypass the half-float MSAA composer on `low` quality.
+- **#262** — Move module-global `TICK_CTX`, `beltCounts`, and steering scratch vectors onto `SimIndex`.
 
-- **#50 choice-based perks** and **#38 exploration**: still two-line specs from the first review. Rewrite each in
-  Why / Proposal / Acceptance before picking them up.
-- **#27 corner minimap**: #164 made the map view readable. Decide whether a minimap is still wanted; close it if
-  not.
+## Batch 5 — Visual polish & touch/gamepad parity (M)
 
-## Later / help wanted
+Polish pass for game feel, zoom legibility, and non-mouse input completeness.
 
-- **#129 headless browser test tier** and **#123 AA check on HiDPI / Safari / Firefox**: infra or manual.
-  #129 would also cover the renderer numbers #159's stress bench couldn't measure.
+- **#268** — Fade ship status bars and floating pickup text in map zoom, standardize `wpp` marker widths, and
+  clamp asteroid Y-thickness to stop vertical clipping.
+- **#269** — Add solar flare `warn` telegraph, dock pulse, laser-variant beam tinting, soft radial DPR-scaled
+  particles, damaged-hull derelicts, and lit planet night-side atmospheres / ring banding.
+- **#273** — Add gamepad Research/Outpost bindings and range-slider stepping, enlarge touch targets (`>= 36-44 px`),
+  replace `window.confirm()` with an in-app modal, and adapt copy to active input mode.
+
+## Batch 6 — Structural refactor before the next pillar (M)
+
+Clean up the largest coordinator files before adding new combat/economy systems.
+
+- **#263** — Decompose `src/input.ts` (remove dead `multi`, add `dispose()`, unify `hud.hasModalOpen()`), split
+  `src/sim/pilot.ts` (steering vs drone AI), extract heavy inline handlers from `src/sim/handlers.ts`, and
+  evaluate moving browser storage I/O out of `src/sim/save.ts`.
+
+## Next big scope pillars (existing, spec first)
+
+- **#175** — Pirates and combat as the next pillar (large; gives defensive gear from #275 a real combat job).
+- **#173** — Contract variety and faction reputation (escort contracts want #175 first).
+- **#176** — Station market and trade routes.
