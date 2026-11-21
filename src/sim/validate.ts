@@ -126,10 +126,13 @@ function isRock(r: unknown): boolean {
     isVec(r.pos) &&
     isVec(r.vel) &&
     finite(r.radius) &&
+    r.radius > 0 &&
     finite(r.hp) &&
     finite(r.maxHp) &&
+    r.maxHp > 0 &&
     finite(r.units) &&
     finite(r.belt) &&
+    (r.comet === undefined || r.comet === true) &&
     (r.rich === undefined || r.rich === true)
   );
 }
@@ -315,6 +318,7 @@ function isSystem(sys: unknown): boolean {
     (sys.starClass === 'M' || sys.starClass === 'G' || sys.starClass === 'B') &&
     finite(sys.starRadius) &&
     finite(sys.heatRadius) &&
+    sys.heatRadius > sys.starRadius &&
     finite(sys.richness) &&
     Array.isArray(planets) &&
     planets.every((p) => isOrbiter(p, true)) &&
@@ -336,7 +340,7 @@ function isRefinery(r: unknown): boolean {
   if (!isObj(r) || Array.isArray(r) || !Array.isArray(r.queue)) return false;
   const produced = r.produced;
   if (!isObj(produced) || Array.isArray(produced)) return false;
-  if (RECIPE_IDS.some((id) => typeof produced[id] !== 'number')) return false;
+  if (RECIPE_IDS.some((id) => !finite(produced[id]))) return false;
   if (!isQueue(r.queue)) return false;
   // New jobs must not reuse a queued job's id, or a cancel could hit the wrong one.
   const { nextId } = r;
@@ -402,7 +406,7 @@ export function validateState(data: SaveData): GameState | null {
   // read with NaN, so the bank must be complete (ship cargo is checked by isShip).
   if (!isWallet(run.bank) || !run.ships.every(isShip)) return null;
   if (!isBoard(run.contracts)) return null;
-  if (!run.ships.some((s) => s.hullId === 'prospector' || s.hullId === 'excavator')) return null;
+  if (!run.ships.some((s) => HULLS[s.hullId]?.role === 'flagship')) return null;
   if (!isRefinery(run.refinery)) return null;
   if (!isHazards(run.hazards)) return null;
   if (!isAutomation(run.automation, run.rocks)) return null;
