@@ -14,7 +14,7 @@ import { canAfford, formatCost, formatWallet, type Cost, walletTotal } from '../
 import { isDocked, refitBlock, repairCost, scrapValue, slotCost, upgradeCost } from '../../sim/economy';
 import { applySystemStats } from '../../sim/modifiers';
 import { findShip, isAlive, isFlagship, selectedShip, shipStats } from '../../sim/ships';
-import type { Fitted, Ship } from '../../sim/types';
+import type { Fitted, GameState, Ship } from '../../sim/types';
 import { Panel, bar, h, setBlocked, setDisabled, setText, slotRow } from '../dom';
 import type { PanelCtx } from './context';
 
@@ -85,8 +85,8 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       const ship0 = selectedShip(s0.run);
       if (!ship0) return [h('h3', { text: 'No ship selected' })];
       const id = ship0.id;
-      const cur = (): Ship | undefined => findShip(st().run, id);
       const send = ctx.send;
+      const updaters: ((state: GameState, s: Ship, rb: string | null) => void)[] = [];
 
       const title = h(
         'h3',
@@ -113,17 +113,85 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           },
         });
         actions.append(scrap);
-        bind(() => {
-          const s = cur();
-          if (s) setBlocked(scrap, refitBlock(st(), s));
-        });
+        updaters.push((_state, _s, rb) => setBlocked(scrap, rb));
       }
       const notice = h('div', { class: 'notice' });
 
+      const slotsHead = h('h3', { text: 'Components' });
+      const slotRows = ship0.slots.map((f, i) => {
+        if (f) {
+          const def = variantDef(f.type, f.variant);
+          const pips = h('span', { class: 'pips', text: ' ' + '●'.repeat(f.tier) + '○'.repeat(3 - f.tier) });
+          const up = h('button', { onclick: () => send({ t: 'upgrade', shipId: id, slot: i }) });
+          const rm = h('button', {
+            class: 'icon',
+            text: '✕',
+            title: removeRefundTitle(f),
+            onclick: () => send({ t: 'remove', shipId: id, slot: i }),
+          });
+          rm.dataset.title = rm.title;
+          const row = slotRow(
+            def.name,
+            [pips, h('small', { text: def.describe(f.tier) })],
+            h('div', { class: 'row' }, up, rm),
+          );
+          updaters.push((state, s, rb) => {
+            const cost = upgradeCost(s, i);
+            if (!cost) {
+              setText(up, 'MAX');
+              setBlocked(up, 'Max tier');
+            } else {
+              setText(up, `T${f.tier + 1} ${formatCost(cost)}`);
+              up.dataset.title = def.describe((f.tier + 1) as 2 | 3);
+              setBlocked(up, rb ?? (canAfford(state.run.bank, cost) ? null : 'Not enough resources'));
+            }
+            setBlocked(rm, rb);
+          });
+          return row;
+        }
+        const sel = h('select');
+        sel.append(h('option', { text: 'Install…' }));
+        const opts = installOptions();
+        for (const o of opts) {
+          const opt = h('option', { text: o.label });
+          opt.value = o.value;
+          sel.append(opt);
+        }
+        sel.addEventListener('change', () => {
+          const pick = parseInstallValue(sel.value);
+          if (pick) send({ t: 'install', shipId: id, slot: i, comp: pick.comp, variant: pick.variant });
+          sel.selectedIndex = 0;
+        });
+        const row = slotRow('Empty slot', h('small', { text: 'Install a component' }), sel);
+        row.classList.add('empty');
+        updaters.push((state, _s, rb) => {
+          sel.disabled = !!rb;
+          sel.title = rb ?? '';
+          // Option 0 is the 'Install…' placeholder; the rest mirror installOptions().
+          const bank = state.run.bank;
+          for (let k = 0; k < opts.length; k++) sel.options[k + 1]!.disabled = !canAfford(bank, opts[k]!.cost);
+        });
+        return row;
+      });
+
+      if (slotCost(ship0)) {
+        const buy = h('button', { onclick: () => send({ t: 'buySlot', shipId: id }) });
+        const row = slotRow('New slot', h('small', { text: 'Expand the hull by one slot' }), buy);
+        row.classList.add('empty');
+        updaters.push((state, s, rb) => {
+          const cost = slotCost(s);
+          if (!cost) return;
+          setText(buy, `Buy ${formatCost(cost)}`);
+          setBlocked(buy, rb ?? (canAfford(state.run.bank, cost) ? null : 'Not enough resources'));
+        });
+        slotRows.push(row);
+      }
+
+      // One binder resolves the selected ship, stats and refit block once per refresh instead of per slot.
       bind(() => {
-        const s = cur();
-        if (!s) return;
         const state = st();
+        const s = findShip(state.run, id);
+        if (!s) return;
         const k = shipStats(s, state.profile);
         hull.set(s.hull / k.maxHull, `Hull ${Math.ceil(Math.max(0, s.hull))}/${k.maxHull}`);
         shield.set(
@@ -145,84 +213,8 @@ export function createShipPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         setDisabled(dockBtn, !isAlive(s) || isDocked(state.run, s));
         setText(notice, rb ? `⚓ ${rb}` : '⚓ Docked — refit available');
         notice.classList.toggle('ok', !rb);
+        for (const update of updaters) update(state, s, rb);
       });
-
-      const slotsHead = h('h3', { text: 'Components' });
-      const slotRows = ship0.slots.map((f, i) => {
-        if (f) {
-          const def = variantDef(f.type, f.variant);
-          const pips = h('span', { class: 'pips', text: ' ' + '●'.repeat(f.tier) + '○'.repeat(3 - f.tier) });
-          const up = h('button', { onclick: () => send({ t: 'upgrade', shipId: id, slot: i }) });
-          const rm = h('button', {
-            class: 'icon',
-            text: '✕',
-            title: removeRefundTitle(f),
-            onclick: () => send({ t: 'remove', shipId: id, slot: i }),
-          });
-          rm.dataset.title = rm.title;
-          const row = slotRow(
-            def.name,
-            [pips, h('small', { text: def.describe(f.tier) })],
-            h('div', { class: 'row' }, up, rm),
-          );
-          bind(() => {
-            const s = cur();
-            if (!s) return;
-            const cost = upgradeCost(s, i);
-            const rb = refitBlock(st(), s);
-            if (!cost) {
-              setText(up, 'MAX');
-              setBlocked(up, 'Max tier');
-            } else {
-              setText(up, `T${f.tier + 1} ${formatCost(cost)}`);
-              up.dataset.title = def.describe((f.tier + 1) as 2 | 3);
-              setBlocked(up, rb ?? (canAfford(st().run.bank, cost) ? null : 'Not enough resources'));
-            }
-            setBlocked(rm, rb);
-          });
-          return row;
-        }
-        const sel = h('select');
-        sel.append(h('option', { text: 'Install…' }));
-        const opts = installOptions();
-        for (const o of opts) {
-          const opt = h('option', { text: o.label });
-          opt.value = o.value;
-          sel.append(opt);
-        }
-        sel.addEventListener('change', () => {
-          const pick = parseInstallValue(sel.value);
-          if (pick) send({ t: 'install', shipId: id, slot: i, comp: pick.comp, variant: pick.variant });
-          sel.selectedIndex = 0;
-        });
-        const row = slotRow('Empty slot', h('small', { text: 'Install a component' }), sel);
-        row.classList.add('empty');
-        bind(() => {
-          const s = cur();
-          if (!s) return;
-          const rb = refitBlock(st(), s);
-          sel.disabled = !!rb;
-          sel.title = rb ?? '';
-          // Option 0 is the 'Install…' placeholder; the rest mirror installOptions().
-          const bank = st().run.bank;
-          for (let k = 0; k < opts.length; k++) sel.options[k + 1]!.disabled = !canAfford(bank, opts[k]!.cost);
-        });
-        return row;
-      });
-
-      if (slotCost(ship0)) {
-        const buy = h('button', { onclick: () => send({ t: 'buySlot', shipId: id }) });
-        const row = slotRow('New slot', h('small', { text: 'Expand the hull by one slot' }), buy);
-        row.classList.add('empty');
-        bind(() => {
-          const s = cur();
-          const cost = s && slotCost(s);
-          if (!s || !cost) return;
-          setText(buy, `Buy ${formatCost(cost)}`);
-          setBlocked(buy, refitBlock(st(), s) ?? (canAfford(st().run.bank, cost) ? null : 'Not enough resources'));
-        });
-        slotRows.push(row);
-      }
 
       return [title, hull.el, shield.el, cargo.el, cargoDetail, stats, actions, notice, slotsHead, ...slotRows];
     },

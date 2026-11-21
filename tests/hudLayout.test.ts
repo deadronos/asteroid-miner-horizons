@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it } from 'vitest';
 import { newGame } from '../src/sim/create';
 import { queueRefine } from '../src/sim/refining';
+import { Panel, bar } from '../src/ui/dom';
 import {
   HELP_AUTO_HIDE_SEC,
   autoCollapsed,
@@ -9,6 +10,7 @@ import {
   toggledCollapse,
   touchControlsShown,
 } from '../src/ui/hudLayout';
+import { resetDom } from './domStub';
 
 describe('help box visibility', () => {
   it('auto shows help only for the first minutes of lifetime play', () => {
@@ -102,5 +104,48 @@ describe('panel collapse on a narrow screen', () => {
   it('is not an accordion on a wide screen', () => {
     const s = newGame(7);
     expect(toggledCollapse('refinery', { fleet: false }, s)).toEqual({ fleet: false, refinery: false });
+  });
+});
+
+describe('HUD DOM perf helpers', () => {
+  afterEach(() => {
+    resetDom();
+  });
+
+  it('bar().set() dirty-checks fill.style.width before writing', () => {
+    resetDom();
+    const b = bar('hull');
+    const fill = b.el.childNodes[0] as unknown as { style: { width: string } };
+    let writes = 0;
+    let cur = '';
+    Object.defineProperty(fill.style, 'width', {
+      get: () => cur,
+      set: (v: string) => {
+        writes++;
+        cur = v;
+      },
+    });
+    b.set(0.5, '50/100');
+    b.set(0.5001, '50/100');
+    expect(cur).toBe('50.0%');
+    expect(writes).toBe(1);
+    b.set(0.75, '75/100');
+    expect(cur).toBe('75.0%');
+    expect(writes).toBe(2);
+  });
+
+  it('Panel.built tracks whether the panel has rendered at least once', () => {
+    resetDom();
+    const el = document.createElement('div');
+    const p = new Panel(
+      el,
+      () => 'k',
+      () => [document.createElement('h3')],
+    );
+    expect(p.built).toBe(false);
+    p.refresh();
+    expect(p.built).toBe(true);
+    p.invalidate();
+    expect(p.built).toBe(false);
   });
 });

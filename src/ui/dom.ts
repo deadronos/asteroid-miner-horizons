@@ -39,6 +39,10 @@ export class Panel {
     for (const b of this.binders) b();
   }
 
+  get built(): boolean {
+    return this.lastKey !== '';
+  }
+
   invalidate(): void {
     this.lastKey = '';
   }
@@ -72,10 +76,15 @@ export function bar(cls: string): { el: HTMLElement; set: (f: number, label?: st
   const fill = h('div', { class: 'fill' });
   const label = h('span', { class: 'label' });
   const el = h('div', { class: `bar ${cls}` }, fill, label);
+  let lastWidth = '';
   return {
     el,
     set(f, text = '') {
-      fill.style.width = `${(Math.max(0, Math.min(1, f)) * 100).toFixed(1)}%`;
+      const width = `${(Math.max(0, Math.min(1, f)) * 100).toFixed(1)}%`;
+      if (width !== lastWidth) {
+        lastWidth = width;
+        fill.style.width = width;
+      }
       setText(label, text);
     },
   };
