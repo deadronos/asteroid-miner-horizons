@@ -8,6 +8,7 @@ import { SettingsStore } from '../src/settings';
 import { newGame } from '../src/sim/create';
 import type { Command } from '../src/sim/commands';
 import type { GameState } from '../src/sim/types';
+import { confirmOpen } from '../src/ui/confirm';
 import type { FakeEl } from './domStub';
 import { pressKey, resetDom } from './domStub';
 import { memStorage } from './memStorage';
@@ -40,7 +41,7 @@ const mount = (
     gateOpen: false,
     menu: { open: false },
     touch: { onAction: null, thrust: { x: 0, z: 0 } },
-    hasModalOpen: () => hud.menu.open || hud.gateOpen || hud.warpOpen || hud.researchOpen,
+    hasModalOpen: () => confirmOpen() || hud.menu.open || hud.gateOpen || hud.warpOpen || hud.researchOpen,
     escape: () => false,
     toggleResearch: () => research++,
   };

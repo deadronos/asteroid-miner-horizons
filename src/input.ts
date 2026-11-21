@@ -89,6 +89,7 @@ export class Input {
     window.removeEventListener('keyup', this.onWindowKeyUp);
     window.removeEventListener('blur', this.onWindowBlur);
     this.pointer.dispose();
+    this.padHint.el.remove();
     this.held.clear();
     this.hud.touch.onAction = () => {};
   }
