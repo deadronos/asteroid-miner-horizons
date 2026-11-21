@@ -27,6 +27,7 @@ export class Panel {
     readonly el: HTMLElement,
     private readonly key: () => string,
     private readonly build: (bind: (b: Binder) => void) => Node[],
+    private readonly header?: () => void,
   ) {}
 
   refresh(): void {
@@ -37,6 +38,15 @@ export class Panel {
       this.el.replaceChildren(...this.build((b) => this.binders.push(b)));
     }
     for (const b of this.binders) b();
+  }
+
+  /** Lightweight update for a collapsed panel's still-visible heading without refreshing its body. */
+  refreshHeader(): void {
+    this.header?.();
+  }
+
+  get built(): boolean {
+    return this.lastKey !== '';
   }
 
   invalidate(): void {
@@ -72,10 +82,15 @@ export function bar(cls: string): { el: HTMLElement; set: (f: number, label?: st
   const fill = h('div', { class: 'fill' });
   const label = h('span', { class: 'label' });
   const el = h('div', { class: `bar ${cls}` }, fill, label);
+  let lastWidth = '';
   return {
     el,
     set(f, text = '') {
-      fill.style.width = `${(Math.max(0, Math.min(1, f)) * 100).toFixed(1)}%`;
+      const width = `${(Math.max(0, Math.min(1, f)) * 100).toFixed(1)}%`;
+      if (width !== lastWidth) {
+        lastWidth = width;
+        fill.style.width = width;
+      }
       setText(label, text);
     },
   };

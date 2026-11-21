@@ -3,7 +3,6 @@
 import { HULLS, HULL_IDS } from '../../data/hulls';
 import { formatCost, walletTotal } from '../../data/resources';
 import { TUNING } from '../../data/tuning';
-import { outpostAt } from '../../sim/automation';
 import { hullBlock, isDocked } from '../../sim/economy';
 import { droneCount, findShip, fleetCap, isAlive, isBuilder, isFlagship, isHauler, shipStats } from '../../sim/ships';
 import type { IdleReason, ShipStatus } from '../../sim/status';
@@ -83,7 +82,7 @@ export function autoToggleCommand(ship: Ship, kind: 'repair' | 'upgrade' | 'buil
 }
 
 /** The line the fleet list shows for a ship; exported so its precedence can be tested without the DOM. */
-export function fleetStatus(state: GameState, s: Ship): string {
+export function fleetStatus(state: GameState, s: Ship, cargoCap?: number): string {
   if (!isAlive(s)) return `Rebuilding ${Math.ceil(s.respawn)}s`;
   if (isDocked(state.run, s) && !s.order && isFlagship(s)) return 'Docked';
   if (s.order?.kind === 'mine') return s.beamOn ? 'Mining' : 'Approaching';
@@ -93,12 +92,16 @@ export function fleetStatus(state: GameState, s: Ship): string {
   if (st?.kind === 'manual') return formatStatus(st, 0);
   if (isFlagship(s)) return s.beamOn ? 'Mining' : 'Idle';
   if (!st) return 'Standby';
-  const cap = shipStats(s, state.profile).cargoCap;
+  const cap = cargoCap ?? shipStats(s, state.profile).cargoCap;
   return formatStatus(st, cap > 0 ? walletTotal(s.cargo) / cap : 0);
 }
 
 export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
   const st = ctx.getState;
+  let head: HTMLElement | null = null;
+  const updateHead = (): void => {
+    if (head) setText(head, `Fleet · ${droneCount(st().run)}/${fleetCap(st().profile)} drones`);
+  };
   return new Panel(
     el,
     () => {
@@ -108,8 +111,19 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
     },
     (bind) => {
       const s0 = st();
-      const head = h('h3');
-      bind(() => setText(head, `Fleet · ${droneCount(st().run)}/${fleetCap(st().profile)} drones`));
+      head = h('h3');
+      bind(updateHead);
+      const rowRefs: {
+        id: number;
+        row: HTMLElement;
+        stat: HTMLElement;
+        hb: ReturnType<typeof bar>;
+        cb: ReturnType<typeof bar>;
+        mode: HTMLButtonElement | null;
+        repair: HTMLButtonElement | null;
+        upgrade: HTMLButtonElement | null;
+        build: HTMLButtonElement | null;
+      }[] = [];
       const rows = s0.run.ships.map((ship) => {
         const id = ship.id;
         const name = h('span', { class: 'nm', text: `${isFlagship(ship) ? '★' : '▸'} ${ship.name}` });
@@ -132,21 +146,24 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
         if (controls.length) {
           const ctl = h('div', { class: 'ctl' });
           if (controls.includes('mode')) {
+            const title = 'Assist: work near the flagship · Auto: work near the station';
             mode = h('button', {
               class: 'mode',
+              title,
               onclick: (e) => {
                 e.stopPropagation();
                 const cur = findShip(st().run, id);
                 if (cur) ctx.send({ t: 'aiMode', shipId: id, mode: cur.aiMode === 'assist' ? 'auto' : 'assist' });
               },
             });
-            mode.dataset.title = 'Assist: work near the flagship · Auto: work near the station';
+            mode.dataset.title = title;
             ctl.append(mode);
           }
           const toggle = (kind: 'repair' | 'upgrade' | 'build', text: string, title: string): HTMLButtonElement => {
             const btn = h('button', {
               class: 'mode auto',
               text,
+              title,
               onclick: (e) => {
                 e.stopPropagation();
                 const cur = findShip(st().run, id);
@@ -175,38 +192,63 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
             );
           row.append(ctl);
         }
-        bind(() => {
-          const s = st();
-          const cur = findShip(s.run, id);
-          if (!cur) return;
-          const stt = shipStats(cur, s.profile);
-          row.classList.toggle('sel', s.run.selectedId === id);
-          setText(stat, fleetStatus(s, cur));
-          hb.set(cur.hull / stt.maxHull);
-          cb.set(walletTotal(cur.cargo) / stt.cargoCap);
-          if (mode) setText(mode, cur.aiMode === 'assist' ? 'ASSIST' : 'AUTO');
-          repair?.classList.toggle('on', cur.autoRepair);
-          upgrade?.classList.toggle('on', cur.autoUpgrade);
-          build?.classList.toggle('on', cur.autoBuild);
-        });
+        rowRefs.push({ id, row, stat, hb, cb, mode, repair, upgrade, build });
         return row;
+      });
+      // Ships are keyed by id:hullId in order, so a single linear pass updates every row without O(N) findShip scans.
+      bind(() => {
+        const s = st();
+        const ships = s.run.ships;
+        for (let i = 0; i < rowRefs.length; i++) {
+          const ref = rowRefs[i]!;
+          const cur = ships[i];
+          if (!cur || cur.id !== ref.id) continue;
+          const stt = shipStats(cur, s.profile);
+          ref.row.classList.toggle('sel', s.run.selectedId === cur.id);
+          setText(ref.stat, fleetStatus(s, cur, stt.cargoCap));
+          ref.hb.set(cur.hull / stt.maxHull);
+          ref.cb.set(walletTotal(cur.cargo) / stt.cargoCap);
+          if (ref.mode) {
+            setText(ref.mode, cur.aiMode === 'assist' ? 'ASSIST' : 'AUTO');
+            ref.mode.setAttribute('aria-pressed', String(cur.aiMode === 'auto'));
+          }
+          if (ref.repair) {
+            ref.repair.classList.toggle('on', cur.autoRepair);
+            ref.repair.setAttribute('aria-pressed', String(cur.autoRepair));
+          }
+          if (ref.upgrade) {
+            ref.upgrade.classList.toggle('on', cur.autoUpgrade);
+            ref.upgrade.setAttribute('aria-pressed', String(cur.autoUpgrade));
+          }
+          if (ref.build) {
+            ref.build.classList.toggle('on', cur.autoBuild);
+            ref.build.setAttribute('aria-pressed', String(cur.autoBuild));
+          }
+        }
       });
 
       const outHead = h('h3');
       bind(() => setText(outHead, `Outposts · ${st().run.automation.outposts.length}/${TUNING.outpostMax}`));
+      const outRefs: { rockId: number; stat: HTMLElement; sb: ReturnType<typeof bar> }[] = [];
       const outRows = s0.run.automation.outposts.map((o0) => {
-        const rockId = o0.rockId;
         const label = h('span', { class: 'nm', text: `▪ ${o0.kind} outpost` });
         const stat = h('span', { class: 'st' });
         const sb = bar('cargo mini');
-        bind(() => {
-          const o = outpostAt(st(), rockId);
-          if (!o) return;
-          setText(stat, `${Math.floor(o.reserve)} left`);
-          sb.set(walletTotal(o.stored) / TUNING.outpostCapacity);
-        });
+        outRefs.push({ rockId: o0.rockId, stat, sb });
         return h('div', { class: 'shiprow' }, label, stat, sb.el);
       });
+      if (outRefs.length) {
+        bind(() => {
+          const outposts = st().run.automation.outposts;
+          for (let i = 0; i < outRefs.length; i++) {
+            const ref = outRefs[i]!;
+            const o = outposts[i];
+            if (!o || o.rockId !== ref.rockId) continue;
+            setText(ref.stat, `${Math.floor(o.reserve)} left`);
+            ref.sb.set(walletTotal(o.stored) / TUNING.outpostCapacity);
+          }
+        });
+      }
       const outHint = h('div', {
         class: 'dim small',
         text: 'Fly next to a large asteroid and press the outpost key over it. Haulers collect the output.',
@@ -237,5 +279,6 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
       });
       return [head, ...rows, outHead, ...outRows, ...(outRows.length ? [] : [outHint]), yard, ...buys];
     },
+    updateHead,
   );
 }

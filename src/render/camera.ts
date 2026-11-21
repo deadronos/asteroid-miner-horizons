@@ -23,16 +23,36 @@ export class CameraRig {
   private mapReturn = 420;
   /** Whether the last ease still moved the view by a visible amount (zoom or follow glide). */
   moving = false;
+  /** Cached viewport size in CSS pixels, refreshed on construction and resize. */
+  private viewW = 1;
+  private viewH = 1;
 
   constructor(
-    private container: HTMLElement,
+    container: HTMLElement,
     private canvas: HTMLCanvasElement,
   ) {
     this.camera.up.set(0, 0, -1);
+    this.setViewport(container.clientWidth, container.clientHeight);
+  }
+
+  /** Cached viewport width in CSS pixels. */
+  get width(): number {
+    return this.viewW;
+  }
+
+  /** Cached viewport height in CSS pixels. */
+  get height(): number {
+    return this.viewH;
+  }
+
+  /** Updates the cached viewport size in CSS pixels (called by the renderer on resize). */
+  setViewport(w: number, h: number): void {
+    this.viewW = Math.max(1, w);
+    this.viewH = Math.max(1, h);
   }
 
   get aspect(): number {
-    return this.container.clientWidth / Math.max(1, this.container.clientHeight);
+    return this.viewW / this.viewH;
   }
 
   /** The visible world rectangle (center + half extents), for audio falloff. */
@@ -42,7 +62,7 @@ export class CameraRig {
 
   /** World units per CSS pixel at the current zoom. */
   get wpp(): number {
-    return (this.halfH * 2) / Math.max(1, this.container.clientHeight);
+    return (this.halfH * 2) / this.viewH;
   }
 
   screenToWorld(clientX: number, clientY: number): Vec2 {
@@ -52,14 +72,18 @@ export class CameraRig {
     return { x: this.center.x + nx * this.halfH * this.aspect, z: this.center.z + ny * this.halfH };
   }
 
-  /** World point → CSS pixels relative to the scene container. */
-  worldToScreen(p: Vec2): { x: number; y: number } {
-    const w = this.container.clientWidth;
-    const h = this.container.clientHeight;
-    return {
-      x: ((p.x - this.center.x) / (this.halfH * this.aspect) + 1) * 0.5 * w,
-      y: ((p.z - this.center.z) / this.halfH + 1) * 0.5 * h,
-    };
+  /** World point → CSS pixels relative to the scene container. Writes into `out` when provided. */
+  worldToScreen(p: Vec2, out?: { x: number; y: number }): { x: number; y: number } {
+    const w = this.viewW;
+    const h = this.viewH;
+    const x = ((p.x - this.center.x) / (this.halfH * (w / h)) + 1) * 0.5 * w;
+    const y = ((p.z - this.center.z) / this.halfH + 1) * 0.5 * h;
+    if (out) {
+      out.x = x;
+      out.y = y;
+      return out;
+    }
+    return { x, y };
   }
 
   /** True when `p` is inside the (unshaken) view. */

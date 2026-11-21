@@ -35,6 +35,8 @@ const MAX_LOG = 60;
 const TOAST_MS = 6000;
 /** A phone-sized screen, in either orientation; style.css uses the same query for the phone layout. */
 const NARROW_QUERY = '(max-width: 640px), (max-height: 500px)';
+/** Width below which CSS hides `#help.auto`; cached here so `helpShown()` never forces layout. */
+const AUTO_HELP_HIDDEN_QUERY = '(max-width: 1199px)';
 
 /** A live media query, or null where `matchMedia` is missing; `onChange` runs on every change. */
 function watchMedia(query: string, onChange: () => void): MediaQueryList | null {
@@ -69,8 +71,10 @@ export class Hud {
   private tipSize = { text: '', w: 0, h: 0 };
   private flash = h('div', { class: 'flash' });
   private help: HTMLElement;
-  /** Collapsible panel containers and their toggle buttons. */
-  private collapsibles: { id: HudPanelId; el: HTMLElement; btn: HTMLButtonElement }[] = [];
+  /** Collapsible panel containers, toggle buttons and panels. */
+  private collapsibles: { id: HudPanelId; el: HTMLElement; btn: HTMLButtonElement; panel: Panel }[] = [];
+  /** Panels currently folded away; their `refresh()` is skipped once their heading has been built. */
+  private collapsedPanels = new Set<Panel>();
   private paused = h('div', { class: 'paused hidden' });
   private hazard = h('div', { class: 'hazard hidden' });
   private fps = h('div', { class: 'fps hidden' });
@@ -80,10 +84,13 @@ export class Hud {
   private fpsWorst = 0;
   /** Set by showNotice; while true, setPaused no longer changes the banner. */
   private noticeShown = false;
+  /** Cached visibility of `#help`, updated in `applyHelp()` and on media-query changes. */
+  private isHelpVisible = false;
   readonly menu: Menu;
   readonly touch: TouchControls;
   private narrowMq: MediaQueryList | null;
   private coarseMq: MediaQueryList | null;
+  private autoHelpHiddenMq: MediaQueryList | null;
 
   constructor(
     root: HTMLElement,
@@ -102,20 +109,21 @@ export class Hud {
     const left = h('div', { class: 'hud-col left' });
     const right = h('div', { class: 'hud-col right' });
     // A collapsible panel: a fixed toggle button over a body that the panel fills and that scrolls on its own.
-    const fold = (id: HudPanelId, parent: HTMLElement): HTMLElement => {
+    const fold = (id: HudPanelId, parent: HTMLElement, build: (body: HTMLElement) => Panel): Panel => {
       const el = mk(id, 'hud collapsible', parent);
       const btn = h('button', {
         class: 'collapse',
         onclick: () => {
           const prefs = toggledCollapse(id, settings.value.hudCollapsed, getState(), this.narrow);
           settings.set({ hudCollapsed: prefs });
-          this.applyCollapse();
+          this.applyCollapse(true);
         },
       });
       const body = h('div', { class: 'body' });
       el.append(btn, body);
-      this.collapsibles.push({ id, el, btn });
-      return body;
+      const panel = build(body);
+      this.collapsibles.push({ id, el, btn, panel });
+      return panel;
     };
     const topbar = mk('topbar');
     root.append(left, right);
@@ -128,10 +136,10 @@ export class Hud {
         toggleHelp: () => this.toggleHelp(),
         helpVisible: () => this.helpShown(),
       }),
-      createFleetPanel(fold('fleet', left), ctx),
-      createContractsPanel(fold('contracts', left), ctx),
-      createShipPanel(fold('ship', right), ctx),
-      createRefineryPanel(fold('refinery', right), ctx),
+      fold('fleet', left, (body) => createFleetPanel(body, ctx)),
+      fold('contracts', left, (body) => createContractsPanel(body, ctx)),
+      fold('ship', right, (body) => createShipPanel(body, ctx)),
+      fold('refinery', right, (body) => createRefineryPanel(body, ctx)),
       createGoalsPanel(mk('goals', 'hud hidden'), ctx),
     ];
     this.log.id = 'log';
@@ -152,6 +160,7 @@ export class Hud {
       ).observe(topbar);
     this.narrowMq = watchMedia(NARROW_QUERY, () => this.applySettings());
     this.coarseMq = watchMedia('(pointer: coarse)', () => this.applySettings());
+    this.autoHelpHiddenMq = watchMedia(AUTO_HELP_HIDDEN_QUERY, () => this.applyHelp());
     settings.onChange(() => this.applySettings());
     this.applySettings();
   }
@@ -196,27 +205,33 @@ export class Hud {
   /** Shows or hides the help box for the help mode and lifetime play time. */
   private applyHelp(): void {
     const mode = this.settings.value.help;
-    this.help.classList.toggle('hidden', !helpVisible(mode, this.getState().profile.stats.time));
+    const shown = helpVisible(mode, this.getState().profile.stats.time);
+    this.help.classList.toggle('hidden', !shown);
     this.help.classList.toggle('auto', mode === 'auto');
+    this.isHelpVisible = shown && !(mode === 'auto' && !!this.autoHelpHiddenMq?.matches);
   }
 
   /** Marks each side panel collapsed or open, and labels its button to match. */
-  private applyCollapse(): void {
+  private applyCollapse(refreshExpanded = false): void {
     const state = this.getState();
-    for (const { id, el, btn } of this.collapsibles) {
+    for (const { id, el, btn, panel } of this.collapsibles) {
       const folded = isCollapsed(id, this.settings.value.hudCollapsed, state, this.narrow);
-      if (el.classList.contains('collapsed') === folded && btn.textContent) continue;
+      if (folded) this.collapsedPanels.add(panel);
+      else this.collapsedPanels.delete(panel);
+      const changed = el.classList.contains('collapsed') !== folded;
+      if (!changed && btn.textContent) continue;
       el.classList.toggle('collapsed', folded);
       btn.textContent = folded ? '+' : '−';
       btn.title = folded ? 'Expand' : 'Collapse';
       btn.setAttribute('aria-label', `${folded ? 'Expand' : 'Collapse'} ${id}`);
       btn.setAttribute('aria-expanded', String(!folded));
+      if (refreshExpanded && changed && !folded && panel.built) panel.refresh();
     }
   }
 
   /** Whether the help box is on screen; CSS also hides auto help in narrow windows. */
   private helpShown(): boolean {
-    return this.help.getClientRects().length > 0;
+    return this.isHelpVisible;
   }
 
   /** The `?` button and help key: hide the help box if shown, otherwise show it until hidden again. */
@@ -327,8 +342,11 @@ export class Hud {
     const state = this.getState();
     for (const line of state.out.log.splice(0)) this.pushLog(line);
     this.applyHelp();
-    for (const p of this.panels) p.refresh();
     this.applyCollapse();
+    for (const p of this.panels) {
+      if (!p.built || !this.collapsedPanels.has(p)) p.refresh();
+      else p.refreshHeader();
+    }
     this.research.refresh();
     this.gate.refresh();
     this.routes.refresh();

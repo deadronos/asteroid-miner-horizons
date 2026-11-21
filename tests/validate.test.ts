@@ -2,6 +2,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { makeRng, int, pick } from '../src/core/rng';
+import { HULLS, type HullId } from '../src/data/hulls';
 import { newGame } from '../src/sim/create';
 import type { SaveData } from '../src/sim/migrations';
 import { deserialize, serialize } from '../src/sim/save';
@@ -61,6 +62,17 @@ const corruptions: Corrupt[] = [
   ['bank alloy Infinity', (s) => ((s.run.bank.alloy as unknown) = Infinity)],
   ['ship cargo alloy NaN', (s) => ((s.run.ships[0]!.cargo.alloy as unknown) = NaN)],
   ['gate has an unknown field', (s) => ((s.profile.gate as { extra?: number }).extra = 1)],
+  ['rock radius 0', (s) => (s.run.rocks[0]!.radius = 0)],
+  ['rock radius negative', (s) => (s.run.rocks[0]!.radius = -1)],
+  ['rock maxHp 0', (s) => (s.run.rocks[0]!.maxHp = 0)],
+  ['rock maxHp negative', (s) => (s.run.rocks[0]!.maxHp = -10)],
+  ['rock comet false', (s) => ((s.run.rocks[0]!.comet as unknown) = false)],
+  ['rock comet string', (s) => ((s.run.rocks[0]!.comet as unknown) = 'yes')],
+  ['system heatRadius equals starRadius', (s) => (s.run.system.heatRadius = s.run.system.starRadius)],
+  ['system heatRadius below starRadius', (s) => (s.run.system.heatRadius = s.run.system.starRadius - 1)],
+  ['refinery produced alloy NaN', (s) => ((s.run.refinery.produced.alloy as unknown) = NaN)],
+  ['refinery produced fuel Infinity', (s) => ((s.run.refinery.produced.fuel as unknown) = Infinity)],
+  ['refinery produced alloy -Infinity', (s) => ((s.run.refinery.produced.alloy as unknown) = -Infinity)],
 ];
 
 describe('validateState – build orders', () => {
@@ -81,6 +93,27 @@ describe('validateState – build orders', () => {
     delete (payload.run.ships[0] as Partial<(typeof payload.run.ships)[0]>).autoBuild;
     expect(validateState(payload)).toBeNull();
   });
+});
+
+describe('validateState – rock comet flag', () => {
+  it('accepts a rock with comet: true', () => {
+    const payload = validPayload();
+    payload.run.rocks[0]!.comet = true;
+    expect(validateState(payload)).not.toBeNull();
+  });
+});
+
+describe('validateState – role-based flagship check', () => {
+  const hullIds = Object.keys(HULLS) as HullId[];
+
+  for (const hullId of hullIds) {
+    const isFlagship = HULLS[hullId].role === 'flagship';
+    it(`${isFlagship ? 'accepts' : 'rejects'} a fleet whose only ship has hullId "${hullId}"`, () => {
+      const payload = validPayload();
+      payload.run.ships[0]!.hullId = hullId;
+      expect(validateState(payload) !== null).toBe(isFlagship);
+    });
+  }
 });
 
 describe('validateState – corruptions return null', () => {

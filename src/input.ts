@@ -259,7 +259,9 @@ export class Input {
     this.padHint.setShown(!!f);
     this.padVec = { x: 0, z: 0 };
     if (!f) return;
-    const overlay = [...document.querySelectorAll<HTMLElement>('.modal:not(.hidden), #boot:not([hidden])')].pop();
+    const overlay =
+      [...document.querySelectorAll<HTMLElement>('.modal:not(.hidden)')].pop() ??
+      [...document.querySelectorAll<HTMLElement>('#boot:not([hidden])')].pop();
     if (overlay || this.blocked()) {
       if (overlay) this.padNavigate(overlay, f.edges);
       return;
@@ -332,7 +334,7 @@ export class Input {
       } else if (b === PAD.A) {
         if (cur < 0) items[0]?.focus();
         else items[cur].click();
-      } else if ((b === PAD.B || b === PAD.START) && !this.blocked()) this.hud.escape();
+      } else if ((b === PAD.B || b === PAD.START) && (!this.blocked() || this.hud.menu.open)) this.hud.escape();
     }
   }
 
