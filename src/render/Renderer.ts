@@ -345,18 +345,18 @@ export class Renderer {
     this.rocks.update(run.rocks, run.pickups, run.time, v, index);
     this.curRun = run;
     this.curIndex = index ?? null;
-    this.outpostView.update(run.automation.outposts, this.rockOf, run.time);
-    this.explorationView.update(run);
     const wpp = this.wpp;
-    const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars, motionK, index);
+    this.outpostView.update(run.automation.outposts, this.rockOf, run.time, wpp);
+    this.explorationView.update(run, wpp);
+    const hits = this.ships.update(state, run.time, dt, wpp, this.alwaysBars, motionK, index, this.cam.halfH);
     this.hazardView.update(run.hazards, run.time, wpp);
 
     if (this.fx.consume(state, hits, dt, this.onScreen, index)) this.follow = true;
-    this.fx.update(dt, this.reducedMotion);
+    this.fx.update(dt, this.reducedMotion, wpp);
     this.updateMarkers(state, moveMark, wpp);
     this.setPlayfieldVisible(!w.hidden);
     this.labels.update(run, w.hidden ? 0 : this.cam.halfH, this.wpp, dt, this.toScreen);
-    this.fx.updateText(dt, this.toScreen, this.anchorOf);
+    this.fx.updateText(dt, this.toScreen, this.anchorOf, this.cam.halfH);
 
     if (this.warmup) {
       this.warmup = false;
@@ -419,11 +419,16 @@ export class Renderer {
     const h = this.hover;
     let target: { pos: Vec2; r: number; color: number } | null = null;
     if (h?.kind === 'rock')
-      target = { pos: h.rock.pos, r: h.rock.radius + 6 * wpp, color: palette().resource[h.rock.kind] };
-    else if (h?.kind === 'station') target = { pos: state.run.system.station.pos, r: 60, color: palette().ok };
+      target = {
+        pos: h.rock.pos,
+        r: Math.max(h.rock.radius + 6 * wpp, 18 * wpp),
+        color: palette().resource[h.rock.kind],
+      };
+    else if (h?.kind === 'station')
+      target = { pos: state.run.system.station.pos, r: Math.max(60, 18 * wpp), color: palette().ok };
     else if (h?.kind === 'ship') {
       const s = findShip(state.run, h.id);
-      if (s) target = { pos: s.pos, r: HULLS[s.hullId].size * 2.4 + 6 * wpp, color: 0xffffff };
+      if (s) target = { pos: s.pos, r: Math.max(HULLS[s.hullId].size * 2.4 + 6 * wpp, 18 * wpp), color: 0xffffff };
     }
     this.hoverRing.visible = !!target;
     if (target) {

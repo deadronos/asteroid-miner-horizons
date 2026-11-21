@@ -340,4 +340,29 @@ describe('ShipView GPU disposal', () => {
     fx.consume(state, [], DT, () => true, index);
     expect(emitSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('fades ship status bars across map-zoom transition and hides them at map zoom', () => {
+    const { state, view, a } = setup();
+    const pa = partsOf(view, a.id);
+
+    // Play zoom (halfH <= 900): fully opaque and visible when alwaysBars is on.
+    view.update(state, 1, DT, 1, true, 1, undefined, 420);
+    expect(pa.barBg.visible).toBe(true);
+    expect(pa.hpBar.visible).toBe(true);
+    expect((pa.hpBar.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(1, 3);
+    expect((pa.cargoBar.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(1, 3);
+
+    // Mid-transition (halfH = 1100): faded to 50%.
+    view.update(state, 2, DT, 2, true, 1, undefined, 1100);
+    expect(pa.barBg.visible).toBe(true);
+    expect((pa.hpBar.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(0.5, 3);
+    expect((pa.cargoBar.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(0.5, 3);
+    expect((pa.barBg.material as THREE.MeshBasicMaterial).opacity).toBeCloseTo(0.4, 3);
+
+    // Map zoom (halfH >= 1300): cleanly hidden.
+    view.update(state, 3, DT, 4, true, 1, undefined, 1300);
+    expect(pa.barBg.visible).toBe(false);
+    expect(pa.hpBar.visible).toBe(false);
+    expect(pa.cargoBar.visible).toBe(false);
+  });
 });

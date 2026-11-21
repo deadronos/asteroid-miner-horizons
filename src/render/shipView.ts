@@ -11,6 +11,7 @@ import type { SimIndex } from '../sim/index';
 import { isAlive, shipStats } from '../sim/ships';
 import type { Fitted, GameState, Rock, Ship } from '../sim/types';
 import { buildFittings, fitLayout, type FitLayout, sameFit, snapshotFit } from './fittings';
+import { labelOpacity } from './labels';
 import { additive, flat, glowTexture } from './util';
 import { palette, paletteGeneration } from './activePalette';
 
@@ -113,7 +114,12 @@ const shieldGeo = flat(new THREE.CircleGeometry(1, 40));
 const selectGeo = flat(new THREE.RingGeometry(0.92, 1, 48));
 // Shared by every ship and never disposed. `cargoBarMat` re-colours in place on palette switches.
 const barBgMat = new THREE.MeshBasicMaterial({ color: 0x0b1424, transparent: true, opacity: 0.8, depthWrite: false });
-const cargoBarMat = new THREE.MeshBasicMaterial({ color: palette().resource.ore, depthWrite: false });
+const cargoBarMat = new THREE.MeshBasicMaterial({
+  color: palette().resource.ore,
+  transparent: true,
+  opacity: 1,
+  depthWrite: false,
+});
 const beamGlowMat = additive(0xff5e30, 0.42);
 
 export class ShipView {
@@ -181,7 +187,10 @@ export class ShipView {
     root.add(select);
 
     const barBg = new THREE.Mesh(barPlane, barBgMat);
-    const hpBar = new THREE.Mesh(barPlane, new THREE.MeshBasicMaterial({ color: pal.ok, depthWrite: false }));
+    const hpBar = new THREE.Mesh(
+      barPlane,
+      new THREE.MeshBasicMaterial({ color: pal.ok, transparent: true, opacity: 1, depthWrite: false }),
+    );
     const cargoBar = new THREE.Mesh(barPlane, cargoBarMat);
     for (const b of [barBg, hpBar, cargoBar]) {
       b.renderOrder = 20;
@@ -260,6 +269,7 @@ export class ShipView {
     alwaysBars: boolean,
     motion = 1,
     index?: SimIndex,
+    halfH = 0,
   ): { x: number; z: number; ship: Ship }[] {
     const { run, profile } = state;
     const seen = this.seen;
@@ -267,6 +277,9 @@ export class ShipView {
     const hits = this.hits;
     hits.length = 0;
     const motionK = Math.min(1, Math.max(0.35, motion));
+    const barAlpha = 1 - labelOpacity(halfH);
+    barBgMat.opacity = 0.8 * barAlpha;
+    cargoBarMat.opacity = barAlpha;
     // Share the sim's rock map when available; otherwise fall back to a reused
     // map filled only on frames where some ship is actually firing.
     let rockById: ReadonlyMap<number, Rock>;
@@ -331,7 +344,7 @@ export class ShipView {
       v.select.visible = selected;
       const hullF = Math.max(0, ship.hull / st.maxHull);
       const cargoF = Math.min(1, walletTotal(ship.cargo) / st.cargoCap);
-      const showBars = alwaysBars || selected || hullF < 0.999 || cargoF > 0.01;
+      const showBars = barAlpha > 0 && (alwaysBars || selected || hullF < 0.999 || cargoF > 0.01);
       v.barBg.visible = v.hpBar.visible = v.cargoBar.visible = showBars;
       if (selected || showBars) {
         const ringR = Math.max(h.size * 1.9 + 4 * wpp, 14 * wpp);
@@ -348,9 +361,9 @@ export class ShipView {
           v.barBg.scale.set(bw + 2 * wpp, 1, bh * 2 + 3 * wpp);
           v.hpBar.position.set(-bw / 2, 2, -by);
           v.hpBar.scale.set(bw * hullF, 1, bh);
-          (v.hpBar.material as THREE.MeshBasicMaterial).color.setHex(
-            hullF > 0.5 ? pal.ok : hullF > 0.25 ? pal.warn : pal.bad,
-          );
+          const hpMat = v.hpBar.material as THREE.MeshBasicMaterial;
+          hpMat.color.setHex(hullF > 0.5 ? pal.ok : hullF > 0.25 ? pal.warn : pal.bad);
+          hpMat.opacity = barAlpha;
           v.cargoBar.position.set(-bw / 2, 2, -by + bh + wpp);
           v.cargoBar.scale.set(Math.max(0.0001, bw * cargoF), 1, bh);
         }

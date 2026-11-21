@@ -24,7 +24,7 @@ export class OutpostView {
   private readonly markers: Marker[] = [];
 
   constructor() {
-    const ringGeo = flat(new THREE.RingGeometry(1.12, 1.2, 6));
+    const ringGeo = flat(new THREE.RingGeometry(1.1, 1.22, 6));
     for (let i = 0; i < TUNING.outpostMax; i++) {
       const ring = new THREE.Mesh(ringGeo, additive(0xffffff, 0.55));
       const fill = new THREE.Mesh(new THREE.BufferGeometry(), additive(0xffffff, 0.85));
@@ -37,7 +37,7 @@ export class OutpostView {
   }
 
   /** Poses one marker per outpost on its rock; `rockById` holds the run's live rocks. */
-  update(outposts: Outpost[], rockById: (id: number) => Rock | undefined, time: number): void {
+  update(outposts: Outpost[], rockById: (id: number) => Rock | undefined, time: number, wpp = 1): void {
     for (let i = 0; i < this.markers.length; i++) {
       const m = this.markers[i]!;
       const o = outposts[i];
@@ -48,7 +48,7 @@ export class OutpostView {
       (m.ring.material as THREE.MeshBasicMaterial).color.setHex(color);
       (m.fill.material as THREE.MeshBasicMaterial).color.setHex(color);
       m.root.position.set(rock.pos.x, 20, rock.pos.z);
-      m.root.scale.setScalar(rock.radius);
+      m.root.scale.setScalar(Math.max(rock.radius, 16 * wpp));
       m.ring.rotation.y = time * 0.3;
       const f = Math.round((walletTotal(o.stored) / TUNING.outpostCapacity) * FILL_SEGMENTS) / FILL_SEGMENTS;
       if (f !== m.shown) {

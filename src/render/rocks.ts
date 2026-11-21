@@ -17,6 +17,10 @@ import { palette, paletteGeneration } from './activePalette';
 
 /** Number of shared rock shape pools: two shapes for each of the three kinds. */
 export const ROCK_POOLS = 6;
+/** Maximum vertical half-scale of a rock so pickups, debris, particles, beams and ships never clip through large rocks. */
+export const MAX_ROCK_Y = 12;
+/** Vertical half-scale for a rock of visual radius `k`. */
+export const rockYScale = (k: number): number => Math.min(k * 0.8, MAX_ROCK_Y);
 /** `aTrait` shader value per trait; also the fragment accent branch order. */
 const TRAIT_INDEX: Record<RockTrait, number> = { volatile: 1, dense: 2, magnetic: 3 };
 /** Shader value for a rock's trait: volatile 1, dense 2, magnetic 3, plain 0. */
@@ -391,9 +395,24 @@ export class RockView {
         const since = time - (this.hitAt.get(r.id) ?? -1);
         const shudder = since < 0.15 ? Math.sin(time * 70 + r.id) * 0.035 : 0;
         const k = r.radius * (1 - 0.12 * dmg) * (1 + shudder);
-        p.set(r.pos.x, 0, r.pos.z);
-        s.set(k, k * 0.8, k);
-        pool.mesh.setMatrixAt(i, m.compose(p, q, s));
+        const yScale = rockYScale(k);
+        // Apply world-space (k, yScale, k) after tumbling so even large rocks rotated
+        // arbitrarily stay strictly below y = 0 (under pickups, debris, particles, beams and ships).
+        m.makeRotationFromQuaternion(q);
+        const te = m.elements;
+        te[0]! *= k;
+        te[4]! *= k;
+        te[8]! *= k;
+        te[1]! *= yScale;
+        te[5]! *= yScale;
+        te[9]! *= yScale;
+        te[2]! *= k;
+        te[6]! *= k;
+        te[10]! *= k;
+        te[12] = r.pos.x;
+        te[13] = -yScale * 1.25;
+        te[14] = r.pos.z;
+        pool.mesh.setMatrixAt(i, m);
         c.copy(ROCK_TINT[r.kind])
           .multiplyScalar(0.85 + h * 0.3)
           .lerp(HOT, dmg * 0.35);

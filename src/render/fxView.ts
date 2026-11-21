@@ -145,15 +145,20 @@ export class FxView {
   }
 
   /** Advances particles, debris and the ping pulse. */
-  update(dt: number, reducedMotion = false): void {
+  update(dt: number, reducedMotion = false, wpp = 1): void {
     this.particles.update(dt);
     this.debris.update(dt);
-    this.ping.update(dt, reducedMotion);
+    this.ping.update(dt, reducedMotion, wpp);
   }
 
   /** Moves floating pickup text; `anchor` gives a live ship's position (null once it is gone). */
-  updateText(dt: number, toScreen: (p: Vec2) => { x: number; y: number }, anchor: (id: number) => Vec2 | null): void {
-    this.floaters.update(dt, toScreen, anchor);
+  updateText(
+    dt: number,
+    toScreen: (p: Vec2) => { x: number; y: number },
+    anchor: (id: number) => Vec2 | null,
+    halfH = 0,
+  ): void {
+    this.floaters.update(dt, toScreen, anchor, halfH);
   }
 
   setVisible(on: boolean): void {

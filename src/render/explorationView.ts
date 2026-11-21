@@ -8,7 +8,7 @@ import type { Run } from '../sim/types';
 import { palette } from './activePalette';
 
 /** A thin ground-plane ring around a rich rock (authored in XY, laid onto XZ). */
-const richRingGeometry = (): THREE.BufferGeometry => new THREE.RingGeometry(0.94, 1, 32).rotateX(-Math.PI / 2);
+const richRingGeometry = (): THREE.BufferGeometry => new THREE.RingGeometry(0.92, 1, 32).rotateX(-Math.PI / 2);
 
 /** A world-space label for an anomaly or rich rock. Objects are reused between calls. */
 export interface WorldLabel {
@@ -69,13 +69,14 @@ export class ExplorationView {
   });
 
   /** Shows revealed, unclaimed derelicts and rich rock outlines for `run`; no per-frame allocation. */
-  update(run: Run): void {
+  update(run: Run, wpp = 1): void {
     for (const m of this.derelicts) m.visible = false;
     for (const m of this.richRings) m.visible = false;
     this.derelictMat.color.setHex(palette().fleet);
     this.richMat.color.setHex(palette().warn);
 
     const list = anomalies(run);
+    const derelictScale = Math.max(12, 12 * wpp);
     let d = 0;
     for (const id of run.exploration.revealed) {
       if (isClaimed(run, id)) continue;
@@ -83,7 +84,7 @@ export class ExplorationView {
       if (!a || a.id !== id || a.kind !== 'derelict') continue;
       const mesh = this.derelict(d++);
       mesh.position.set(a.pos.x, 16, a.pos.z);
-      mesh.scale.setScalar(12);
+      mesh.scale.setScalar(derelictScale);
       mesh.visible = true;
     }
 
@@ -92,7 +93,7 @@ export class ExplorationView {
       if (!rock.rich) continue;
       const mesh = this.rich(r++);
       mesh.position.set(rock.pos.x, 8, rock.pos.z);
-      mesh.scale.setScalar(rock.radius * 1.3);
+      mesh.scale.setScalar(Math.max(rock.radius * 1.3 + 2 * wpp, 22 * wpp));
       mesh.visible = true;
     }
   }
