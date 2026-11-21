@@ -164,9 +164,9 @@ function step(now: number): void {
         manual: manualPause,
         pauseInMenus: s.pauseInMenus,
         pauseUnfocused: s.pauseUnfocused,
-        menuOpen: hud.menu.open,
-        researchOpen: hud.researchOpen || hud.gateOpen,
-        warpOpen: hud.warpOpen,
+        menuOpen: hud.hasModalOpen(),
+        researchOpen: false,
+        warpOpen: false,
         focused: document.hasFocus(),
       });
   hud.setPaused(title.open ? null : pauseBanner(paused));

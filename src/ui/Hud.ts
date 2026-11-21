@@ -10,7 +10,7 @@ import type { Command } from '../sim/commands';
 import { type HudPanelId, type SettingsStore, keyLabel } from '../settings';
 import type { GameState, LogEntry, Outpost, Rock } from '../sim/types';
 import { type Panel, h, setText } from './dom';
-import { closeConfirm } from './confirm';
+import { closeConfirm, confirmOpen } from './confirm';
 import type { InputMode } from './goals';
 import { hazardBanner } from './hazardBanner';
 import { PALETTES } from '../data/palette';
@@ -345,6 +345,11 @@ export class Hud {
       { el: this.research.el, close: () => this.research.toggle(false) },
       { el: this.routes.el, close: () => this.routes.toggle(false) },
     ]);
+  }
+
+  /** Whether any modal dialog (confirmation, menu, gate, research, or warp picker) is currently open. */
+  hasModalOpen(): boolean {
+    return confirmOpen() || this.menu.open || this.gate.open || this.routes.open || this.research.open;
   }
 
   get warpOpen(): boolean {

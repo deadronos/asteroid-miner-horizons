@@ -23,11 +23,14 @@ interface FakeHud {
   gateOpen: boolean;
   menu: { open: boolean };
   touch: { onAction: ((action: string) => void) | null; thrust: { x: number; z: number } };
+  hasModalOpen: () => boolean;
   escape: () => boolean;
   toggleResearch: () => void;
 }
 
-const mount = (state: GameState): { hud: FakeHud; sent: Command[]; research: () => number; input: Input } => {
+const mount = (
+  state: GameState,
+): { hud: FakeHud; sent: Command[]; research: () => number; input: Input; canvas: FakeEl; zoomCalls: number[] } => {
   resetDom();
   const doc = document as unknown as { createElement: (tag: string) => FakeEl; body: FakeEl };
   let research = 0;
@@ -37,15 +40,18 @@ const mount = (state: GameState): { hud: FakeHud; sent: Command[]; research: () 
     gateOpen: false,
     menu: { open: false },
     touch: { onAction: null, thrust: { x: 0, z: 0 } },
+    hasModalOpen: () => hud.menu.open || hud.gateOpen || hud.warpOpen || hud.researchOpen,
     escape: () => false,
     toggleResearch: () => research++,
   };
   const sent: Command[] = [];
+  const zoomCalls: number[] = [];
+  const canvas = doc.createElement('canvas');
   const renderer = {
-    canvas: doc.createElement('canvas'),
+    canvas,
     follow: false,
     panPixels: () => {},
-    zoomAt: () => {},
+    zoomAt: (factor: number) => zoomCalls.push(factor),
   };
   const input = new Input(
     renderer as never,
@@ -55,7 +61,7 @@ const mount = (state: GameState): { hud: FakeHud; sent: Command[]; research: () 
     new SettingsStore(memStorage()),
     () => {},
   );
-  return { hud, sent, research: () => research, input };
+  return { hud, sent, research: () => research, input, canvas, zoomCalls };
 };
 
 describe('keyboard while the warp picker is open', () => {
@@ -265,5 +271,25 @@ describe('gamepad overlay precedence', () => {
     setPad([PAD.DOWN]);
     input.pollGamepad(0.016);
     expect(doc.activeElement).toBe(afterBtn);
+  });
+});
+
+describe('Input.dispose()', () => {
+  it('removes window and canvas listeners cleanly', () => {
+    const { input, sent, canvas, zoomCalls } = mount(newGame(5));
+    pressKey('Tab', false, 'Tab');
+    expect(sent.map((c) => c.t)).toEqual(['select']);
+
+    canvas.dispatch('wheel', { deltaY: 100, clientX: 10, clientY: 20, preventDefault: () => {} } as unknown as Event);
+    expect(zoomCalls).toHaveLength(1);
+
+    sent.length = 0;
+    zoomCalls.length = 0;
+    input.dispose();
+
+    pressKey('Tab', false, 'Tab');
+    expect(sent).toEqual([]);
+    canvas.dispatch('wheel', { deltaY: 100, clientX: 10, clientY: 20, preventDefault: () => {} } as unknown as Event);
+    expect(zoomCalls).toEqual([]);
   });
 });

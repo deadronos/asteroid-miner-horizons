@@ -38,6 +38,7 @@ export interface FakeEl {
   removeAttribute: (name: string) => void;
   hasAttribute: (name: string) => boolean;
   addEventListener: (type: string, fn: (e: Event) => void) => void;
+  removeEventListener: (type: string, fn: (e: Event) => void) => void;
   dispatch: (type: string, event: Event) => void;
   dispatchEvent: (event: Event) => boolean;
   click: () => void;
@@ -180,6 +181,10 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
     hasAttribute: (name) => attrs.has(name),
     addEventListener: (type, fn) => {
       elListeners.push({ type, fn });
+    },
+    removeEventListener: (type, fn) => {
+      const i = elListeners.findIndex((l) => l.type === type && l.fn === fn);
+      if (i >= 0) elListeners.splice(i, 1);
     },
     dispatch(type, event) {
       for (const l of elListeners) if (l.type === type) l.fn(event);
