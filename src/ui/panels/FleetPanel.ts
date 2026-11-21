@@ -8,7 +8,9 @@ import { droneCount, findShip, fleetCap, isAlive, isBuilder, isFlagship, isHaule
 import type { IdleReason, ShipStatus } from '../../sim/status';
 import type { Command } from '../../sim/commands';
 import type { GameState, Ship } from '../../sim/types';
+import { keyLabel } from '../../settings';
 import { Panel, bar, h, setBlocked, setText } from '../dom';
+import type { InputMode } from '../goals';
 import type { PanelCtx } from './context';
 
 const REASONS: Record<IdleReason, string> = {
@@ -94,6 +96,22 @@ export function fleetStatus(state: GameState, s: Ship, cargoCap?: number): strin
   if (!st) return 'Standby';
   const cap = cargoCap ?? shipStats(s, state.profile).cargoCap;
   return formatStatus(st, cap > 0 ? walletTotal(s.cargo) / cap : 0);
+}
+
+/** Input-aware hint shown under Outposts when none have been deployed yet. */
+export function outpostHintText(
+  outpostKeys: readonly (string | null)[] | undefined,
+  mode: InputMode = 'pointer',
+): string {
+  if (mode === 'touch') {
+    return 'Fly next to a large asteroid, tap Outpost, then tap the asteroid. Haulers collect the output.';
+  }
+  if (mode === 'gamepad') {
+    return 'Fly next to a large asteroid and press R3 to deploy an outpost. Haulers collect the output.';
+  }
+  const bound = outpostKeys?.filter(Boolean).map(keyLabel).join('/');
+  const key = bound ? bound : 'the outpost key';
+  return `Fly next to a large asteroid and press ${key} over it. Haulers collect the output.`;
 }
 
 export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
@@ -256,10 +274,12 @@ export function createFleetPanel(el: HTMLElement, ctx: PanelCtx): Panel {
           }
         });
       }
-      const outHint = h('div', {
-        class: 'dim small',
-        text: 'Fly next to a large asteroid and press the outpost key over it. Haulers collect the output.',
-      });
+      const outHint = h('div', { class: 'dim small' });
+      if (!outRows.length) {
+        bind(() =>
+          setText(outHint, outpostHintText(ctx.settings?.value?.keys?.outpost, ctx.inputMode?.() ?? 'pointer')),
+        );
+      }
 
       const yard = h('h3', { text: 'Shipyard' });
       const buys = HULL_IDS.filter((id) => id !== 'prospector').map((hid) => {

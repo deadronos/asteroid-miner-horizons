@@ -16,6 +16,9 @@ import type { GameState, Ship } from '../sim/types';
 
 export type GoalId = 'mine' | 'unload' | 'install' | 'drone' | 'contract' | 'warp';
 
+/** Active control scheme for adapting input-specific UI copy. */
+export type InputMode = 'pointer' | 'touch' | 'gamepad';
+
 /** Units the first goal asks for. */
 export const MINE_GOAL = 20;
 
@@ -47,6 +50,19 @@ export const GOALS: readonly GoalDef[] = [
     how: 'Refine ice into fuel, then press WARP in the top bar and pick a route.',
   },
 ];
+
+/** Input-aware how-to text for a goal, adapting click/tap/gamepad instructions. */
+export function goalHow(id: GoalId, mode: InputMode = 'pointer'): string {
+  if (mode === 'touch') {
+    if (id === 'mine') return 'Tap an asteroid, then fly over the debris to collect it.';
+    if (id === 'unload') return 'Tap the station to fly home and unload your hold.';
+  } else if (mode === 'gamepad') {
+    if (id === 'mine') return 'Fly near an asteroid and press A to mine, then fly over the debris to collect it.';
+    if (id === 'unload') return 'Press A away from rocks (or at the station) to fly home and unload your hold.';
+    if (id === 'warp') return 'Refine ice into fuel, then press Y to open warp routes and pick a route.';
+  }
+  return GOALS.find((g) => g.id === id)!.how;
+}
 
 /** True once goal `id` is met. */
 export function goalDone(state: GameState, id: GoalId): boolean {
@@ -92,6 +108,7 @@ export function goalProgress(state: GameState, id: GoalId): string | null {
 export interface HintEnv {
   assists: Pick<Assists, 'autoDock'>;
   auto: FleetAuto;
+  inputMode?: InputMode;
 }
 
 const DEFAULT_ENV: HintEnv = { assists: DEFAULT_ASSISTS, auto: DEFAULT_FLEET_AUTO };
@@ -124,7 +141,11 @@ export function goalHint(state: GameState, env: HintEnv = DEFAULT_ENV): string |
   if (!isAlive(fs)) return `${fs.name} is being rebuilt at the station.`;
   const st = shipStats(fs, profile);
   if (st.dps <= 0) return 'No mining laser fitted: dock and install one in the ship panel.';
-  if (isHoldFull(fs, st) && fs.order?.kind !== 'dock') return 'Hold full: click the station to unload.';
+  if (isHoldFull(fs, st) && fs.order?.kind !== 'dock') {
+    if (env.inputMode === 'touch') return 'Hold full: tap the station to unload.';
+    if (env.inputMode === 'gamepad') return 'Hold full: press A to fly home and unload.';
+    return 'Hold full: click the station to unload.';
+  }
   let idle: Ship | null = null;
   for (const s of run.ships) {
     if (HULLS[s.hullId].role !== 'drone' || !isAlive(s) || s.order) continue;

@@ -13,6 +13,7 @@ import {
   currentGoal,
   goalDone,
   goalHint,
+  goalHow,
   goalProgress,
   goalsVisible,
   type GoalId,
@@ -131,8 +132,24 @@ describe('first-steps goals', () => {
       const fs = flagship(s.run);
       fs.cargo.ore = shipStats(fs, s.profile).cargoCap;
       expect(goalHint(s)).toMatch(/Hold full: click the station/);
+      expect(goalHint(s, { assists: { autoDock: true }, auto: DEFAULT_FLEET_AUTO, inputMode: 'touch' })).toMatch(
+        /Hold full: tap the station/,
+      );
+      expect(goalHint(s, { assists: { autoDock: true }, auto: DEFAULT_FLEET_AUTO, inputMode: 'gamepad' })).toMatch(
+        /Hold full: press A/,
+      );
       send(s, { t: 'dock', shipId: fs.id });
       expect(goalHint(s)).toBeNull();
+    });
+
+    it('adapts goal how-to text for pointer, touch and gamepad modes (#273)', () => {
+      expect(goalHow('mine', 'pointer')).toContain('Click an asteroid');
+      expect(goalHow('mine', 'touch')).toContain('Tap an asteroid');
+      expect(goalHow('mine', 'gamepad')).toContain('press A');
+      expect(goalHow('unload', 'pointer')).toContain('Click the station');
+      expect(goalHow('unload', 'touch')).toContain('Tap the station');
+      expect(goalHow('unload', 'gamepad')).toContain('Press A');
+      expect(goalHow('warp', 'gamepad')).toContain('press Y');
     });
 
     it('flags a flagship being rebuilt before anything else', () => {

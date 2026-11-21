@@ -3,12 +3,17 @@
 
 export interface FakeEl {
   tag: string;
+  readonly tagName: string;
   id: string;
   parent: FakeEl | null;
   childNodes: FakeEl[];
   hidden: boolean;
   disabled: boolean;
   type: string;
+  value: string;
+  min: string;
+  max: string;
+  step: string;
   title: string;
   innerHTML: string;
   dataset: Record<string, string>;
@@ -34,6 +39,8 @@ export interface FakeEl {
   hasAttribute: (name: string) => boolean;
   addEventListener: (type: string, fn: (e: Event) => void) => void;
   dispatch: (type: string, event: Event) => void;
+  dispatchEvent: (event: Event) => boolean;
+  click: () => void;
   append: (...nodes: (FakeEl | string)[]) => void;
   prepend: (...nodes: (FakeEl | string)[]) => void;
   replaceChildren: (...nodes: FakeEl[]) => void;
@@ -68,7 +75,10 @@ export function resetDom(): void {
     addEventListener: (type: string, fn: (e: KeyboardEvent) => void) => {
       listeners.push({ type, fn });
     },
-    removeEventListener: () => {},
+    removeEventListener: (type: string, fn: (e: KeyboardEvent) => void) => {
+      const i = listeners.findIndex((l) => l.type === type && l.fn === fn);
+      if (i >= 0) listeners.splice(i, 1);
+    },
   };
   Object.assign(globalThis, { document: doc, window: win, HTMLElement: Object });
 }
@@ -118,12 +128,19 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
   let text = '';
   const el: FakeEl = {
     tag,
+    get tagName() {
+      return tag.toUpperCase();
+    },
     id: '',
     parent: null,
     childNodes: [],
     hidden: false,
     disabled: false,
     type: '',
+    value: '',
+    min: '',
+    max: '',
+    step: '',
     title: '',
     innerHTML: '',
     dataset: {},
@@ -166,6 +183,13 @@ function createEl(doc: FakeDoc, tag: string): FakeEl {
     },
     dispatch(type, event) {
       for (const l of elListeners) if (l.type === type) l.fn(event);
+    },
+    dispatchEvent(event) {
+      el.dispatch(event.type, event);
+      return true;
+    },
+    click() {
+      el.dispatch('click', { target: el } as unknown as Event);
     },
     append(...nodes) {
       for (const n of nodes) {
@@ -282,7 +306,10 @@ function hit(el: FakeEl, selector: string): boolean {
   if (selector === '.doctrine button')
     return el.tag === 'button' && el.closest('.doctrine') !== el && !!el.closest('.doctrine');
   if (selector === 'button:not([disabled])') return el.tag === 'button' && !el.disabled;
+  if (selector === 'input:not([disabled]):not([type="hidden"])')
+    return el.tag === 'input' && !el.disabled && el.type !== 'hidden';
   if (selector === 'button.warp') return el.tag === 'button' && el.classList.contains('warp');
   if (selector === 'button') return el.tag === 'button';
+  if (selector === 'div') return el.tag === 'div';
   return false;
 }

@@ -8,6 +8,7 @@
 import { interactTarget, padThrust, padZoom } from './core/gamepad';
 import { type Point, pinchStep } from './core/gesture';
 import { nextFocusIndex, FOCUSABLE } from './ui/focus';
+import { confirmOpen } from './ui/confirm';
 import { GamepadHint } from './ui/GamepadHint';
 import { PAD, PadReader, padCommand } from './gamepad';
 import { TUNING } from './data/tuning';
@@ -15,7 +16,7 @@ import { dist, type Vec2 } from './core/vec';
 import { HULLS } from './data/hulls';
 import type { Command } from './sim/commands';
 import { outpostAt } from './sim/automation';
-import { findShip, isAlive, selectedShip } from './sim/ships';
+import { findShip, isAlive, isFlagship, selectedShip } from './sim/ships';
 import type { GameState } from './sim/types';
 import type { HoverTarget, Renderer } from './render/Renderer';
 import type { Hud } from './ui/Hud';
@@ -66,8 +67,15 @@ export class Input {
       delete document.body.dataset.pad;
       this.onKey(e);
     });
-    window.addEventListener('gamepadconnected', () => this.padHint.setShown(true));
-    window.addEventListener('gamepaddisconnected', () => this.padHint.setShown(!!this.pad.read()));
+    window.addEventListener('gamepadconnected', () => {
+      this.padHint.setShown(true);
+      this.hud.setGamepad?.(true);
+    });
+    window.addEventListener('gamepaddisconnected', () => {
+      const on = !!this.pad.read();
+      this.padHint.setShown(on);
+      this.hud.setGamepad?.(on);
+    });
     window.addEventListener('keyup', (e) => this.held.delete(e.code));
     window.addEventListener('blur', () => this.held.clear());
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -156,8 +164,8 @@ export class Input {
   }
 
   private onKey(e: KeyboardEvent): void {
-    // The title screen owns the keyboard, except for Esc while a higher menu (Settings) is open.
-    if (this.blocked() && !(e.code === 'Escape' && this.hud.menu.open)) return;
+    // The title screen owns the keyboard, except for Esc while a higher menu (Settings, Confirm) is open.
+    if (this.blocked() && !(e.code === 'Escape' && (this.hud.menu.open || confirmOpen()))) return;
     // Typing into form fields (save text, selects) must not fly the ship.
     if (['SELECT', 'TEXTAREA', 'INPUT'].includes((e.target as HTMLElement)?.tagName) && e.code !== 'Escape') return;
     if (e.code === 'Escape') {
@@ -167,6 +175,7 @@ export class Input {
       this.moveMark = null;
       return;
     }
+    if (confirmOpen()) return;
     if (this.hud.menu.open) return; // the menu owns the keyboard while open
     // The run summary owns the keyboard; Esc already closed it above.
     if (this.hud.gateOpen) return;
@@ -258,6 +267,7 @@ export class Input {
   pollGamepad(dt: number): void {
     const f = this.pad.read();
     this.padHint.setShown(!!f);
+    this.hud.setGamepad?.(!!f);
     this.padVec = { x: 0, z: 0 };
     if (!f) return;
     const overlay =
@@ -302,6 +312,12 @@ export class Input {
         case PAD.Y:
           this.hud.toggleWarp();
           break;
+        case PAD.LT:
+          this.runAction('research');
+          break;
+        case PAD.R3:
+          this.padDeployOutpost();
+          break;
         case PAD.SELECT:
           this.runAction('map');
           break;
@@ -323,19 +339,49 @@ export class Input {
     this.moveMark = null;
   }
 
-  /** Pad control of an open overlay: D-pad steps focus (wrapping), A presses, B and Start close it. */
+  /** R3: deploy an outpost on the nearest eligible large asteroid to the flagship. */
+  private padDeployOutpost(): void {
+    const s = this.getState();
+    const fs = s.run.ships.find(isFlagship);
+    if (!fs || !isAlive(fs)) return;
+    let bestId: number | null = null;
+    let bestD = Infinity;
+    for (const r of s.run.rocks) {
+      if (r.size !== 0 || r.comet || outpostAt(s, r.id)) continue;
+      const d = dist(fs.pos, r.pos) - r.radius;
+      if (d < bestD) {
+        bestD = d;
+        bestId = r.id;
+      }
+    }
+    if (bestId !== null) this.send({ t: 'deployOutpost', rockId: bestId });
+  }
+
+  /** Pad control of an open overlay: D-pad steps focus (or adjusts range sliders), A presses, B/Start close. */
   private padNavigate(overlay: HTMLElement, edges: number[]): void {
     const items = [...overlay.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((e) => e.getClientRects().length > 0);
     for (const b of edges) {
       document.body.dataset.pad = '1';
       const cur = items.indexOf(document.activeElement as HTMLElement);
+      if (b === PAD.LEFT || b === PAD.RIGHT) {
+        const active = cur >= 0 ? items[cur] : null;
+        if (active && active.tagName === 'INPUT' && (active as HTMLInputElement).type === 'range') {
+          stepRange(active as HTMLInputElement, b === PAD.LEFT ? -1 : 1);
+          continue;
+        }
+      }
       if (b === PAD.UP || b === PAD.DOWN || b === PAD.LEFT || b === PAD.RIGHT) {
         const prev = b === PAD.UP || b === PAD.LEFT;
         items[nextFocusIndex(items.length, cur, prev)]?.focus();
       } else if (b === PAD.A) {
         if (cur < 0) items[0]?.focus();
         else items[cur].click();
-      } else if ((b === PAD.B || b === PAD.START) && (!this.blocked() || this.hud.menu.open)) this.hud.escape();
+      } else if (
+        (b === PAD.B || b === PAD.START) &&
+        (!this.blocked() || this.hud.menu.open || overlay.classList.contains('modal'))
+      ) {
+        this.hud.escape();
+      }
     }
   }
 
@@ -440,11 +486,26 @@ export class Input {
     const s = this.getState();
     const label =
       hit?.kind === 'station'
-        ? `${s.run.system.name} Station · click to dock & unload`
+        ? `${s.run.system.name} Station · ${this.hud.touch.shown ? 'tap' : 'click'} to dock & unload`
         : hit?.kind === 'ship'
           ? (findShip(s.run, hit.id)?.name ?? null)
           : null;
     const rock = hit?.kind === 'rock' ? hit.rock : null;
     this.hud.showTooltip(this.mouse.x, this.mouse.y, rock, label, rock ? outpostAt(s, rock.id) : undefined);
   }
+}
+
+/** Steps an `<input type="range">` by one step in `dir`, clamping to min/max and dispatching input/change. */
+function stepRange(input: HTMLInputElement, dir: -1 | 1): void {
+  const min = input.min !== '' ? Number(input.min) : 0;
+  const max = input.max !== '' ? Number(input.max) : 100;
+  const step = input.step && input.step !== 'any' ? Number(input.step) : 1;
+  const cur = Number(input.value);
+  if (!Number.isFinite(cur) || !Number.isFinite(step) || step <= 0) return;
+  const decimals = Math.max(0, (String(step).split('.')[1] ?? '').length);
+  const next = Math.min(max, Math.max(min, Number((cur + dir * step).toFixed(decimals))));
+  if (next === cur) return;
+  input.value = String(next);
+  input.dispatchEvent(new Event('input', { bubbles: true }));
+  input.dispatchEvent(new Event('change', { bubbles: true }));
 }

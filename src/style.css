@@ -725,6 +725,12 @@ button.buy small {
 .modal p {
   margin: 0 0 10px;
 }
+.modal.confirm-modal {
+  z-index: 35;
+}
+.modal .box.confirm-box {
+  width: min(420px, calc(100vw - 24px));
+}
 
 /* Warp route picker (#172) */
 .modal .box.routes {
@@ -1355,6 +1361,30 @@ button {
 .touch .paused.gfx-reset.actionable {
   bottom: var(--touch-band);
 }
+/* Enlarged hit targets for touch controls (#273). */
+.touch button.collapse {
+  top: 0;
+  right: 0;
+  width: 40px;
+  height: 40px;
+  line-height: 38px;
+  font-size: 18px;
+}
+.touch .collapsible > .body > h3:first-child {
+  padding-right: 40px;
+  min-height: 24px;
+  line-height: 24px;
+}
+.touch .shiprow .ctl {
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.touch .shiprow .mode {
+  min-height: 36px;
+  min-width: 44px;
+  padding: 6px 10px;
+  font-size: 11.5px;
+}
 
 /* Phone layout (#194), the same query as Hud's NARROW_QUERY. The top bar wraps rather than scrolls, the columns
    start below it, panels start folded and open one at a time (Hud), a folded panel is just its heading and an
@@ -1426,6 +1456,29 @@ button {
   }
   .tabs {
     flex-wrap: wrap;
+  }
+  button.collapse {
+    top: 0;
+    right: 0;
+    width: 40px;
+    height: 40px;
+    line-height: 38px;
+    font-size: 18px;
+  }
+  .collapsible > .body > h3:first-child {
+    padding-right: 40px;
+    min-height: 24px;
+    line-height: 24px;
+  }
+  .shiprow .ctl {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .shiprow .mode {
+    min-height: 36px;
+    min-width: 44px;
+    padding: 6px 10px;
+    font-size: 11.5px;
   }
 }
 /* A phone on its side has little height: a smaller stick and strip, a two-line log beside first steps, which

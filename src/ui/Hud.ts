@@ -10,6 +10,8 @@ import type { Command } from '../sim/commands';
 import { type HudPanelId, type SettingsStore, keyLabel } from '../settings';
 import type { GameState, LogEntry, Outpost, Rock } from '../sim/types';
 import { type Panel, h, setText } from './dom';
+import { closeConfirm } from './confirm';
+import type { InputMode } from './goals';
 import { hazardBanner } from './hazardBanner';
 import { PALETTES } from '../data/palette';
 import { applyPaletteVars } from './paletteVars';
@@ -86,6 +88,8 @@ export class Hud {
   private noticeShown = false;
   /** Cached visibility of `#help`, updated in `applyHelp()` and on media-query changes. */
   private isHelpVisible = false;
+  /** True while a standard-mapping gamepad is connected, so panels adapt copy. */
+  private gamepad = false;
   readonly menu: Menu;
   readonly touch: TouchControls;
   private narrowMq: MediaQueryList | null;
@@ -128,7 +132,7 @@ export class Hud {
     };
     const topbar = mk('topbar');
     root.append(left, right, stack);
-    const ctx: PanelCtx = { getState, send: actions.send, settings };
+    const ctx: PanelCtx = { getState, send: actions.send, settings, inputMode: () => this.inputMode() };
     this.paused.setAttribute('role', 'status');
     this.paused.setAttribute('aria-live', 'polite');
     this.hazard.setAttribute('role', 'alert');
@@ -318,8 +322,21 @@ export class Hud {
     return out;
   }
 
+  /** Updates whether a gamepad is connected so panels can adapt input-specific hints. */
+  setGamepad(on: boolean): void {
+    this.gamepad = on;
+  }
+
+  /** Active input mode: gamepad when connected, else touch when on-screen controls show, else pointer. */
+  inputMode(): InputMode {
+    if (this.gamepad) return 'gamepad';
+    if (this.touch.shown) return 'touch';
+    return 'pointer';
+  }
+
   /** Esc: close the topmost open overlay. Returns true if something closed. */
   escape(): boolean {
+    if (closeConfirm()) return true;
     if (this.menu.escape()) return true;
     // The gate, Research and the warp picker can stack in any order, so close whichever is on top;
     // the gate's own dismiss is its "Keep playing" button.

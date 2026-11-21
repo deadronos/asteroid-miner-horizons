@@ -7,12 +7,13 @@ import { makeShip } from '../src/sim/ships';
 import type { Command } from '../src/sim/commands';
 import { Hud } from '../src/ui/Hud';
 import { Menu } from '../src/ui/Menu';
+import { closeConfirm, confirmAction, confirmOpen } from '../src/ui/confirm';
 import { nextFocusIndex } from '../src/ui/focus';
 import { createFleetPanel } from '../src/ui/panels/FleetPanel';
 import { createRefineryPanel } from '../src/ui/panels/RefineryPanel';
 import { createShipPanel } from '../src/ui/panels/ShipPanel';
 import type { FakeEl } from './domStub';
-import { resetDom } from './domStub';
+import { pressKey, resetDom } from './domStub';
 import { memStorage } from './memStorage';
 
 // The menu's Tab trap: forward/backward wrap, entering from outside, and a single item.
@@ -211,5 +212,52 @@ describe('UI accessibility (#272)', () => {
     refPanel.refresh();
     const cancelBtn = (refRoot as unknown as FakeEl).querySelectorAll('button').find((b) => b.textContent === '✕');
     expect(cancelBtn?.getAttribute('aria-label')).toContain('Cancel');
+  });
+
+  it('opens an accessible in-app confirm modal that handles confirm, cancel, Esc, Tab and focus restore (#273)', async () => {
+    resetDom();
+    const doc = document as unknown as {
+      createElement: (tag: string) => FakeEl;
+      body: FakeEl;
+      activeElement: FakeEl | null;
+    };
+    const trigger = doc.createElement('button');
+    trigger.textContent = 'Trigger';
+    doc.body.append(trigger);
+    trigger.focus();
+
+    const p1 = confirmAction('Scrap Miner 1?', { title: 'Scrap ship', confirmLabel: 'Scrap' });
+    expect(confirmOpen()).toBe(true);
+    const modal = doc.body.querySelectorAll('.modal')[0]!;
+    expect(modal.getAttribute('role')).toBe('alertdialog');
+    expect(modal.getAttribute('aria-modal')).toBe('true');
+    const [cancelBtn, okBtn] = modal.querySelectorAll('button') as [FakeEl, FakeEl];
+    // Cancel is focused by default for destructive actions.
+    expect(doc.activeElement).toBe(cancelBtn);
+
+    // Tab cycles to the confirm button and wraps back.
+    pressKey('Tab');
+    expect(doc.activeElement).toBe(okBtn);
+    pressKey('Tab');
+    expect(doc.activeElement).toBe(cancelBtn);
+
+    // Clicking Confirm resolves true and restores focus.
+    okBtn.click();
+    expect(await p1).toBe(true);
+    expect(confirmOpen()).toBe(false);
+    expect(doc.activeElement).toBe(trigger);
+
+    // Escape cancels and resolves false.
+    const p2 = confirmAction('Start new game?');
+    expect(confirmOpen()).toBe(true);
+    pressKey('Escape');
+    expect(await p2).toBe(false);
+    expect(confirmOpen()).toBe(false);
+
+    // closeConfirm() also closes the active modal.
+    const p3 = confirmAction('Erase slot?');
+    expect(closeConfirm()).toBe(true);
+    expect(await p3).toBe(false);
+    expect(closeConfirm()).toBe(false);
   });
 });

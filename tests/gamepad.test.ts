@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { buttonEdges, interactTarget, padThrust, padZoom } from '../src/core/gamepad';
 import { PAD, padCommand } from '../src/gamepad';
+import { GamepadHint } from '../src/ui/GamepadHint';
+import { resetDom } from './domStub';
 
 describe('padThrust', () => {
   it('is zero inside the radial dead zone, even with both axes nonzero', () => {
@@ -53,8 +55,22 @@ describe('buttonEdges', () => {
 describe('padCommand', () => {
   it('sends a ping from the right trigger and leaves stateful buttons to Input', () => {
     expect(padCommand(PAD.RT)).toEqual({ t: 'ping' });
+    expect(padCommand(PAD.LT)).toBeNull();
+    expect(padCommand(PAD.R3)).toBeNull();
     expect(padCommand(PAD.A)).toBeNull();
     expect(padCommand(PAD.START)).toBeNull();
+  });
+});
+
+describe('GamepadHint', () => {
+  it('lists Research (LT) and Deploy outpost (R3) bindings', () => {
+    resetDom();
+    const hint = new GamepadHint(document.body);
+    expect(hint.el.textContent).toContain('Research');
+    expect(hint.el.textContent).toContain('LT');
+    expect(hint.el.textContent).toContain('Deploy outpost');
+    expect(hint.el.textContent).toContain('R3');
+    resetDom();
   });
 });
 
