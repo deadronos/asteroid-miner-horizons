@@ -5,7 +5,7 @@ import type { Wallet } from '../data/resources';
 import { TUNING } from '../data/tuning';
 import { DEFAULT_ASSISTS, DEFAULT_FLEET_AUTO, type Assists, type FleetAuto } from './assists';
 import { applyEffects, systemEffects } from './modifiers';
-import type { TickCtx } from './pilot';
+import type { TickCtx } from './steering';
 import { emptyStats, writeShipStats, type ShipStats } from './ships';
 import type { ShipStatus } from './status';
 import type { GameState, Pickup, Rock, Ship } from './types';
