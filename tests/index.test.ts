@@ -107,4 +107,45 @@ describe('SimIndex', () => {
     tick(state, 1 / 60, { thrust: { x: 0, z: 0 }, commands: [] }, index);
     expect((ctx1 as { state: unknown }).state).toBeUndefined();
   });
+
+  it('rebuilds and clears shipHash, pickupHash and maxMagnet', () => {
+    const state = newGame(11);
+    const ship = state.run.ships[0]!;
+    state.run.pickups.push({
+      id: 9001,
+      kind: 'ore',
+      amount: 1,
+      pos: { x: ship.pos.x + 20, z: ship.pos.z },
+      vel: { x: 0, z: 0 },
+      age: 0,
+    });
+    const index = new SimIndex();
+    index.rebuild(state);
+    expect(index.maxMagnet).toBeGreaterThan(0);
+    expect(index.pickupHashCount).toBe(1);
+    let ships = 0;
+    index.shipHash.query(ship.pos, 100, () => {
+      ships++;
+    });
+    let pickups = 0;
+    index.pickupHash.query(ship.pos, 100, () => {
+      pickups++;
+    });
+    expect(ships).toBeGreaterThan(0);
+    expect(pickups).toBe(1);
+
+    index.clear();
+    expect(index.maxMagnet).toBe(0);
+    expect(index.pickupHashCount).toBe(0);
+    ships = 0;
+    index.shipHash.query(ship.pos, 100, () => {
+      ships++;
+    });
+    pickups = 0;
+    index.pickupHash.query(ship.pos, 100, () => {
+      pickups++;
+    });
+    expect(ships).toBe(0);
+    expect(pickups).toBe(0);
+  });
 });

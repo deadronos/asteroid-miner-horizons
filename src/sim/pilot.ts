@@ -8,13 +8,13 @@ import { TUNING } from '../data/tuning';
 import type { Assists, FleetAuto } from './assists';
 import { isDocked } from './economy';
 import { cometPathEscape, flareShelter, inCometPath, inFlareZone } from './hazards';
-import type { SimIndex } from './index';
+import type { AvoidQuery, BrakeQuery, DronePickupQuery, RockSearchQuery, SimIndex, SplashQuery } from './index';
 import { needsRepair } from './fleetAuto';
 import { laserRock } from './mining';
 import { flagship, isAlive, isHoldFull, type ShipStats } from './ships';
 import { setStatus } from './status';
 import { canMine, volatileSafeDistance } from './traits';
-import type { GameState, Rock, Ship } from './types';
+import type { GameState, Pickup, Rock, Ship } from './types';
 
 export interface TickCtx {
   state: GameState;
@@ -25,6 +25,29 @@ export interface TickCtx {
   auto: FleetAuto;
   /** Hazard level for this tick; scales flare damage. */
   hazards: HazardLevel;
+}
+
+function visitAvoidRock(r: Rock, q: AvoidQuery): void {
+  if (r.id === q.ignoreId || !q.index!.rockById.has(r.id)) return;
+  const rx = r.pos.x - q.shipX;
+  const rz = r.pos.z - q.shipZ;
+  const d = hypot2(rx, rz) || 0.01;
+  const gap = d - r.radius - q.shipSize;
+  if (gap < 12) {
+    const k = (1 - Math.max(0, gap) / 12) * 2;
+    q.ax -= (rx / d) * k;
+    q.az -= (rz / d) * k;
+  }
+  const along = rx * q.dx + rz * q.dz;
+  if (along < 0 || along - r.radius > q.look) return;
+  const lateral = rx * -q.dz + rz * q.dx; // + means the rock is to the left
+  const clearance = r.radius + q.shipSize + 14;
+  if (Math.abs(lateral) >= clearance) return;
+  const urgency = (1 - Math.max(0, along - r.radius) / q.look) * (1 - (Math.abs(lateral) / clearance) * 0.5) * 2.2;
+  q.danger = Math.max(q.danger, urgency / 2.2);
+  const side = lateral > 0 ? -1 : 1; // sidestep away from the rock's side
+  q.ax += -q.dz * side * urgency;
+  q.az += q.dx * side * urgency;
 }
 
 /**
@@ -42,34 +65,40 @@ function avoidance(
   out: Vec2,
 ): number {
   const look = st.size + 60 + len(ship.vel) * 1.2;
-  let ax = 0;
-  let az = 0;
-  let danger = 0;
-  ctx.index.rockHash.query(ship.pos, look + 50, (r) => {
-    if (r.id === ignoreId || !ctx.index.rockById.has(r.id)) return;
-    const rx = r.pos.x - ship.pos.x;
-    const rz = r.pos.z - ship.pos.z;
-    const d = hypot2(rx, rz) || 0.01;
-    const gap = d - r.radius - st.size;
-    if (gap < 12) {
-      const k = (1 - Math.max(0, gap) / 12) * 2;
-      ax -= (rx / d) * k;
-      az -= (rz / d) * k;
-    }
-    const along = rx * dx + rz * dz;
-    if (along < 0 || along - r.radius > look) return;
-    const lateral = rx * -dz + rz * dx; // + means the rock is to the left
-    const clearance = r.radius + st.size + 14;
-    if (Math.abs(lateral) >= clearance) return;
-    const urgency = (1 - Math.max(0, along - r.radius) / look) * (1 - (Math.abs(lateral) / clearance) * 0.5) * 2.2;
-    danger = Math.max(danger, urgency / 2.2);
-    const side = lateral > 0 ? -1 : 1; // sidestep away from the rock's side
-    ax += -dz * side * urgency;
-    az += dx * side * urgency;
-  });
-  out.x = ax;
-  out.z = az;
-  return danger;
+  const q = ctx.index.qAvoid;
+  q.index = ctx.index;
+  q.shipX = ship.pos.x;
+  q.shipZ = ship.pos.z;
+  q.shipSize = st.size;
+  q.dx = dx;
+  q.dz = dz;
+  q.look = look;
+  q.ignoreId = ignoreId;
+  q.ax = 0;
+  q.az = 0;
+  q.danger = 0;
+  ctx.index.rockHash.queryWith(ship.pos, look + 50, q, visitAvoidRock);
+  q.index = null;
+  out.x = q.ax;
+  out.z = q.az;
+  return q.danger;
+}
+
+function visitBrakeRock(r: Rock, q: BrakeQuery): void {
+  if (r.comet || !q.index!.rockById.has(r.id)) return;
+  const ship = q.ship!;
+  const rx = r.pos.x - ship.pos.x;
+  const rz = r.pos.z - ship.pos.z;
+  const d = hypot2(rx, rz) || 0.01;
+  const nx = rx / d;
+  const nz = rz / d;
+  const closing = (ship.vel.x - r.vel.x) * nx + (ship.vel.z - r.vel.z) * nz;
+  if (closing <= q.cap) return;
+  const gap = d - r.radius - q.shipSize;
+  if (gap > (closing * closing - q.cap * q.cap) / (2 * q.decel) + 2) return;
+  const dv = Math.min(closing - q.cap, q.maxDv);
+  ship.vel.x -= nx * dv;
+  ship.vel.z -= nz * dv;
 }
 
 /**
@@ -80,24 +109,18 @@ function avoidance(
 export function brakeForRocks(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   const cap = TUNING.collisionMinSpeed * TUNING.rockApproachCap;
   const decel = st.accel * TUNING.rockBrakeMargin;
-  const maxDv = st.accel * ctx.dt;
   const sp = len(ship.vel);
   const stopReach = sp > cap ? (sp * sp - cap * cap) / (2 * decel) + 50 : 50;
-  ctx.index.rockHash.query(ship.pos, st.size + Math.max(90, stopReach), (r) => {
-    if (r.comet || !ctx.index.rockById.has(r.id)) return;
-    const rx = r.pos.x - ship.pos.x;
-    const rz = r.pos.z - ship.pos.z;
-    const d = hypot2(rx, rz) || 0.01;
-    const nx = rx / d;
-    const nz = rz / d;
-    const closing = (ship.vel.x - r.vel.x) * nx + (ship.vel.z - r.vel.z) * nz;
-    if (closing <= cap) return;
-    const gap = d - r.radius - st.size;
-    if (gap > (closing * closing - cap * cap) / (2 * decel) + 2) return;
-    const dv = Math.min(closing - cap, maxDv);
-    ship.vel.x -= nx * dv;
-    ship.vel.z -= nz * dv;
-  });
+  const q = ctx.index.qBrake;
+  q.index = ctx.index;
+  q.ship = ship;
+  q.shipSize = st.size;
+  q.cap = cap;
+  q.decel = decel;
+  q.maxDv = st.accel * ctx.dt;
+  ctx.index.rockHash.queryWith(ship.pos, st.size + Math.max(90, stopReach), q, visitBrakeRock);
+  q.index = null;
+  q.ship = null;
 }
 
 /**
@@ -217,6 +240,19 @@ export function arrive(
   return false;
 }
 
+function visitSplashRock(n: Rock, q: SplashQuery): void {
+  const ctx = q.ctx!;
+  const rock = q.rock!;
+  const st = q.st!;
+  if (n.id === rock.id || !ctx.index.rockById.has(n.id) || ctx.index.outpostRocks.has(n.id)) return;
+  if (dist(n.pos, rock.pos) > st.splash + n.radius) return;
+  const nf = laserRock(ctx.state, n, q.dmg, st.laserTier);
+  if (nf) {
+    ctx.index.rockById.delete(n.id);
+    (q.frags ??= []).push(...nf);
+  }
+}
+
 /** Fly into laser range of a rock and burn it. Returns fragments if it broke. */
 export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): Rock[] | null {
   const d = dist(ship.pos, rock.pos);
@@ -243,16 +279,18 @@ export function workRock(ctx: TickCtx, ship: Ship, st: ShipStats, rock: Rock): R
   if (frags) ctx.index.rockById.delete(rock.id);
   if (st.splash > 0) {
     // Wide Beam: the same beam also grazes every other live rock inside the splash radius.
-    const dmg = st.dps * ctx.dt * TUNING.splashMul;
-    ctx.index.rockHash.query(rock.pos, st.splash + 60, (n) => {
-      if (n.id === rock.id || !ctx.index.rockById.has(n.id) || ctx.index.outpostRocks.has(n.id)) return;
-      if (dist(n.pos, rock.pos) > st.splash + n.radius) return;
-      const nf = laserRock(ctx.state, n, dmg, st.laserTier);
-      if (nf) {
-        ctx.index.rockById.delete(n.id);
-        (frags ??= []).push(...nf);
-      }
-    });
+    const q = ctx.index.qSplash;
+    q.ctx = ctx;
+    q.rock = rock;
+    q.st = st;
+    q.dmg = st.dps * ctx.dt * TUNING.splashMul;
+    q.frags = frags;
+    ctx.index.rockHash.queryWith(rock.pos, st.splash + 60, q, visitSplashRock);
+    frags = q.frags;
+    q.ctx = null;
+    q.rock = null;
+    q.st = null;
+    q.frags = null;
   }
   return frags;
 }
@@ -295,17 +333,29 @@ export function dodgeBlast(ctx: TickCtx, ship: Ship, st: ShipStats): boolean {
 /** A rock this ship's laser can cut that is not an outpost's host. */
 const minable = (ctx: TickCtx, st: ShipStats, r: Rock): boolean => canMine(st, r) && !ctx.index.outpostRocks.has(r.id);
 
-function nearestRock(ctx: TickCtx, from: Vec2, radius: number, filter: (r: Rock) => boolean): Rock | null {
-  let best: Rock | null = null;
-  let bestD = radius * radius;
-  ctx.index.rockHash.query(from, radius, (r) => {
-    if (!ctx.index.rockById.has(r.id) || !filter(r)) return;
-    const d = distSq(from, r.pos);
-    if (d < bestD) {
-      bestD = d;
-      best = r;
-    }
-  });
+function visitNearestRock(r: Rock, q: RockSearchQuery): void {
+  const ctx = q.ctx!;
+  if (!ctx.index.rockById.has(r.id) || !minable(ctx, q.st!, r)) return;
+  const d = distSq(q.from!, r.pos);
+  if (d < q.bestScore) {
+    q.bestScore = d;
+    q.best = r;
+  }
+}
+
+function nearestRock(ctx: TickCtx, from: Vec2, radius: number, st: ShipStats): Rock | null {
+  const q = ctx.index.qRockSearch;
+  q.ctx = ctx;
+  q.st = st;
+  q.from = from;
+  q.bestScore = radius * radius;
+  q.best = null;
+  ctx.index.rockHash.queryWith(from, radius, q, visitNearestRock);
+  const best = q.best;
+  q.ctx = null;
+  q.st = null;
+  q.from = null;
+  q.best = null;
   return best;
 }
 
@@ -319,25 +369,57 @@ export function need(bank: Wallet, kind: RawResource): number {
   return 1 + TUNING.scarcityWeight * (1 - share);
 }
 
+function visitScoredRock(r: Rock, q: RockSearchQuery): void {
+  const ctx = q.ctx!;
+  if (
+    !ctx.index.rockById.has(r.id) ||
+    !minable(ctx, q.st!, r) ||
+    (q.anchor !== null && dist(r.pos, q.anchor) >= q.leash) ||
+    unsafe(ctx, r.pos) ||
+    nearBlast(ctx, r.pos, r.id)
+  )
+    return;
+  const d2 = distSq(q.from!, r.pos);
+  if (d2 >= q.limit) return;
+  const n = need(q.bank!, r.kind);
+  const score = d2 / (n * n);
+  if (score < q.bestScore || (score === q.bestScore && q.best !== null && r.id < q.best.id)) {
+    q.bestScore = score;
+    q.best = r;
+  }
+}
+
 /**
  * Like `nearestRock`, but ranks by distance divided by `need`, so a scarcer resource wins from further away.
  * Lowest score wins; ties go to the lower rock id.
  */
-function scoredRock(ctx: TickCtx, from: Vec2, radius: number, filter: (r: Rock) => boolean, bank: Wallet): Rock | null {
-  let best: Rock | null = null;
-  let bestScore = Infinity;
-  const limit = radius * radius;
-  ctx.index.rockHash.query(from, radius, (r) => {
-    if (!ctx.index.rockById.has(r.id) || !filter(r)) return;
-    const d2 = distSq(from, r.pos);
-    if (d2 >= limit) return;
-    const n = need(bank, r.kind);
-    const score = d2 / (n * n);
-    if (score < bestScore || (score === bestScore && best !== null && r.id < best.id)) {
-      bestScore = score;
-      best = r;
-    }
-  });
+function scoredRock(
+  ctx: TickCtx,
+  from: Vec2,
+  radius: number,
+  st: ShipStats,
+  bank: Wallet,
+  anchor: Vec2 | null,
+  leash: number,
+): Rock | null {
+  const q = ctx.index.qRockSearch;
+  q.ctx = ctx;
+  q.st = st;
+  q.from = from;
+  q.anchor = anchor;
+  q.leash = leash;
+  q.bank = bank;
+  q.limit = radius * radius;
+  q.bestScore = Infinity;
+  q.best = null;
+  ctx.index.rockHash.queryWith(from, radius, q, visitScoredRock);
+  const best = q.best;
+  q.ctx = null;
+  q.st = null;
+  q.from = null;
+  q.anchor = null;
+  q.bank = null;
+  q.best = null;
   return best;
 }
 
@@ -353,7 +435,7 @@ export function chainTarget(ctx: TickCtx, ship: Ship, st: ShipStats, frags: Rock
     }
   }
   if (best) return best.id;
-  return nearestRock(ctx, ship.pos, st.range * 1.2, (r) => minable(ctx, st, r))?.id ?? null;
+  return nearestRock(ctx, ship.pos, st.range * 1.2, st)?.id ?? null;
 }
 
 /** Executes a ship's manual order. Returns false if it has none. */
@@ -409,13 +491,34 @@ export function dodgeHazards(ctx: TickCtx, ship: Ship, st: ShipStats, full: bool
   return true;
 }
 
+/** Writes ship `id`'s parking spot into `out` and returns `out`, avoiding an allocation on hot paths. */
+function formationSlotInto(anchor: Vec2, id: number, radius: number, out: Vec2): Vec2 {
+  const slot = (id % 6) * ((Math.PI * 2) / 6);
+  out.x = anchor.x + Math.cos(slot) * radius;
+  out.z = anchor.z + Math.sin(slot) * radius;
+  return out;
+}
+
 /**
  * Returns ship `id`'s parking spot: one of six slots on a ring of `radius` around `anchor`,
  * so ships waiting at the same anchor spread out. Returns a fresh vector each call.
  */
 export function formationSlot(anchor: Vec2, id: number, radius: number): Vec2 {
-  const slot = (id % 6) * ((Math.PI * 2) / 6);
-  return { x: anchor.x + Math.cos(slot) * radius, z: anchor.z + Math.sin(slot) * radius };
+  return formationSlotInto(anchor, id, radius, { x: 0, z: 0 });
+}
+
+function visitDronePickup(p: Pickup, q: DronePickupQuery): void {
+  const d = distSq(q.shipPos!, p.pos);
+  if (
+    (d < q.bestD || (d === q.bestD && q.bestPos !== null && p.id < q.bestId)) &&
+    dist(p.pos, q.anchor!) < TUNING.droneLeash &&
+    !unsafe(q.ctx!, p.pos) &&
+    !nearBlast(q.ctx!, p.pos)
+  ) {
+    q.bestD = d;
+    q.bestId = p.id;
+    q.bestPos = p.pos;
+  }
 }
 
 /**
@@ -431,7 +534,6 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
 
   const fs = flagship(run);
   const anchor = ship.aiMode === 'assist' && isAlive(fs) ? fs.pos : station;
-  const home = formationSlot(anchor, ship.id, 70);
 
   const full = isHoldFull(ship, st);
   if (dodgeHazards(ctx, ship, st, full)) {
@@ -460,7 +562,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     // Without auto-dock a full drone waits by its anchor for a manual dock order.
     if (!ctx.assists.autoDock) {
       setStatus(out, ship.id, 'idle');
-      arrive(ctx, ship, st, home, 20);
+      arrive(ctx, ship, st, formationSlotInto(anchor, ship.id, 70, ctx.index.scratchHome), 20);
     } else if (!isDocked(run, ship)) {
       setStatus(out, ship.id, 'returning');
       arrive(ctx, ship, st, station, TUNING.dockRadius * 0.5);
@@ -469,19 +571,28 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   }
 
   // Sweep up debris within a short hop.
-  let pickup: Vec2 | null = null;
-  let best = 260 * 260;
-  for (const p of run.pickups) {
-    const d = distSq(ship.pos, p.pos);
-    if (d < best && dist(p.pos, anchor) < TUNING.droneLeash && !unsafe(ctx, p.pos) && !nearBlast(ctx, p.pos)) {
-      best = d;
-      pickup = p.pos;
+  if (run.pickups.length > 0) {
+    const q = ctx.index.qDronePickup;
+    q.ctx = ctx;
+    q.shipPos = ship.pos;
+    q.anchor = anchor;
+    q.bestD = 260 * 260;
+    q.bestId = Infinity;
+    q.bestPos = null;
+    ctx.index.pickupHash.queryWith(ship.pos, 260, q, visitDronePickup);
+    // Include any pickups spawned by earlier ships in this same tick after `pickupHash` was built.
+    for (let i = ctx.index.pickupHashCount; i < run.pickups.length; i++) visitDronePickup(run.pickups[i]!, q);
+    const pickup = q.bestPos;
+    const best = q.bestD;
+    q.ctx = null;
+    q.shipPos = null;
+    q.anchor = null;
+    q.bestPos = null;
+    if (pickup && best > st.magnet * st.magnet * 0.3) {
+      setStatus(out, ship.id, 'collecting');
+      arrive(ctx, ship, st, pickup, 6);
+      return;
     }
-  }
-  if (pickup && best > st.magnet * st.magnet * 0.3) {
-    setStatus(out, ship.id, 'collecting');
-    arrive(ctx, ship, st, pickup, 6);
-    return;
   }
 
   if (st.dps > 0) {
@@ -500,24 +611,8 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
     }
     if (!rock) {
       rock =
-        scoredRock(
-          ctx,
-          ship.pos,
-          500,
-          (r) =>
-            minable(ctx, st, r) &&
-            dist(r.pos, anchor) < TUNING.droneLeash &&
-            !unsafe(ctx, r.pos) &&
-            !nearBlast(ctx, r.pos, r.id),
-          run.bank,
-        ) ??
-        scoredRock(
-          ctx,
-          anchor,
-          TUNING.droneLeash,
-          (r) => minable(ctx, st, r) && !unsafe(ctx, r.pos) && !nearBlast(ctx, r.pos, r.id),
-          run.bank,
-        ) ??
+        scoredRock(ctx, ship.pos, 500, st, run.bank, anchor, TUNING.droneLeash) ??
+        scoredRock(ctx, anchor, TUNING.droneLeash, st, run.bank, null, 0) ??
         undefined;
     }
     if (rock) {
@@ -532,6 +627,7 @@ export function droneThink(ctx: TickCtx, ship: Ship, st: ShipStats): void {
   ship.aiTargetId = null;
   if (ship.aiMode === 'assist' && st.dps <= 0) setStatus(out, ship.id, 'escorting');
   else setStatus(out, ship.id, 'idle', 'noRocks');
+  const home = formationSlotInto(anchor, ship.id, 70, ctx.index.scratchHome);
   if (unsafe(ctx, home) || nearBlast(ctx, home)) steer(ctx, ship, st, 0, 0);
   else arrive(ctx, ship, st, home, 20);
 }
